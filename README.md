@@ -1,1 +1,1 @@
-# search_by_ingredients
+# Search By Ingredients Challenge
