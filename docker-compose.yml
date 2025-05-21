@@ -1,0 +1,54 @@
+services:
+  web:
+    build:
+      context: web
+      dockerfile: Dockerfile
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - DATABASE_URL=postgresql://postgres:argmax@pg:5432/postgres
+      - OPENSEARCH_URL=http://os:9200
+    ports:
+      - "8080:8080"
+    networks:
+      - argmax
+    depends_on:
+      - pg
+      - os
+
+  pg:
+    image: postgres:latest
+    ports:
+      - "5432:5432"
+    restart: always
+    shm_size: 128mb
+    environment:
+      POSTGRES_PASSWORD: argmax
+    networks:
+      - argmax
+
+  os:
+    image: opensearchproject/opensearch:latest
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    networks:
+      - argmax
+
+volumes:
+  opensearch-data:
+
+networks:
+  argmax:
+    driver: bridge
