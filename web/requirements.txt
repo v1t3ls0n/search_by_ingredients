@@ -1,0 +1,6 @@
+Flask[async]==3.0.2
+opensearch-py==2.8.0
+psycopg2-binary==2.9.10
+python-decouple==3.8
+requests==2.32.3
+SQLAlchemy==2.0.39
