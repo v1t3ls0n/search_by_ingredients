@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, render_template
 from opensearchpy import OpenSearch
 from decouple import config
+from operator import itemgetter as at
 
 app = Flask(__name__)
 
@@ -12,6 +13,8 @@ client = OpenSearch(
     verify_certs=False,
     ssl_show_warn=False,
 )
+ingredients = client.search(index="ingredients", body={"query": {"match_all": {}}}, size=10000)["hits"]["hits"]
+ingredients = [hit["_source"]["ingredients"] for hit in ingredients]
 
 @app.route('/')
 def home():
@@ -20,8 +23,8 @@ def home():
 @app.route("/select2", methods=["GET"])
 def select2():
     q = request.args.get("q").strip()
-    ingredients = [("1", "apple"), ("2", "banana"), ("3", "cherry")]
-    results = [{"id": id_, "text": txt_} for id_,txt_ in ingredients if q in txt_]
+    results = [{"id": id_, "text": txt_} for id_,txt_ in enumerate(ingredients) if q in txt_]
+    results = sorted(results, key=lambda x: len(x["text"]))
     return jsonify({"results": results})
 
 
@@ -31,6 +34,10 @@ def search_by_ingredients():
     if not ingredient:
         return jsonify({'error': 'Please provide an ingredient name'}), 400
 
+    ingredient_ids = [int(id_) for id_ in ingredient.split() if id_.isdigit()]
+    ingredient_ids = [ingredients[id_] for id_ in ingredient_ids]
+    ingredient = " ".join(ingredient_ids)
+    
     # Create the search query
     query = {
         "query": {

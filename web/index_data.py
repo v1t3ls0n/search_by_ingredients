@@ -7,10 +7,30 @@ from pathlib import Path
 from typing import List, Dict
 import logging
 from argparse import ArgumentParser
+import re
+from collections import Counter
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def normalize_ingredient(ingredient: str) -> str:
+    ingredient = ingredient.lower().strip()
+    ingredient = ingredient.rsplit(',', 1)[0]
+    ingredient = re.sub(r'\d+\s*\d*/\d*', '', ingredient)
+    measurements = [
+        'cup', 'cups', 'tablespoon', 'tablespoons', 'tbsp', 'teaspoon', 'teaspoons', 'tsp',
+        'ounce', 'ounces', 'oz', 'pound', 'pounds', 'lb', 'lbs', 'gram', 'grams', 'g',
+        'kilogram', 'kilograms', 'kg', 'milliliter', 'milliliters', 'ml', 'liter', 'liters', 'l',
+        'pinch', 'pinches', 'dash', 'dashes', 'piece', 'pieces', 'slice', 'slices',
+        'cube', 'cubes', 'inch', 'inches', 'cm', 'mm', 'quart', 'quarts', 'qt',
+        'gallon', 'gallons', 'gal', 'pint', 'pints', 'pt', 'fluid ounce', 'fluid ounces', 'fl oz'
+    ]
+    pattern = r'\b(' + '|'.join(measurements) + r')\b'
+    ingredient = re.sub(pattern, '', ingredient)
+    ingredient = re.sub(r'[^a-z\s]', '', ingredient)
+    ingredient = ' '.join(ingredient.split())
+    return ingredient
 
 def wait_for_opensearch(client, max_retries=30, retry_interval=2):
     """Wait for OpenSearch to be ready"""
@@ -24,9 +44,9 @@ def wait_for_opensearch(client, max_retries=30, retry_interval=2):
         sleep(retry_interval)
     return False
 
-def create_index(client: OpenSearch, index_name: str = "recipes"):
+def create_index(client: OpenSearch):
     """Create the recipes index with appropriate mappings"""
-    if not client.indices.exists(index=index_name):
+    if not client.indices.exists(index="recipes"):
         mappings = {
             "mappings": {
                 "properties": {
@@ -38,25 +58,29 @@ def create_index(client: OpenSearch, index_name: str = "recipes"):
                 }
             }
         }
-        client.indices.create(index=index_name, body=mappings)
-        logger.info(f"Created index: {index_name}")
-
-def batch_index_recipes(client: OpenSearch, recipes: List[Dict], index_name: str = "recipes", batch_size: int = 1024):
-    """Index a batch of recipes into OpenSearch"""
-    actions = []
-    for recipe in recipes:
-        # Add the action metadata line
-        action_metadata = {
-            "index": {
-                "_index": index_name
+        client.indices.create(index="recipes", body=mappings)
+        logger.info(f"Created index: recipes")
+    if not client.indices.exists(index="ingredients"):
+        mappings = {
+            "mappings": {
+                "properties": {
+                    "ingredients": {"type": "text"}
+                }
             }
         }
-        actions.append(action_metadata)
-        # Add the document
+        client.indices.create(index="ingredients", body=mappings)
+        logger.info(f"Created index: ingredients")
+
+def batch_index_recipes(client: OpenSearch, recipes: List[Dict], batch_size: int = 10240):
+    """Index a batch of recipes into OpenSearch"""
+    actions = []
+    ingredients = set()
+    for recipe in recipes:
+
+        actions.append({"index": {"_index": "recipes"}})
         actions.append(recipe)
-        
-        # When we reach the batch size, index the batch
-        if len(actions) >= batch_size * 2:  # Multiply by 2 because each document has 2 lines
+        ingredients |= {normalize_ingredient(ing) for ing in recipe["ingredients"]}
+        if len(actions) >= batch_size * 2:
             client.bulk(body=actions)
             logger.info(f"Indexed {len(actions)//2} recipes")
             actions = []
@@ -65,6 +89,13 @@ def batch_index_recipes(client: OpenSearch, recipes: List[Dict], index_name: str
     if actions:
         client.bulk(body=actions)
         logger.info(f"Indexed {len(actions)//2} recipes")
+    
+    actions = []
+    for ing in ingredients:
+        actions.append({"index": {"_index": "ingredients"}})
+        actions.append({"ingredients": ing})
+    client.bulk(body=actions)
+    logger.info(f"Indexed {len(actions)//2} ingredients")
 
 def main(args):
     # Initialize OpenSearch client
@@ -93,7 +124,6 @@ def main(args):
     logger.info("Starting to index recipes...")
     # Read the parquet file
     df = pd.read_parquet(data_path)
-    
     # Convert DataFrame to list of dictionaries
     recipes = df.to_dict('records')
     
@@ -109,5 +139,6 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--batch_size", type=int, default=1024, help="Batch size for indexing")
     parser.add_argument("--data_file", type=str, default="data/allrecipes.parquet", help="Path to the Parquet file")
+    parser.add_argument("--ingredients_file", type=str, default="data/ingredients.json", help="Path to the ingredients file")
     parser.add_argument("--opensearch_url", type=str, default="http://localhost:9200", help="OpenSearch URL")
     main(parser.parse_args()) 
