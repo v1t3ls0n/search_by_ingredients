@@ -5,7 +5,14 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Create data directory
+RUN mkdir -p /app/data
+
+# Download the parquet file
+RUN curl -L https://argmaxml.com/data/allrecipes.parquet -o /app/data/allrecipes.parquet
 
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
