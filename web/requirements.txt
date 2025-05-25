@@ -4,3 +4,5 @@ psycopg2-binary==2.9.10
 python-decouple==3.8
 requests==2.32.3
 SQLAlchemy==2.0.39
+pandas==2.2.3
+pyarrow==19.0.1
