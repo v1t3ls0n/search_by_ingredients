@@ -38,7 +38,7 @@ This challenge would be used for Hiring both for our Israeli office, located at 
   4. Follow the instructions on the [task.ipynb](https://github.com/argmaxml/search_by_ingredients/blob/master/nb/task.ipynb) notebook
 
 ### Submission:
-1. Please clone this repo to a **private repo** on your Github account.
+1. Please clone this repo to a **private repo** on your Github account, and share it with [argmax2025](https://github.com/argmax2025).
 1. Implement the missing parts.
 1. Please fill in the [US Application Form](https://forms.clickup.com/25655193/f/rexwt-1832/L0YE9OKG2FQIC3AYRR) or the [IL Application Form](https://forms.clickup.com/25655193/f/rexwt-1812/IP26WXR9X4P6I4LGQ6) to let us know you're done.
 1. We will contact you once we review the application.
