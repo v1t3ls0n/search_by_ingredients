@@ -54,6 +54,34 @@ def wait_for_opensearch(client, max_retries=30, retry_interval=2):
         sleep(retry_interval)
     return False
 
+def check_data_exists(client: OpenSearch) -> bool:
+    """Simple check if data exists in OpenSearch indices"""
+    try:
+        # Check if indices exist and have data
+        recipes_count = client.count(index="recipes")["count"]
+        ingredients_count = client.count(index="ingredients")["count"]
+        
+        if recipes_count > 0 and ingredients_count > 0:
+            logger.info(f"Found existing data: {recipes_count} recipes and {ingredients_count} ingredients")
+            return True
+            
+        return False
+    except Exception as e:
+        logger.error(f"Error checking data existence: {e}")
+        return False
+
+def delete_existing_data(client: OpenSearch):
+    """Delete existing data from OpenSearch indices"""
+    try:
+        if client.indices.exists(index="recipes"):
+            client.indices.delete(index="recipes")
+            logger.info("Deleted existing recipes index")
+        if client.indices.exists(index="ingredients"):
+            client.indices.delete(index="ingredients")
+            logger.info("Deleted existing ingredients index")
+    except Exception as e:
+        logger.error(f"Error deleting existing data: {e}")
+
 def create_index(client: OpenSearch):
     """Create the recipes index with appropriate mappings"""
     if not client.indices.exists(index="recipes"):
@@ -70,6 +98,7 @@ def create_index(client: OpenSearch):
         }
         client.indices.create(index="recipes", body=mappings)
         logger.info(f"Created index: recipes")
+            
     if not client.indices.exists(index="ingredients"):
         mappings = {
             "mappings": {
@@ -86,7 +115,6 @@ def batch_index_recipes(client: OpenSearch, recipes: List[Dict], batch_size: int
     actions = []
     ingredients = set()
     for recipe in recipes:
-
         actions.append({"index": {"_index": "recipes"}})
         actions.append(recipe)
         ingredients |= {normalize_ingredient(ing) for ing in recipe["ingredients"]}
@@ -121,6 +149,11 @@ def main(args):
     if not wait_for_opensearch(client):
         logger.error("Failed to connect to OpenSearch")
         sys.exit(1)
+
+    # Check if data already exists
+    if check_data_exists(client):
+        logger.info("Data already exists in OpenSearch, skipping indexing")
+        return
 
     # Create the index with mappings
     create_index(client)
