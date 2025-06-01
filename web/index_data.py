@@ -1,34 +1,44 @@
+import sys, string ,json, re, logging
 from opensearchpy import OpenSearch
 from time import sleep
-import sys
 import json
 import pandas as pd
 from pathlib import Path
 from typing import List, Dict
-import logging
 from argparse import ArgumentParser
-import re
-from collections import Counter
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def normalize_ingredient(ingredient: str) -> str:
+    if type(ingredient) != str:
+        return str(ingredient)
     ingredient = ingredient.lower().strip()
     ingredient = ingredient.rsplit(',', 1)[0]
+    ingredient = re.sub(r"\([^()]+\)","",ingredient)
     ingredient = re.sub(r'\d+\s*\d*/\d*', '', ingredient)
+    ingredient = ingredient.translate({ord(c):' ' for c in string.punctuation})
     measurements = [
-        'cup', 'cups', 'tablespoon', 'tablespoons', 'tbsp', 'teaspoon', 'teaspoons', 'tsp',
+        'cup', 'cups', 'can', 'cans', 'tablespoon', 'tablespoons', 'tbsp', 'teaspoon', 'teaspoons', 'tsp',
         'ounce', 'ounces', 'oz', 'pound', 'pounds', 'lb', 'lbs', 'gram', 'grams', 'g',
         'kilogram', 'kilograms', 'kg', 'milliliter', 'milliliters', 'ml', 'liter', 'liters', 'l',
-        'pinch', 'pinches', 'dash', 'dashes', 'piece', 'pieces', 'slice', 'slices',
-        'cube', 'cubes', 'inch', 'inches', 'cm', 'mm', 'quart', 'quarts', 'qt',
-        'gallon', 'gallons', 'gal', 'pint', 'pints', 'pt', 'fluid ounce', 'fluid ounces', 'fl oz'
+        'pinch', 'pinches', 'dash', 'dashes', 'piece', 'pieces', 'slice', 'slices', 'small', 'medium', 'large',
+        'cube', 'cubes', 'inch', 'inches', 'cm', 'mm', 'quart', 'quarts', 'qt', 'jar', 'scoop', 'scoops',
+        'gallon', 'gallons', 'gal', 'pint', 'pints', 'pt', 'fluid ounce', 'fluid ounces', 'fl oz', 'package', 'packages', 'pkg', 'pack', 'packs'
     ]
     pattern = r'\b(' + '|'.join(measurements) + r')\b'
     ingredient = re.sub(pattern, '', ingredient)
     ingredient = re.sub(r'[^a-z\s]', '', ingredient)
+    if ingredient.endswith('ies'):
+        ingredient=ingredient[:-3]+'y'
+    elif ingredient.endswith('es'):
+        if ingredient[-3] in {'s', 'x', 'z'}:
+            ingredient=ingredient[:-2]
+        else:
+            ingredient=ingredient[:-1]
+    elif ingredient.endswith('s'):
+        ingredient=ingredient[:-1]
     ingredient = ' '.join(ingredient.split())
     return ingredient
 

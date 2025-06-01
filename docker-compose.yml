@@ -7,26 +7,26 @@ services:
       - FLASK_APP=app.py
       - FLASK_ENV=development
       - FLASK_DEBUG=1
-      - DATABASE_URL=postgresql://postgres:argmax@pg:5432/postgres
       - OPENSEARCH_URL=http://os:9200
     ports:
       - "8080:8080"
     networks:
       - argmax
     depends_on:
-      - pg
       - os
 
-  pg:
-    image: postgres:latest
-    ports:
-      - "5432:5432"
-    restart: always
-    shm_size: 128mb
+  nb:
+    build:
+      context: nb
+      dockerfile: Dockerfile
     environment:
-      POSTGRES_PASSWORD: argmax
+      - OPENSEARCH_URL=http://os:9200
+    ports:
+      - "8888:8888"
     networks:
       - argmax
+    depends_on:
+      - os
 
   os:
     image: opensearchproject/opensearch:latest
