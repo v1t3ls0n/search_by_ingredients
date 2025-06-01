@@ -3,7 +3,7 @@
 ### Submission deadline: June 30th, 2025
 ![Argmax](https://argmaxml.com/wp-content/uploads/2024/04/Argmax_logo_inline.svg)
 
-**Please watch [this explainer video](https://argmax.ml/pgdl).**
+**Please watch [this explainer video](https://app.clickup.com/25655193/hubs/clips/bbaba09b-5787-4b16-971d-2612592232b1.webm).**
 
 ## Who is this repo for ?
 [Argmax](https://www.argmaxml.com) is hiring Junior Data scientists in Israel (TLV) and the United States (NYC area).
