@@ -35,13 +35,13 @@ This challenge would be used for Hiring both for our Israeli office, located at 
   1. Set up Docker on your local machine
   2. In a terimal, type `docker compose up`
   3. Browse to [JupyterLab](http://localhost:8888)
-  4. Follow the instructions on the `task.ipynb` notebook
+  4. Follow the instructions on the [task.ipynb](https://github.com/argmaxml/search_by_ingredients/blob/master/nb/task.ipynb) notebook
 
 ### Submission:
 1. Please clone this repo to a **private repo** on your Github account.
 1. Implement the missing parts.
-1. Please fill in this [form](https://forms.gle/MaMtcL7yuKsbtgdk7).
-1. An interview with Uri would be scheduled for you.
+1 Please fill in the [US Application Form](https://forms.clickup.com/25655193/f/rexwt-1832/L0YE9OKG2FQIC3AYRR) or the [IL Application Form](https://forms.clickup.com/25655193/f/rexwt-1812/IP26WXR9X4P6I4LGQ6) to let us know you're done.
+1. We will contact you once we review the application.
 
 ## The Interview process
 ### Hands-on Interview
