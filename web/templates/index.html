@@ -146,7 +146,11 @@
                         <div class="card recipe-card" onclick="showRecipeDetails(${JSON.stringify(recipe).replace(/"/g, '&quot;')})">
                             <img src="${recipe.photo_url}" class="card-img-top recipe-image" alt="${recipe.title}">
                             <div class="card-body">
-                                <h5 class="card-title">${recipe.title}</h5>
+                                <h5 class="card-title d-flex justify-content-between align-items-center">
+                                    ${recipe.title}
+                                    ${recipe.keto ? '<span class="badge bg-danger">Keto</span>' : ''}
+                                    ${recipe.vegan ? '<span class="badge bg-success">Vegan</span>' : ''}
+                                </h5>
                             </div>
                         </div>
                     </div>

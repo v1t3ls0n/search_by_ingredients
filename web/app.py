@@ -66,6 +66,8 @@ def search_by_ingredients():
             'ingredients': hit['_source']['ingredients'],
             'instructions': hit['_source'].get('instructions', ''),
             'photo_url': hit['_source'].get('photo_url', ''),
+            'keto': False,
+            'vegan': False,
             'score': hit['_score']
         } for hit in hits]
 
