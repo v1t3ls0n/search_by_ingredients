@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, render_template
 from opensearchpy import OpenSearch
 from decouple import config
-from operator import itemgetter as at
+from diet_classifiers import is_keto, is_vegan
 
 app = Flask(__name__)
 
@@ -66,8 +66,8 @@ def search_by_ingredients():
             'ingredients': hit['_source']['ingredients'],
             'instructions': hit['_source'].get('instructions', ''),
             'photo_url': hit['_source'].get('photo_url', ''),
-            'keto': False,
-            'vegan': False,
+            'keto': is_keto(hit['_source']['ingredients']),
+            'vegan': is_vegan(hit['_source']['ingredients']),
             'score': hit['_score']
         } for hit in hits]
 
