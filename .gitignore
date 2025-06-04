@@ -177,3 +177,5 @@ web/data/*.parquet
 web/data/*.ipynb
 .DS_Store
 tmp.py
+internal/*
+.indexed
