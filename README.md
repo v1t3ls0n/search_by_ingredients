@@ -33,9 +33,9 @@ This challenge would be used for Hiring both for our Israeli office, located at 
 ## Getting started with the task
 ### Setup
   1. Set up Docker on your local machine
-  2. In a terimal, type `docker compose up`
+  2. In a terminal, type `docker compose build` and then `docker compose up -d`
   3. Browse to [JupyterLab](http://localhost:8888)
-  4. Follow the instructions on the [task.ipynb](https://github.com/argmaxml/search_by_ingredients/blob/master/nb/task.ipynb) notebook
+  4. Follow the instructions on the [task.ipynb](https://github.com/argmaxml/search_by_ingredients/blob/master/nb/src/task.ipynb) notebook
 
 ### Submission:
 1. Please clone this repo to a **private repo** on your Github account, and share it with [argmax2025](https://github.com/argmax2025).
