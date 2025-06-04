@@ -3,7 +3,7 @@
 # Check if indexing has been done
 if [ ! -f /app/.indexed ]; then
     echo "Running initial indexing..."
-    python index_data.py --opensearch_url "$OPENSEARCH_URL"
+    python web/index_data.py --opensearch_url "$OPENSEARCH_URL"
     # Create a marker file to indicate indexing is done
     touch /app/.indexed
     echo "Indexing completed"
@@ -12,4 +12,4 @@ else
 fi
 
 # Start the Flask application
-python app.py 
+python web/app.py 

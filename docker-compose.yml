@@ -10,6 +10,8 @@ services:
       - OPENSEARCH_URL=http://os:9200
     ports:
       - "8080:8080"
+    volumes:
+      - ./web/src:/app/web
     networks:
       - argmax
     depends_on:
@@ -23,6 +25,8 @@ services:
       - OPENSEARCH_URL=http://os:9200
     ports:
       - "8888:8888"
+    volumes:
+      - ./nb/src:/usr/src/app
     networks:
       - argmax
     depends_on:
