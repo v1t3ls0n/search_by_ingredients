@@ -4,7 +4,7 @@
 🗓 Submission Deadline: June 30th, 2025
 
 
-🎥 Please watch [this explainer video](https://app.clickup.com/25655193/hubs/clips/bbaba09b-5787-4b16-971d-2612592232b1.webm) to understand the task.
+🎥 Please watch [this explainer video](https://youtu.be/rfdaZXseRro) to understand the task.
 
 ## 👋 Who Is This Repo For?
 
