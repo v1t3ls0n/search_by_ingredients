@@ -21,13 +21,14 @@ Argmax is a boutique consulting firm specializing in personalized search and rec
 We use tools like large language models, vector databases, and behavioral data to build personalization systems that actually deliver results.
 
 We’re looking for candidates who are:
-	•	✅ Proficient in Python
-	•	🔍 Naturally curious
-	•	🧠 Able to perform independent research
 
-This challenge is designed to simulate the type of problems you’ll tackle with us, and it applies to positions in both our:
-	•	🇮🇱 Ramat Gan, Israel office
-	•	🇺🇸 North Bergen County, New Jersey office
+*.	✅ Proficient in Python
+*.	🔍 Naturally curious
+*.	🧠 Able to perform independent research
+
+This challenge is designed to simulate the type of problems you'll tackle with us, and it applies to positions in both our:
+*.	🇮🇱 Ramat Gan, Israel office
+*.	🇺🇸 North Bergen County, New Jersey office
 
 ## 🎥 Past Project Talks
 
