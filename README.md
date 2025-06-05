@@ -39,11 +39,12 @@ This challenge is designed to simulate the type of problems you'll tackle with u
 
 ## 🚀 Getting Started
 
-🛠️ Setup
+### 🛠️ Setup
+
 	1.	Make sure Docker is installed on your machine.
-	2.	Run the following in your terminal:  `docker compose build` and  `docker compose up -d`
-  3. Open your browser and go to [localhost:8888](http://localhost:8888)
-  4. Follow the instructions in the [task.ipynb](https://github.com/argmaxml/search_by_ingredients/blob/master/nb/src/task.ipynb) notebook
+	1.	Run the following in your terminal:  `docker compose build` and  `docker compose up -d`
+  1. Open your browser and go to [localhost:8888](http://localhost:8888)
+  1. Follow the instructions in the [task.ipynb](https://github.com/argmaxml/search_by_ingredients/blob/master/nb/src/task.ipynb) notebook
 
 ## 📬 Submission Instructions
 
