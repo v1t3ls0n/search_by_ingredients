@@ -5,12 +5,17 @@ from diet_classifiers import is_keto, is_vegan
 from time import sleep
 import sys
 import logging
+import os
 
-# Configure logging
+# Configure logging - keep it simple
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(levelname)s: %(message)s'  # Simplified format
 )
+# Silence noisy loggers
+logging.getLogger('opensearchpy').setLevel(logging.ERROR)  # Only show errors
+logging.getLogger('urllib3').setLevel(logging.ERROR)       # Only show errors
+logging.getLogger('opensearch').setLevel(logging.ERROR)    # Only show errors
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -18,16 +23,16 @@ app = Flask(__name__)
 
 def wait_for_opensearch(client, max_retries=30, retry_interval=2):
     """Wait for OpenSearch to be ready"""
-    logger.info("Starting to wait for OpenSearch...")
+    print("Waiting for OpenSearch to be ready...")  # Simple status message
     for i in range(max_retries):
-        logger.info(
-            f"Attempting to connect to OpenSearch (attempt {i+1}/{max_retries})")
         try:
             if client.ping():
-                logger.info("Successfully connected to OpenSearch!")
+                # Simple success message
+                print("Successfully connected to OpenSearch!")
                 return True
         except Exception as e:
-            logger.error(f"Connection attempt {i+1} failed: {str(e)}")
+            # Log connection attempts at debug level
+            logger.debug(f"Connection attempt {i+1}/{max_retries} failed.")
         sleep(retry_interval)
     logger.error("Failed to connect to OpenSearch after maximum retries")
     return False
@@ -35,10 +40,6 @@ def wait_for_opensearch(client, max_retries=30, retry_interval=2):
 
 def init_opensearch():
     """Initialize OpenSearch client and wait for it to be ready"""
-    logger.info("Initializing OpenSearch client...")
-    logger.info(
-        f"OpenSearch URL: {config('OPENSEARCH_URL', 'http://localhost:9200')}")
-
     client = OpenSearch(
         hosts=[config('OPENSEARCH_URL', 'http://localhost:9200')],
         http_auth=None,
@@ -53,15 +54,15 @@ def init_opensearch():
 
     try:
         # Load all ingredients once OpenSearch is ready
-        logger.info("Loading ingredients from OpenSearch...")
         response = client.search(index="ingredients", body={
                                  "query": {"match_all": {}}}, size=10000)
         ingredients = [hit["_source"]["ingredients"]
                        for hit in response["hits"]["hits"]]
-        logger.info(f"Successfully loaded {len(ingredients)} ingredients")
+        # Simple status message
+        print(f"Successfully loaded {len(ingredients)} ingredients")
         return client, ingredients
     except Exception as e:
-        logger.error(f"Error initializing OpenSearch: {str(e)}", exc_info=True)
+        logger.error(f"Error initializing OpenSearch: {str(e)}")
         sys.exit(1)
 
 

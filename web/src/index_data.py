@@ -10,8 +10,10 @@ import pandas as pd
 from pathlib import Path
 from typing import List, Dict
 from argparse import ArgumentParser
+from tqdm import tqdm
 
 # Configure logging
+logging.getLogger('opensearch').setLevel(logging.ERROR)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -134,20 +136,20 @@ def batch_index_recipes(client: OpenSearch, recipes: List[Dict], batch_size: int
             ing) for ing in recipe["ingredients"]}
         if len(actions) >= batch_size * 2:
             client.bulk(body=actions)
-            logger.info(f"Indexed {len(actions)//2} recipes")
+            # logger.info(f"Indexed {len(actions)//2} recipes")
             actions = []
 
     # Index any remaining recipes
     if actions:
         client.bulk(body=actions)
-        logger.info(f"Indexed {len(actions)//2} recipes")
+        # logger.info(f"Indexed {len(actions)//2} recipes")
 
     actions = []
     for ing in ingredients:
         actions.append({"index": {"_index": "ingredients"}})
         actions.append({"ingredients": ing})
     client.bulk(body=actions)
-    logger.info(f"Indexed {len(actions)//2} ingredients")
+    # logger.info(f"Indexed {len(actions)//2} ingredients")
 
 
 def main(args):
@@ -185,11 +187,12 @@ def main(args):
     # Convert DataFrame to list of dictionaries
     recipes = df.to_dict('records')
 
-    # Process in batches
-    for i in range(0, len(recipes), args.batch_size):
-        batch = recipes[i:i + args.batch_size]
-        batch_index_recipes(client, batch)
-        logger.info(f"Processed {i + len(batch)} recipes")
+    # Process in batches with progress bar
+    with tqdm(total=len(recipes), desc="Indexing recipes") as pbar:
+        for i in range(0, len(recipes), args.batch_size):
+            batch = recipes[i:i + args.batch_size]
+            batch_index_recipes(client, batch)
+            pbar.update(len(batch))
 
     logger.info("Indexing completed successfully")
 
