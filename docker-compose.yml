@@ -1,37 +1,4 @@
 services:
-  web:
-    build:
-      context: web
-      dockerfile: Dockerfile
-    environment:
-      - FLASK_APP=app.py
-      - FLASK_ENV=development
-      - FLASK_DEBUG=1
-      - OPENSEARCH_URL=http://os:9200
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./web/src:/app/web
-    networks:
-      - argmax
-    depends_on:
-      - os
-
-  nb:
-    build:
-      context: nb
-      dockerfile: Dockerfile
-    environment:
-      - OPENSEARCH_URL=http://os:9200
-    ports:
-      - "8888:8888"
-    volumes:
-      - ./nb/src:/usr/src/app
-    networks:
-      - argmax
-    depends_on:
-      - os
-
   os:
     image: opensearchproject/opensearch:latest
     environment:
@@ -55,6 +22,47 @@ services:
       - "9600:9600"
     networks:
       - argmax
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  web:
+    build:
+      context: web
+      dockerfile: Dockerfile
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - OPENSEARCH_URL=http://os:9200
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./web/src:/app/web
+    networks:
+      - argmax
+    depends_on:
+      os:
+        condition: service_healthy
+
+  nb:
+    build:
+      context: nb
+      dockerfile: Dockerfile
+    environment:
+      - OPENSEARCH_URL=http://os:9200
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./nb/src:/usr/src/app
+    networks:
+      - argmax
+    depends_on:
+      os:
+        condition: service_healthy
 
 volumes:
   opensearch-data:
