@@ -6,3 +6,4 @@ python-decouple==3.8
 requests==2.32.3
 pandas==2.2.3
 pyarrow==19.0.1
+scikit-learn==1.6.1

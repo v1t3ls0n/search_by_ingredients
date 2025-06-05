@@ -13,7 +13,6 @@ RUN mkdir -p /app/data
 
 # Download the parquet file
 RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/allrecipes.parquet -o /app/data/allrecipes.parquet
-RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/ground_truth_sample.csv -o /app/data/ground_truth_sample.csv
 
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
