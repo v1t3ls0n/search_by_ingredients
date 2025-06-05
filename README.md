@@ -46,7 +46,7 @@ This challenge is designed to simulate the type of problems you'll tackle with u
   1. Open your browser and go to [localhost:8888](http://localhost:8888)
   1. Follow the instructions in the [task.ipynb](https://github.com/argmaxml/search_by_ingredients/blob/master/nb/src/task.ipynb) notebook
 
-## 📬 Submission Instructions
+### 📬 Submission Instructions
 
 1. **Clone** this repository into a **private GitHub repo** under your own account.
 1. **Invite** [argmax2025](https://github.com/argmax2025) as a collaborator.
