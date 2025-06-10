@@ -1,13 +1,15 @@
+version: "3.9"
+
 services:
   os:
     image: opensearchproject/opensearch:latest
     environment:
       - discovery.type=single-node
       - bootstrap.memory_lock=true
-      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
       - DISABLE_SECURITY_PLUGIN=true
       - DISABLE_INSTALL_DEMO_CONFIG=true
-      - "OPENSEARCH_INITIAL_ADMIN_PASSWORD=Argmax123!"
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=Argmax123!
     ulimits:
       memlock:
         soft: -1
@@ -33,6 +35,7 @@ services:
     build:
       context: web
       dockerfile: Dockerfile
+    working_dir: /app
     environment:
       - FLASK_APP=app.py
       - FLASK_ENV=development
@@ -42,23 +45,30 @@ services:
       - "8080:8080"
     volumes:
       - ./web/src:/app/web
-      - ./data/ground_truth_sample.csv:/usr/src/data/ground_truth_sample.csv
+      - ./data:/usr/src/data
     networks:
       - argmax
     depends_on:
       os:
         condition: service_healthy
+    command: >
+      sh -c "
+      dos2unix web/init.sh && chmod +x web/init.sh &&
+      ./web/init.sh
+      "
 
   nb:
     build:
       context: nb
       dockerfile: Dockerfile
+    working_dir: /usr/src/app
     environment:
       - OPENSEARCH_URL=http://os:9200
     ports:
       - "8888:8888"
     volumes:
       - ./nb/src:/usr/src/app
+      - ./data:/usr/src/data
     networks:
       - argmax
     depends_on:
