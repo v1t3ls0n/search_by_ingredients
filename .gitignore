@@ -7,6 +7,7 @@ allrecipes.parquet
 best_params.json
 # C extensions
 *.so
+.jpg
 
 # Distribution / packaging
 .Python

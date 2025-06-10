@@ -762,10 +762,15 @@ def _download_images(df: pd.DataFrame, split: str) -> None:
     """Download images to the configured image directory."""
     if not TORCH_AVAILABLE:
         return
+
     img_dir = CFG.image_dir / split
     img_dir.mkdir(parents=True, exist_ok=True)
+
     if 'photo_url' not in df.columns:
         return
+
+    downloaded = 0  # ← add counter
+
     for idx, url in df['photo_url'].items():
         f = img_dir / f"{idx}.jpg"
         if f.exists() or not isinstance(url, str) or not url:
@@ -775,9 +780,11 @@ def _download_images(df: pd.DataFrame, split: str) -> None:
             resp.raise_for_status()
             with open(f, 'wb') as fh:
                 fh.write(resp.content)
+            downloaded += 1  # ← increment
         except Exception:
             continue
 
+    log.info(f"Downloaded {downloaded} images to '{img_dir}'")
 
 def build_image_embeddings(df: pd.DataFrame, split: str, force: bool = False) -> np.ndarray:
     """Return or compute image embeddings for the given dataframe."""
@@ -1033,6 +1040,8 @@ def run_mode_A(X_vec, clean, X_gold, silver, gold):
     for task, col in [("keto", "silver_keto"), ("vegan", "silver_vegan")]:
         ys, yt = silver[col].values, gold[f"label_{task}"].values
         X_os, y_os = apply_smote(X_vec, ys)
+        log.info(f"[{task.upper()}] Silver image rows before SMOTE: {len(ys)}")
+        log.info(f"[{task.upper()}] Silver image rows after  SMOTE: {len(y_os)}")
         show_balance(pd.DataFrame({col: y_os}),
                      f"Oversampled {task.capitalize()}")
 
