@@ -12,14 +12,62 @@ except ImportError:
         print("sklearn is not installed, skipping classification report")
 
 
+# Simple heuristic lists for demonstration purposes. These are far from
+# exhaustive but provide a lightweight stand‑in for the heavy‑weight
+# implementation found under ``web/src/diet_classifiers.py``.
+_NON_KETO_TERMS = {
+    "sugar",
+    "flour",
+    "rice",
+    "bread",
+    "pasta",
+    "noodle",
+    "potato",
+    "honey",
+    "corn",
+    "bean",
+    "juice",
+    "syrup",
+    "beer",
+    "cake",
+    "cookie",
+    "biscuit",
+}
+
+
 def is_ingredient_keto(ingredient: str) -> bool:
-    # TODO: Implement
-    return False
+    """Return ``True`` if the ingredient is considered keto friendly."""
+    if not ingredient:
+        return True
+
+    text = ingredient.lower()
+    return not any(term in text for term in _NON_KETO_TERMS)
+
+
+_NON_VEGAN_TERMS = {
+    "beef",
+    "pork",
+    "chicken",
+    "fish",
+    "egg",
+    "cheese",
+    "milk",
+    "butter",
+    "cream",
+    "honey",
+    "yogurt",
+    "lamb",
+    "gelatin",
+}
 
 
 def is_ingredient_vegan(ingredient: str) -> bool:
-    # TODO: Implement
-    return False
+    """Return ``True`` if the ingredient is considered vegan."""
+    if not ingredient:
+        return True
+
+    text = ingredient.lower()
+    return not any(term in text for term in _NON_VEGAN_TERMS)
 
 
 def is_keto(ingredients: List[str]) -> bool:
