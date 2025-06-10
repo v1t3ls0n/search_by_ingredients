@@ -106,6 +106,7 @@ def train_model(X, y):
 def main():
     parser = argparse.ArgumentParser(description='Hybrid text+image diet classifier')
     parser.add_argument('--data', default='silver.csv', help='CSV with ingredients, photo_url columns')
+    # Default to hybrid mode (text + image) =======
     parser.add_argument('--mode', choices=['text', 'image', 'both'], default='both')
     parser.add_argument('--force', action='store_true', help='Force recompute image embeddings')
     args = parser.parse_args()

@@ -46,6 +46,19 @@ This challenge is designed to simulate the type of problems you'll tackle with u
 1. Open your browser and go to [localhost:8888](http://localhost:8888)
 1. Follow the instructions in the [task.ipynb](https://github.com/argmaxml/search_by_ingredients/blob/master/nb/src/task.ipynb) notebook
 
+### Running the pipeline
+
+After installing the requirements you can execute the full pipeline
+directly to train both text and image models and then ensemble them:
+
+```bash
+python web/src/diet_classifiers.py
+```
+
+This downloads the datasets, builds image embeddings and trains the
+classifiers using text and image data separately, combining them with a
+simple ensemble by default.
+
 ### 📬 Submission Instructions
 
 1. **Clone** this repository into a **private GitHub repo** under your own account.
