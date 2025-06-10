@@ -78,8 +78,8 @@ def is_vegan(ingredients: List[str]) -> bool:
     return all(map(is_ingredient_vegan, ingredients))
 
 
-def main(args):
-    ground_truth = pd.read_csv(args.ground_truth, index_col=None)
+def _evaluate(ground_truth_path: str) -> int:
+    ground_truth = pd.read_csv(ground_truth_path, index_col=None)
     try:
         start_time = time()
         ground_truth['keto_pred'] = ground_truth['ingredients'].apply(is_keto)
@@ -101,8 +101,30 @@ def main(args):
     return 0
 
 
+def _classify(ingredients: str) -> int:
+    if ingredients.startswith('['):
+        ing_list = json.loads(ingredients)
+    else:
+        ing_list = [i.strip() for i in ingredients.split(',') if i.strip()]
+
+    keto = is_keto(ing_list)
+    vegan = is_vegan(ing_list)
+    print(json.dumps({'keto': keto, 'vegan': vegan}))
+    return 0
+
+
+def main(args):
+    if args.ingredients:
+        return _classify(args.ingredients)
+    else:
+        return _evaluate(args.ground_truth)
+
+
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--ground_truth", type=str,
-                        default="/usr/src/data/ground_truth_sample.csv")
+                        default="/usr/src/data/ground_truth_sample.csv",
+                        help="Path to CSV for evaluation")
+    parser.add_argument("--ingredients", type=str,
+                        help="Comma separated ingredients for quick classification")
     sys.exit(main(parser.parse_args()))
