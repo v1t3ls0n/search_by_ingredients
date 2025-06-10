@@ -45,7 +45,6 @@ services:
       - "8080:8080"
     volumes:
       - ./web/src:/app/web
-      - ./data:/usr/src/data
       - ./data/ground_truth_sample.csv:/usr/src/data/ground_truth_sample.csv:ro
 
     networks:
