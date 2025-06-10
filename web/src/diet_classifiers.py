@@ -96,7 +96,7 @@ import numpy as np
 import pandas as pd
 from nltk.stem import WordNetLemmatizer
 from tqdm import tqdm
-from imblearn.over_sampling import SMOTE
+from imblearn.over_sampling import SMOTE, RandomOverSampler
 
 # Download NLTK data
 try:
@@ -840,14 +840,27 @@ def filter_photo_rows(df: pd.DataFrame) -> pd.DataFrame:
     return df.loc[mask].copy()
 
 
-def apply_smote(X, y):
-    """Apply SMOTE when classes are imbalanced (<40% minority)."""
+def apply_smote(X, y, max_dense_size: int = int(5e7)):
+    """Apply SMOTE when classes are imbalanced (<40% minority).
+
+    For very large sparse matrices converting to dense can exhaust
+    memory.  In such cases we fall back to ``RandomOverSampler`` which
+    operates directly on sparse matrices without densifying them.
+    ``max_dense_size`` controls the threshold (in number of elements)
+    above which the fallback is used.
+    """
+
     counts = np.bincount(y)
     ratio = counts.min() / counts.sum()
     if ratio < 0.4:
+        if hasattr(X, "toarray"):
+            elements = X.shape[0] * X.shape[1]
+            if elements > max_dense_size:
+                ros = RandomOverSampler(random_state=42)
+                return ros.fit_resample(X, y)
+            X = X.toarray()
         smote = SMOTE(random_state=42)
-        X_dense = X.toarray() if hasattr(X, 'toarray') else X
-        return smote.fit_resample(X_dense, y)
+        return smote.fit_resample(X, y)
     return X, y
 
 
