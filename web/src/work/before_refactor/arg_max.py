@@ -7,7 +7,6 @@ Hard-verify every model’s output with blacklist / whitelist rules
 
 
 from __future__ import annotations
-# from utils.non_starter_tokens import NON_VEGAN, NON_KETO, VEGAN_WHITELIST, KETO_WHITELIST
 from sklearn.pipeline import make_pipeline
 from sklearn.metrics import precision_recall_curve
 from sklearn.kernel_approximation import RBFSampler
@@ -58,6 +57,7 @@ with warnings.catch_warnings():
         lgb = None                                              # type: ignore
 
 # domain hardcoded lists (heuristics)
+
 NON_KETO = list(set([
     "apple", "banana", "orange", "grape", "kiwi", "mango", "peach",
     "apple", "white rice", "long grain rice", "cornmeal",
@@ -519,7 +519,6 @@ VEGAN_WHITELIST = [
     r"\bsoy\s+bacon\b",
     r"\bvegan\s+bacon\b",
 ]
-
 
 # ───────────────────────── Logging ─────────────────────────
 logging.basicConfig(level=logging.INFO,
