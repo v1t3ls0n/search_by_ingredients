@@ -1411,9 +1411,22 @@ def main():
                         help='Path to ground truth CSV')
     parser.add_argument('--train', action='store_true',
                         help='Run full training pipeline')
+    parser.add_argument('--ingredients', type=str,
+                        help='Comma separated ingredients to classify')
     args = parser.parse_args()
 
-    if args.train:
+    if args.ingredients:
+        if args.ingredients.startswith('['):
+            ingredients = json.loads(args.ingredients)
+        else:
+            ingredients = [i.strip() for i in args.ingredients.split(',') if i.strip()]
+
+        keto = is_keto(ingredients)
+        vegan = is_vegan(ingredients)
+        print(json.dumps({'keto': keto, 'vegan': vegan}))
+        return
+
+    elif args.train:
         # Run full pipeline
         vec, silver, gold, res = run_full_pipeline()
 
