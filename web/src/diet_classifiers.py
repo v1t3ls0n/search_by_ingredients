@@ -909,7 +909,7 @@ def apply_smote(X, y, max_dense_size: int = int(5e7)):
                 ros = RandomOverSampler(random_state=42)
                 return ros.fit_resample(X, y)
             X = X.toarray()
-        smote = SMOTE(random_state=42)
+        smote = SMOTE(sampling_strategy=0.3, rrandom_state=42)
         return smote.fit_resample(X, y)
     return X, y
 
