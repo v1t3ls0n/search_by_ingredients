@@ -86,6 +86,7 @@ except ImportError as e:  # pragma: no cover - optional dependency
 import nltk
 import json
 import logging
+import warnings
 import re
 import unicodedata
 import urllib.request
@@ -119,6 +120,8 @@ with warnings.catch_warnings():
 # ============================================================================
 
 NON_KETO = list(set([
+    # "corn",
+    "kidney bean",
     "apple", "banana", "orange", "grape", "kiwi", "mango", "peach",
     "apple", "white rice", "long grain rice", "cornmeal",
     "baking potato", "potato wedge", "potato slice", "russet potato",
@@ -435,6 +438,7 @@ NON_VEGAN = list(set([
 
 KETO_WHITELIST = [
     r"\balmond flour\b",
+    r"\bkidney\b",
     r"\bcoconut flour\b",
     r"\bflaxseed flour\b",
     r"\bchia flour\b",
