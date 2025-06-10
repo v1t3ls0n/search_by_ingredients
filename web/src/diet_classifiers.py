@@ -1324,7 +1324,6 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
 # ============================================================================
 # MAIN PIPELINE
 # ============================================================================
-
 def run_full_pipeline(mode: str = "both", force: bool = False):
     """
     Run the complete training and evaluation pipeline.
@@ -1347,13 +1346,7 @@ def run_full_pipeline(mode: str = "both", force: bool = False):
 
     results, res_text, res_img = [], [], []
 
-    # --- TEXT-ONLY PIPELINE ---
-    if mode in {"text", "both"}:
-        res_text = run_mode_A(X_text_silver, gold.clean, X_text_gold, silver, gold)
-        results.extend(res_text)
-
-    # --- IMAGE-ONLY PIPELINE ---
-    # Run image-only pipeline
+    # --- IMAGE-ONLY PIPELINE (Runs First if mode is 'both') ---
     if mode in {"image", "both"}:
         # Download missing images
         _download_images(silver, CFG.image_dir / "silver")
@@ -1373,9 +1366,6 @@ def run_full_pipeline(mode: str = "both", force: bool = False):
         img_silver_df.index.to_series().to_csv(idx_path, index=False, header=False)
         log.info(f"Saved image index for reproducibility to: {idx_path}")
 
-        img_silver = build_image_embeddings(img_silver_df, "silver", force=force)
-        img_gold = build_image_embeddings(img_gold_df, "gold", force=force)
-
         X_img_silver = csr_matrix(img_silver)
         X_img_gold = csr_matrix(img_gold)
 
@@ -1383,6 +1373,11 @@ def run_full_pipeline(mode: str = "both", force: bool = False):
             X_img_silver, img_gold_df.clean, X_img_gold, img_silver_df, img_gold_df
         )
         results.extend(res_img)
+
+    # --- TEXT-ONLY PIPELINE (Runs Second if mode is 'both') ---
+    if mode in {"text", "both"}:
+        res_text = run_mode_A(X_text_silver, gold.clean, X_text_gold, silver, gold)
+        results.extend(res_text)
 
     # --- TEXT+IMAGE ENSEMBLE ---
     if mode == "both" and res_text and res_img:
@@ -1421,6 +1416,7 @@ def run_full_pipeline(mode: str = "both", force: bool = False):
         json.dump({k: v.get_params() for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
 
     return vec, silver, gold, results
+
 
 
 # ============================================================================
