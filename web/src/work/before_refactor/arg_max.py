@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -57,7 +58,6 @@ with warnings.catch_warnings():
         lgb = None                                              # type: ignore
 
 # domain hardcoded lists (heuristics)
-
 NON_KETO = list(set([
     "apple", "banana", "orange", "grape", "kiwi", "mango", "peach",
     "apple", "white rice", "long grain rice", "cornmeal",
@@ -396,7 +396,7 @@ KETO_WHITELIST = [
     r"\bcashew milk\b",
     r"\balmond cream\b",
     r"\bcoconut cream\b",
-
+    r"\bsour cream\b",
     r"\balmond butter\b",
     r"\bpeanut butter\b",
     r"\bcoconut butter\b",
@@ -519,6 +519,7 @@ VEGAN_WHITELIST = [
     r"\bsoy\s+bacon\b",
     r"\bvegan\s+bacon\b",
 ]
+
 
 # ───────────────────────── Logging ─────────────────────────
 logging.basicConfig(level=logging.INFO,
@@ -743,6 +744,12 @@ def build_models(task: str) -> Dict[str, BaseEstimator]:
     m = {
         "Rule": RuleModel("keto", RX_KETO, compile_any(KETO_WHITELIST)) if task == "keto" else
         RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN),
+        "Softmax": LogisticRegression(
+            solver="lbfgs",
+            max_iter=1000,
+            class_weight="balanced",
+            random_state=42
+        ),
         "NB": MultinomialNB(),
         "PA": PassiveAggressiveClassifier(max_iter=1000, class_weight="balanced", random_state=42),
         "Ridge": RidgeClassifier(class_weight="balanced", random_state=42),
@@ -780,6 +787,8 @@ HYPER = {
         "kernel": ["linear", "rbf"],
         "class_weight": ["balanced"]
     },
+    "Softmax": {"C": [0.05, 0.2, 1, 5, 10]},
+
     "NB": {}
 }
 
@@ -1050,13 +1059,9 @@ def main():
 
     res = run_mode_A(X_silver, gold.clean, X_gold, silver, gold)
     res_ens = [
-        # top_n("keto", res, X_silver, gold.clean, X_gold, silver, gold, n=4),
-        # top_n("vegan", res, X_silver, gold.clean, X_gold, silver, gold, n=4),
         best_ensemble("keto", res, X_silver, gold.clean, X_gold, silver, gold),
         best_ensemble("vegan", res, X_silver,
                       gold.clean, X_gold, silver, gold),
-        # ensemble_all("keto", res, X_silver, gold.clean, X_gold, silver, gold),
-        # ensemble_all("vegan", res, X_silver, gold.clean, X_gold, silver, gold)
     ]
     table("MODE A Ensemble (Top-3 combined metrics)", res_ens)
 
