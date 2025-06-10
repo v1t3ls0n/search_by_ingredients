@@ -14,10 +14,72 @@ Complete implementation including:
 
 from __future__ import annotations
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
-from sklearn.pipeline import make_pipeline
-from sklearn.metrics import precision_recall_curve
-from sklearn.kernel_approximation import RBFSampler
-from sklearn.svm import SVC
+
+# ---------------------------------------------------------------------------
+# Optional scikit-learn imports
+# ---------------------------------------------------------------------------
+try:
+    from sklearn.pipeline import make_pipeline
+    from sklearn.metrics import precision_recall_curve
+    from sklearn.kernel_approximation import RBFSampler
+    from sklearn.svm import SVC
+    from sklearn.base import BaseEstimator, ClassifierMixin, clone
+    from sklearn.calibration import CalibratedClassifierCV
+    from sklearn.ensemble import VotingClassifier
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.linear_model import LogisticRegression, SGDClassifier
+    from sklearn.metrics import (accuracy_score, average_precision_score,
+                                 confusion_matrix, f1_score, precision_score,
+                                 recall_score, roc_auc_score)
+    from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+    from sklearn.neural_network import MLPClassifier
+    from sklearn.svm import LinearSVC
+    from sklearn.naive_bayes import MultinomialNB
+    from sklearn.linear_model import PassiveAggressiveClassifier, RidgeClassifier
+    SKLEARN_AVAILABLE = True
+except Exception as e:  # pragma: no cover - optional dependency
+    warnings.warn(
+        f"scikit-learn not installed ({e}). ML features will be disabled.")
+    SKLEARN_AVAILABLE = False
+
+    class BaseEstimator:  # type: ignore
+        pass
+
+    class ClassifierMixin:  # type: ignore
+        pass
+
+    def clone(obj):  # type: ignore
+        return obj
+
+    def make_pipeline(*args, **kwargs):  # type: ignore
+        raise ImportError("scikit-learn is required for this functionality")
+
+    def precision_recall_curve(*args, **kwargs):  # type: ignore
+        raise ImportError("scikit-learn is required for this functionality")
+
+    class RBFSampler:  # type: ignore
+        pass
+
+    class SVC:  # type: ignore
+        pass
+
+    class CalibratedClassifierCV:  # type: ignore
+        pass
+
+    class VotingClassifier:  # type: ignore
+        pass
+
+    class TfidfVectorizer:  # type: ignore
+        def __init__(self, **kwargs):
+            raise ImportError("scikit-learn is required for this functionality")
+
+    class LogisticRegression:  # type: ignore
+        pass
+
+    LinearSVC = MLPClassifier = GridSearchCV = RandomizedSearchCV = None  # type: ignore
+    accuracy_score = average_precision_score = confusion_matrix = f1_score = precision_score = recall_score = roc_auc_score = None  # type: ignore
+    SGDClassifier = MultinomialNB = PassiveAggressiveClassifier = RidgeClassifier = None  # type: ignore
+
 import nltk
 import json
 import logging
