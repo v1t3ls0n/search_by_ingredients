@@ -529,6 +529,7 @@ log = logging.getLogger("PIPE")
 # CONFIG
 # ============================================================================
 
+
 @dataclass(frozen=True)
 class Config:
     data_dir: Path = Path("dataset/arg_max")
@@ -541,14 +542,17 @@ class Config:
     vec_kwargs: Dict[str, Any] = field(default_factory=lambda: dict(
         min_df=2, ngram_range=(1, 3), max_features=50000, sublinear_tf=True))
 
+
 CFG = Config()
 
 # ============================================================================
 # REGEX HELPERS
 # ============================================================================
 
+
 def compile_any(words: Iterable[str]) -> re.Pattern[str]:
     return re.compile(r"\b(?:%s)\b" % "|".join(map(re.escape, words)), re.I)
+
 
 RX_KETO = compile_any(NON_KETO)
 RX_VEGAN = compile_any(NON_VEGAN)
@@ -562,6 +566,7 @@ RX_WL_VEGAN = re.compile("|".join(VEGAN_WHITELIST), re.I)
 _LEMM = WordNetLemmatizer() if wnl else None
 _UNITS = re.compile(r"\b(?:g|gram|kg|oz|ml|l|cup|cups|tsp|tbsp|teaspoon|"
                     r"tablespoon|pound|lb|slice|slices|small|large|medium)\b")
+
 
 def normalise(t: str) -> str:
     """Normalize ingredient text for consistent matching."""
@@ -578,6 +583,7 @@ def normalise(t: str) -> str:
 # ============================================================================
 # RULE MODEL
 # ============================================================================
+
 
 class RuleModel(BaseEstimator, ClassifierMixin):
     def __init__(self, task: str, rx_black, rx_white=None,
@@ -597,15 +603,17 @@ class RuleModel(BaseEstimator, ClassifierMixin):
                          for d in X), float, count=len(X))
         return np.c_[1-p, p]
 
-    def predict(self, X): 
+    def predict(self, X):
         return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
 
 # ============================================================================
 # VERIFICATION LAYER
 # ============================================================================
 
+
 def tokenize_ingredient(text: str) -> list[str]:
     return re.findall(r"\b\w[\w-]*\b", text.lower())
+
 
 def is_keto_ingredient_list(tokens: list[str]) -> bool:
     for ingredient in NON_KETO:
@@ -614,12 +622,14 @@ def is_keto_ingredient_list(tokens: list[str]) -> bool:
             return False
     return True
 
+
 def find_non_keto_hits(text: str) -> list[str]:
     tokens = set(tokenize_ingredient(text))
     return sorted([
         ingredient for ingredient in NON_KETO
         if all(tok in tokens for tok in ingredient.split())
     ])
+
 
 def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarray:
     """Apply rule-based verification to ML predictions."""
@@ -656,6 +666,7 @@ def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarr
 # DATA I/O
 # ============================================================================
 
+
 def download_raw():
     """Download raw data files if not present."""
     CFG.data_dir.mkdir(parents=True, exist_ok=True)
@@ -664,6 +675,7 @@ def download_raw():
         if not dst.exists():
             log.info("⬇️ %s", f)
             urllib.request.urlretrieve(u, dst)
+
 
 def parquet_to_csv() -> Path:
     """Convert parquet to CSV format."""
@@ -680,10 +692,11 @@ def parquet_to_csv() -> Path:
 # SILVER LABELS GENERATION
 # ============================================================================
 
+
 def build_silver(csv: Path) -> pd.DataFrame:
     """
     Generate silver (weak) labels using rule-based classification.
-    
+
     This creates training labels for the large unlabeled dataset
     using our curated ingredient lists.
     """
@@ -693,16 +706,17 @@ def build_silver(csv: Path) -> pd.DataFrame:
         df["silver_vegan"] = pd.read_csv(sv).silver_vegan
         df["clean"] = df.clean.fillna("").astype(str)
         return df
-    
+
     log.info("Building silver labels from %s", csv)
     df = pd.read_csv(csv, usecols=["ingredients"])
     df["clean"] = df.ingredients.fillna("").map(normalise)
-    
+
     # Apply rule-based classification
     df["silver_keto"] = (~df.clean.str.contains(RX_KETO)).astype(int)
-    bad = (df.clean.str.contains(RX_VEGAN) & ~df.clean.str.contains(RX_WL_VEGAN))
+    bad = (df.clean.str.contains(RX_VEGAN) & ~
+           df.clean.str.contains(RX_WL_VEGAN))
     df["silver_vegan"] = (~bad).astype(int)
-    
+
     # Save silver labels
     sk.parent.mkdir(parents=True, exist_ok=True)
     df[["clean", "silver_keto"]].to_csv(sk, index=False)
@@ -712,6 +726,7 @@ def build_silver(csv: Path) -> pd.DataFrame:
 # ============================================================================
 # CLASS BALANCE HELPER
 # ============================================================================
+
 
 def show_balance(df: pd.DataFrame, title: str) -> None:
     """Print class distribution statistics."""
@@ -727,11 +742,12 @@ def show_balance(df: pd.DataFrame, title: str) -> None:
 # MODEL REGISTRY
 # ============================================================================
 
+
 def build_models(task: str) -> Dict[str, BaseEstimator]:
     """Build all available models for classification."""
     m = {
         "Rule": RuleModel("keto", RX_KETO, RX_WL_KETO) if task == "keto" else
-                RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN),
+        RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN),
         "Softmax": LogisticRegression(
             solver="lbfgs",
             max_iter=1000,
@@ -744,7 +760,7 @@ def build_models(task: str) -> Dict[str, BaseEstimator]:
         "LR": LogisticRegression(solver="lbfgs", max_iter=1000),
         "SGD": SGDClassifier(loss="log_loss", max_iter=1000, tol=1e-3, class_weight="balanced", n_jobs=-1),
     }
-    
+
     if lgb:
         m["LGBM"] = lgb.LGBMClassifier(
             num_leaves=15,
@@ -758,8 +774,9 @@ def build_models(task: str) -> Dict[str, BaseEstimator]:
             verbose=-1,  # Suppress LightGBM info messages
             force_col_wise=True  # Avoid the overhead warning
         )
-    
+
     return m
+
 
 HYPER = {
     "LR": {"C": [0.2, 1, 5], "class_weight": [None, "balanced"]},
@@ -777,6 +794,7 @@ BEST: Dict[str, BaseEstimator] = {}
 FAST = True
 CV = 2 if FAST else 3
 N_IT = 2 if FAST else 6
+
 
 def tune(name, model, X, y):
     """Tune hyperparameters for models using GridSearchCV where relevant."""
@@ -821,6 +839,7 @@ def tune(name, model, X, y):
 # METRICS / TABLE
 # ============================================================================
 
+
 def pack(y, prob):
     pred = (prob >= 0.5).astype(int)
     tn, fp, fn, tp = confusion_matrix(y, pred, labels=[0, 1]).ravel()
@@ -830,6 +849,7 @@ def pack(y, prob):
                 F1=f1_score(y, pred, zero_division=0),
                 ROC=roc_auc_score(y, prob),
                 PR=average_precision_score(y, prob))
+
 
 def table(title, rows):
     cols = ("ACC", "PREC", "REC", "F1", "ROC", "PR")
@@ -847,13 +867,15 @@ def table(title, rows):
 # MODE A - TRAIN ON SILVER, EVALUATE ON GOLD
 # ============================================================================
 
+
 def run_mode_A(X_vec, clean, X_gold, silver, gold):
     """Train models on silver labels and evaluate on gold labels."""
     res = []
     for task, col in [("keto", "silver_keto"), ("vegan", "silver_vegan")]:
         ys, yt = silver[col].values, gold[f"label_{task}"].values
         X_os, y_os = RandomOverSampler(random_state=42).fit_resample(X_vec, ys)
-        show_balance(pd.DataFrame({col: y_os}), f"Oversampled {task.capitalize()}")
+        show_balance(pd.DataFrame({col: y_os}),
+                     f"Oversampled {task.capitalize()}")
 
         import time
         for name, base in tqdm(build_models(task).items(), desc=f"A/{task}"):
@@ -864,7 +886,7 @@ def run_mode_A(X_vec, clean, X_gold, silver, gold):
                 prob = mdl.predict_proba(clean)[:, 1]
             else:
                 mdl = tune(name, base, X_os, y_os).fit(X_os, y_os)
-                
+
                 # Get probabilities based on model type
                 if hasattr(mdl, "predict_proba"):
                     prob = mdl.predict_proba(X_gold)[:, 1]
@@ -889,6 +911,7 @@ def run_mode_A(X_vec, clean, X_gold, silver, gold):
 # ============================================================================
 # FALSE PREDICTION LOGGING
 # ============================================================================
+
 
 def log_false_preds(task, texts, y_true, y_pred, model_name="Model"):
     """Log false positive and false negative predictions."""
@@ -924,30 +947,86 @@ def log_false_preds(task, texts, y_true, y_pred, model_name="Model"):
 # ENSEMBLE METHODS
 # ============================================================================
 
+
 def tune_threshold(y_true, probs):
     precision, recall, thresholds = precision_recall_curve(y_true, probs)
     f1 = 2 * (precision * recall) / (precision + recall + 1e-10)
     optimal_idx = np.argmax(f1)
     return thresholds[optimal_idx] if optimal_idx < len(thresholds) else 0.5
 
-def best_ensemble(task, res, X_vec, clean, X_gold, silver, gold):
-    """Find best ensemble size by trying n=1 to max available models."""
-    model_names = [r["model"] for r in res if r["task"] == task and r["model"] != "Rule"]
+
+def best_ensemble(task, res, X_vec, clean, X_gold, silver, gold, weights=None):
+    """Find best ensemble size by trying n=1 to max available models.
+
+    Args:
+        task: Task name
+        res: Results list
+        X_vec: Vectorized features
+        clean: Clean text data
+        X_gold: Gold standard features
+        silver: Silver standard data
+        gold: Gold standard data
+        weights: Dict of metric weights (default: equal weighting)
+                e.g., {'F1': 0.3, 'PREC': 0.2, 'REC': 0.2, 'ROC': 0.1, 'PR': 0.1, 'ACC': 0.1}
+    """
+    model_names = [r["model"]
+                   for r in res if r["task"] == task and r["model"] != "Rule"]
     max_n = len(set(model_names))
+
+    # Default equal weighting for all metrics
+    if weights is None:
+        weights = {
+            'F1': 1/6,
+            'PREC': 1/6,
+            'REC': 1/6,
+            'ROC': 1/6,
+            'PR': 1/6,
+            'ACC': 1/6
+        }
+
+    # Validate weights sum to 1
+    if abs(sum(weights.values()) - 1.0) > 1e-6:
+        print(
+            f"[WARN] Weights don't sum to 1.0 ({sum(weights.values()):.3f}), normalizing...")
+        total = sum(weights.values())
+        weights = {k: v/total for k, v in weights.items()}
 
     best_score = -1
     best_result = None
 
+    print(f"\n🔍 Finding best ensemble for {task} using weighted metrics:")
+    print(
+        f"   Weights: {', '.join([f'{k}={v:.3f}' for k, v in weights.items()])}")
+
     for n in range(1, max_n + 1):
         try:
             result = top_n(task, res, X_vec, clean, X_gold, silver, gold, n=n)
-            if result["F1"] > best_score:
-                best_score = result["F1"]
+
+            # Calculate weighted composite score
+            composite_score = sum(
+                weights.get(metric, 0) * result.get(metric, 0)
+                for metric in weights.keys()
+            )
+
+            print(
+                f"   n={n}: F1={result['F1']:.3f}, Composite={composite_score:.3f}")
+
+            if composite_score > best_score:
+                best_score = composite_score
                 best_result = result
+                best_result['composite_score'] = composite_score
+
         except Exception as e:
             print(f"[WARN] Ensemble n={n} failed: {e}")
 
+    if best_result:
+        print(
+            f"✅ Best ensemble: n={best_result['model'][-1]} with composite score={best_score:.3f}")
+    else:
+        print("❌ No valid ensemble found")
+
     return best_result
+
 
 def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=False, rule_weight=0):
     """Build an n-model ensemble based on combined performance metrics."""
@@ -956,9 +1035,11 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
         with open("best_params.json") as f:
             saved_params = json.load(f).get(task, {})
 
+    # Updated sorting to use the same composite scoring approach
     top_models = sorted(
         [r for r in res if r["task"] == task and r["model"] != "Rule"],
-        key=lambda x: x["PREC"] + x["REC"] + x["ROC"] + x["PR"] + x["F1"] + x["ACC"],
+        key=lambda x: x["PREC"] + x["REC"] +
+        x["ROC"] + x["PR"] + x["F1"] + x["ACC"],
         reverse=True
     )[:n]
 
@@ -1009,7 +1090,7 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
             else:
                 # Last resort: use binary predictions
                 probs.append(clf.predict(X_gold).astype(float))
-        
+
         prob = np.mean(probs, axis=0)
 
     prob = verify_with_rules(task, gold.clean, prob)
@@ -1017,13 +1098,14 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
     y_pred = (prob >= 0.5).astype(int)
 
     print(f"\n── False Predictions: Ensemble Top-{n} on {task} ──")
-    log_false_preds(task, gold.clean, y_true, y_pred, model_name=f"EnsembleTop{n}")
+    log_false_preds(task, gold.clean, y_true, y_pred,
+                    model_name=f"EnsembleTop{n}")
 
     return pack(y_true, prob) | {"model": f"Ens{n}", "task": task}
-
 # ============================================================================
 # MAIN PIPELINE
 # ============================================================================
+
 
 def run_full_pipeline():
     """Run the complete training and evaluation pipeline."""
@@ -1049,23 +1131,26 @@ def run_full_pipeline():
 
     # Run mode A
     res = run_mode_A(X_silver, gold.clean, X_gold, silver, gold)
-    
+
     # Find best ensembles
     res_ens = [
         best_ensemble("keto", res, X_silver, gold.clean, X_gold, silver, gold),
-        best_ensemble("vegan", res, X_silver, gold.clean, X_gold, silver, gold),
+        best_ensemble("vegan", res, X_silver,
+                      gold.clean, X_gold, silver, gold),
     ]
     table("MODE A Ensemble (Best)", res_ens)
 
     # Save best parameters
     with open("best_params.json", "w") as fp:
-        json.dump({k: v.get_params() for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
+        json.dump({k: v.get_params()
+                  for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
 
     return vec, silver, gold, res
 
 # ============================================================================
 # SIMPLE INTERFACE FOR ASSESSMENT (Required functions)
 # ============================================================================
+
 
 # Global state for simple interface
 _pipeline_state = {
@@ -1074,6 +1159,7 @@ _pipeline_state = {
     'initialized': False
 }
 
+
 def _ensure_pipeline():
     """Initialize pipeline if not already done."""
     if not _pipeline_state['initialized']:
@@ -1081,7 +1167,7 @@ def _ensure_pipeline():
             # Try to load existing models
             vec_path = CFG.data_dir / "vectorizer.pkl"
             models_path = CFG.data_dir / "models.pkl"
-            
+
             if vec_path.exists() and models_path.exists():
                 import pickle
                 with open(vec_path, 'rb') as f:
@@ -1090,48 +1176,54 @@ def _ensure_pipeline():
                     _pipeline_state['models'] = pickle.load(f)
             else:
                 # Fallback to rule-based models
-                _pipeline_state['models']['keto'] = RuleModel("keto", RX_KETO, RX_WL_KETO)
-                _pipeline_state['models']['vegan'] = RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN)
-                
+                _pipeline_state['models']['keto'] = RuleModel(
+                    "keto", RX_KETO, RX_WL_KETO)
+                _pipeline_state['models']['vegan'] = RuleModel(
+                    "vegan", RX_VEGAN, RX_WL_VEGAN)
+
         except Exception as e:
-            log.warning(f"Could not load trained models: {e}. Using rule-based.")
-            _pipeline_state['models']['keto'] = RuleModel("keto", RX_KETO, RX_WL_KETO)
-            _pipeline_state['models']['vegan'] = RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN)
-            
+            log.warning(
+                f"Could not load trained models: {e}. Using rule-based.")
+            _pipeline_state['models']['keto'] = RuleModel(
+                "keto", RX_KETO, RX_WL_KETO)
+            _pipeline_state['models']['vegan'] = RuleModel(
+                "vegan", RX_VEGAN, RX_WL_VEGAN)
+
         _pipeline_state['initialized'] = True
+
 
 def is_ingredient_keto(ingredient: str) -> bool:
     """
     Determine if an ingredient is keto-friendly.
-    
+
     Uses the full pipeline: rule-based checks, ML models (if available),
     and post-processing verification.
-    
+
     Args:
         ingredient: Raw ingredient string
-        
+
     Returns:
         True if keto-friendly, False otherwise
     """
     if not ingredient:
         return True
-    
+
     # Quick whitelist check
     if RX_WL_KETO.search(ingredient):
         return True
-    
+
     # Normalize
     normalized = normalise(ingredient)
-    
+
     # Quick blacklist check
     if RX_KETO.search(normalized):
         return False
-    
+
     # Token-based check
     tokens = tokenize_ingredient(normalized)
     if not is_keto_ingredient_list(tokens):
         return False
-    
+
     # Use ML model if available
     _ensure_pipeline()
     if 'keto' in _pipeline_state['models']:
@@ -1145,40 +1237,42 @@ def is_ingredient_keto(ingredient: str) -> bool:
                 prob = model.predict_proba([normalized])[0, 1]
         else:
             prob = model.predict_proba([normalized])[0, 1]
-        
+
         # Apply verification
-        prob_adj = verify_with_rules("keto", pd.Series([normalized]), np.array([prob]))[0]
+        prob_adj = verify_with_rules(
+            "keto", pd.Series([normalized]), np.array([prob]))[0]
         return prob_adj >= 0.5
-    
+
     return True
+
 
 def is_ingredient_vegan(ingredient: str) -> bool:
     """
     Determine if an ingredient is vegan.
-    
+
     Uses the full pipeline: rule-based checks, ML models (if available),
     and post-processing verification.
-    
+
     Args:
         ingredient: Raw ingredient string
-        
+
     Returns:
         True if vegan, False otherwise
     """
     if not ingredient:
         return True
-    
+
     # Quick whitelist check
     if RX_WL_VEGAN.search(ingredient):
         return True
-    
+
     # Normalize
     normalized = normalise(ingredient)
-    
+
     # Quick blacklist check
     if RX_VEGAN.search(normalized) and not RX_WL_VEGAN.search(ingredient):
         return False
-    
+
     # Use ML model if available
     _ensure_pipeline()
     if 'vegan' in _pipeline_state['models']:
@@ -1192,39 +1286,43 @@ def is_ingredient_vegan(ingredient: str) -> bool:
                 prob = model.predict_proba([normalized])[0, 1]
         else:
             prob = model.predict_proba([normalized])[0, 1]
-        
+
         # Apply verification
-        prob_adj = verify_with_rules("vegan", pd.Series([normalized]), np.array([prob]))[0]
+        prob_adj = verify_with_rules(
+            "vegan", pd.Series([normalized]), np.array([prob]))[0]
         return prob_adj >= 0.5
-    
+
     return True
 
 # ============================================================================
 # MAIN ENTRY POINT
 # ============================================================================
 
+
 def main():
     """Main function for command line usage."""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description='Diet Classifier')
-    parser.add_argument('--ground_truth', type=str, help='Path to ground truth CSV')
-    parser.add_argument('--train', action='store_true', help='Run full training pipeline')
+    parser.add_argument('--ground_truth', type=str,
+                        help='Path to ground truth CSV')
+    parser.add_argument('--train', action='store_true',
+                        help='Run full training pipeline')
     args = parser.parse_args()
-    
+
     if args.train:
         # Run full pipeline
         vec, silver, gold, res = run_full_pipeline()
-        
+
         # Save models
         try:
             import pickle
             CFG.data_dir.mkdir(parents=True, exist_ok=True)
-            
+
             # Save vectorizer
             with open(CFG.data_dir / "vectorizer.pkl", 'wb') as f:
                 pickle.dump(vec, f)
-            
+
             # Save best models
             best_models = {}
             for task in ['keto', 'vegan']:
@@ -1232,71 +1330,78 @@ def main():
                 task_res = [r for r in res if r['task'] == task]
                 best = max(task_res, key=lambda x: x['F1'])
                 model_name = best['model']
-                
+
                 if model_name in BEST:
                     best_models[task] = BEST[model_name]
                 else:
                     best_models[task] = build_models(task)[model_name]
-            
+
             with open(CFG.data_dir / "models.pkl", 'wb') as f:
                 pickle.dump(best_models, f)
-                
+
             log.info("Saved trained models to %s", CFG.data_dir)
-            
+
         except Exception as e:
             log.error("Could not save models: %s", e)
-    
+
     elif args.ground_truth:
         # Evaluate on ground truth
         try:
             df = pd.read_csv(args.ground_truth)
-            
+
             # Find columns
-            keto_col = next((col for col in df.columns if 'keto' in col.lower()), None)
-            vegan_col = next((col for col in df.columns if 'vegan' in col.lower()), None)
-            
+            keto_col = next(
+                (col for col in df.columns if 'keto' in col.lower()), None)
+            vegan_col = next(
+                (col for col in df.columns if 'vegan' in col.lower()), None)
+
             if 'ingredients' not in df.columns:
                 print("Error: 'ingredients' column required")
                 return
-            
+
             # Parse ingredients and evaluate
             correct_keto = 0
             correct_vegan = 0
-            
+
             for idx, row in df.iterrows():
                 # Parse ingredients
                 if isinstance(row['ingredients'], str) and row['ingredients'].startswith('['):
                     import ast
                     ingredients = ast.literal_eval(row['ingredients'])
                 else:
-                    ingredients = [i.strip() for i in str(row['ingredients']).split(',')]
-                
+                    ingredients = [i.strip()
+                                   for i in str(row['ingredients']).split(',')]
+
                 # Classify (ALL ingredients must pass)
                 pred_keto = all(is_ingredient_keto(ing) for ing in ingredients)
-                pred_vegan = all(is_ingredient_vegan(ing) for ing in ingredients)
-                
+                pred_vegan = all(is_ingredient_vegan(ing)
+                                 for ing in ingredients)
+
                 # Check accuracy
                 if keto_col and pred_keto == bool(row[keto_col]):
                     correct_keto += 1
                 if vegan_col and pred_vegan == bool(row[vegan_col]):
                     correct_vegan += 1
-            
+
             # Report
             total = len(df)
             print("\n=== Evaluation Results ===")
             if keto_col:
-                print(f"Keto:  {correct_keto}/{total} ({correct_keto/total:.1%})")
+                print(
+                    f"Keto:  {correct_keto}/{total} ({correct_keto/total:.1%})")
             if vegan_col:
-                print(f"Vegan: {correct_vegan}/{total} ({correct_vegan/total:.1%})")
-                
+                print(
+                    f"Vegan: {correct_vegan}/{total} ({correct_vegan/total:.1%})")
+
         except Exception as e:
             print(f"Error: {e}")
             import traceback
             traceback.print_exc()
-    
+
     else:
         # Run full pipeline in dev mode
         run_full_pipeline()
+
 
 if __name__ == "__main__":
     main()
