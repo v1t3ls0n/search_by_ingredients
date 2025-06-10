@@ -48,7 +48,6 @@ from sklearn.svm import LinearSVC
 from sklearn.linear_model import SGDClassifier
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.linear_model import PassiveAggressiveClassifier, RidgeClassifier
-from sklearn.base import BaseEstimator, ClassifierMixin
 from nltk.stem import WordNetLemmatizer
 
 # Download NLTK data
