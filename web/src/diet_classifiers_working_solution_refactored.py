@@ -552,8 +552,8 @@ def compile_any(words: Iterable[str]) -> re.Pattern[str]:
 
 RX_KETO = compile_any(NON_KETO)
 RX_VEGAN = compile_any(NON_VEGAN)
-RX_WL_KETO = re.compile("|".join(KETO_WHITELIST), re.I)
-RX_WL_VEGAN = re.compile("|".join(VEGAN_WHITELIST), re.I)
+RX_WL_KETO = compile_any(KETO_WHITELIST)
+RX_WL_VEGAN = compile_any(VEGAN_WHITELIST)
 
 # ============================================================================
 # NORMALIZATION
@@ -644,6 +644,7 @@ def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarr
             log.debug("Keto Verification: forced %d probs to 0 (regex)",
                       forced_non_keto.sum())
 
+
     else:  # vegan
         bad = clean.str.contains(RX_VEGAN) & ~clean.str.contains(RX_WL_VEGAN)
         adjusted[bad.values] = 0.0
@@ -726,7 +727,7 @@ def show_balance(df: pd.DataFrame, title: str) -> None:
 # ============================================================================
 # MODEL REGISTRY
 # ============================================================================
-
+USE_LGBM = False  # Set to True if you want to use LightGBM
 def build_models(task: str) -> Dict[str, BaseEstimator]:
     """Build all available models for classification."""
     m = {
@@ -738,8 +739,8 @@ def build_models(task: str) -> Dict[str, BaseEstimator]:
         "LR": LogisticRegression(solver="lbfgs", max_iter=1000),
         "SGD": SGDClassifier(loss="log_loss", max_iter=1000, tol=1e-3, class_weight="balanced", n_jobs=-1),
     }
-    
-    if lgb:
+
+    if USE_LGBM:
         m["LGBM"] = lgb.LGBMClassifier(
             num_leaves=15,
             learning_rate=0.3,
@@ -758,8 +759,8 @@ def build_models(task: str) -> Dict[str, BaseEstimator]:
 HYPER = {
     "LR": {"C": [0.2, 1, 5], "class_weight": [None, "balanced"]},
     "SGD": {"alpha": [1e-4, 1e-3]},
-    "MLP": {"hidden_layer_sizes": [(40,), (80,), (80, 40)], "alpha": [1e-4, 1e-3]},
-    "LGBM": {"learning_rate": [0.05, 0.1], "num_leaves": [31, 63], "n_estimators": [200, 400]},
+    # "MLP": {"hidden_layer_sizes": [(40,), (80,), (80, 40)], "alpha": [1e-4, 1e-3]}, not used in this version
+    "LGBM": {"learning_rate": [0.05, 0.1], "num_leaves": [31, 63], "n_estimators": [200, 400]}, 
     "PA": {"C": [0.1, 0.5, 1.0]},
     "Ridge": {"alpha": [0.1, 1.0, 10.0]},
     "NB": {"alpha": [0.5, 1.0, 1.5]}

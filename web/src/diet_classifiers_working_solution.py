@@ -1,4 +1,5 @@
-
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Argmax ingredient-diet pipeline — v3
 Hard-verify every model’s output with blacklist / whitelist rules
@@ -6,6 +7,7 @@ Hard-verify every model’s output with blacklist / whitelist rules
 
 
 from __future__ import annotations
+from utils.non_starter_tokens import NON_VEGAN, NON_KETO, VEGAN_WHITELIST, KETO_WHITELIST
 from sklearn.pipeline import make_pipeline
 from sklearn.metrics import precision_recall_curve
 from sklearn.kernel_approximation import RBFSampler
@@ -394,7 +396,7 @@ KETO_WHITELIST = [
     r"\bcashew milk\b",
     r"\balmond cream\b",
     r"\bcoconut cream\b",
-    r"\bsour cream\b",
+
     r"\balmond butter\b",
     r"\bpeanut butter\b",
     r"\bcoconut butter\b",
@@ -1049,9 +1051,13 @@ def main():
 
     res = run_mode_A(X_silver, gold.clean, X_gold, silver, gold)
     res_ens = [
+        # top_n("keto", res, X_silver, gold.clean, X_gold, silver, gold, n=4),
+        # top_n("vegan", res, X_silver, gold.clean, X_gold, silver, gold, n=4),
         best_ensemble("keto", res, X_silver, gold.clean, X_gold, silver, gold),
         best_ensemble("vegan", res, X_silver,
                       gold.clean, X_gold, silver, gold),
+        # ensemble_all("keto", res, X_silver, gold.clean, X_gold, silver, gold),
+        # ensemble_all("vegan", res, X_silver, gold.clean, X_gold, silver, gold)
     ]
     table("MODE A Ensemble (Top-3 combined metrics)", res_ens)
 
