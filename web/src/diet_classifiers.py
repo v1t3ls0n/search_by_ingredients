@@ -15,6 +15,7 @@ Complete implementation including:
 from __future__ import annotations
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 import warnings
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ---------------------------------------------------------------------------
 # Optional scikit-learn imports
@@ -74,7 +75,8 @@ except ImportError as e:  # pragma: no cover - optional dependency
 
     class TfidfVectorizer:  # type: ignore
         def __init__(self, **kwargs):
-            raise ImportError("scikit-learn is required for this functionality")
+            raise ImportError(
+                "scikit-learn is required for this functionality")
 
     class LogisticRegression:  # type: ignore
         pass
@@ -692,10 +694,14 @@ class RuleModel(BaseEstimator, ClassifierMixin):
 # ============================================================================
 # VERIFICATION LAYER
 # ============================================================================
+
+
 def filter_silver_by_downloaded_images(silver_df: pd.DataFrame, image_dir: Path) -> pd.DataFrame:
     """Keep only rows in silver that have corresponding downloaded image files."""
-    downloaded_ids = [int(p.stem) for p in (image_dir / "silver").glob("*.jpg")]
+    downloaded_ids = [int(p.stem)
+                      for p in (image_dir / "silver").glob("*.jpg")]
     return silver_df.loc[silver_df.index.intersection(downloaded_ids)].copy()
+
 
 def tokenize_ingredient(text: str) -> list[str]:
     return re.findall(r"\b\w[\w-]*\b", text.lower())
@@ -765,71 +771,74 @@ def load_datasets_fixed() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
     # Attach photo_url to gold set
     ground_truth["photo_url"] = ground_truth.get("photo_url")
-    ground_truth["label_keto"] = ground_truth.filter(regex="keto").iloc[:, 0].astype(int)
-    ground_truth["label_vegan"] = ground_truth.filter(regex="vegan").iloc[:, 0].astype(int)
+    ground_truth["label_keto"] = ground_truth.filter(
+        regex="keto").iloc[:, 0].astype(int)
+    ground_truth["label_vegan"] = ground_truth.filter(
+        regex="vegan").iloc[:, 0].astype(int)
     ground_truth["clean"] = ground_truth.ingredients.fillna("").map(normalise)
 
     return silver, ground_truth, recipes
 
-def _download_images(df: pd.DataFrame, split: str) -> None:
-    """Download images from `photo_url` column to disk, with logging and diagnostics."""
+
+
+def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> None:
+    """Download images using multithreading, with logging and progress bar."""
     if not TORCH_AVAILABLE:
         return
 
-    img_dir = CFG.image_dir / split
     img_dir.mkdir(parents=True, exist_ok=True)
 
     if 'photo_url' not in df.columns:
         log.warning("No 'photo_url' column found.")
         return
 
-    downloaded = 0
-    already_exists = 0
-    invalid_url = 0
-    failed = 0
-    failed_urls = []
-
-    for idx, url in df['photo_url'].items():
+    # Internal function to download a single image
+    def fetch(idx_url):
+        idx, url = idx_url
         f = img_dir / f"{idx}.jpg"
 
         if f.exists():
-            already_exists += 1
-            continue
+            return "exists", idx, url, None
         if not isinstance(url, str) or not url.strip().startswith("http"):
-            invalid_url += 1
-            continue
+            return "invalid", idx, url, None
 
         try:
             resp = requests.get(url, timeout=10)
             resp.raise_for_status()
             with open(f, 'wb') as fh:
                 fh.write(resp.content)
-            downloaded += 1
+            return "downloaded", idx, url, None
         except Exception as e:
-            failed += 1
-            failed_urls.append((idx, url, str(e)))
-            continue
+            return "failed", idx, url, str(e)
 
-    log.info(f"[{split}] Downloaded: {downloaded}, Already existed: {already_exists}, Invalid URLs: {invalid_url}, Failed: {failed}")
-    log.info(f"[{split}] Total attempted rows: {len(df)}")
+    stats = {"downloaded": 0, "exists": 0, "invalid": 0, "failed": 0}
+    failed_urls = []
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(fetch, (idx, url)) for idx, url in df['photo_url'].items()]
+        for future in tqdm(as_completed(futures), total=len(futures), desc=f"📥 Downloading {img_dir.name} images"):
+            result, idx, url, err = future.result()
+            stats[result] += 1
+            if result == "failed":
+                failed_urls.append((idx, url, err))
+
+    log.info(f"[{img_dir.name}] Downloaded: {stats['downloaded']}, Already existed: {stats['exists']}, Invalid URLs: {stats['invalid']}, Failed: {stats['failed']}")
+    log.info(f"[{img_dir.name}] Total attempted rows: {len(df)}")
 
     if failed_urls:
         fail_log_path = img_dir / "failed_downloads.txt"
         with open(fail_log_path, "w") as f:
             for idx, url, err in failed_urls:
                 f.write(f"{idx}\t{url}\t{err}\n")
-        log.warning(f"[{split}] Logged {len(failed_urls)} failed downloads to {fail_log_path}")
+        log.warning(f"[{img_dir.name}] Logged {len(failed_urls)} failed downloads to {fail_log_path}")
 
-        
+
+
 def build_image_embeddings(df: pd.DataFrame, mode: str, force: bool = False) -> np.ndarray:
-    """Return or compute image embeddings for the given dataframe."""
+    """Return or compute image embeddings for the given dataframe (skip missing/failed)."""
     if not TORCH_AVAILABLE:
         log.warning("Torch not available — returning zero vectors.")
         return np.zeros((len(df), 2048), dtype=np.float32)
-
-    if df.empty:
-        log.warning(f"[{mode.upper()}] Empty DataFrame passed to build_image_embeddings — returning empty array.")
-        return np.empty((0, 2048), dtype=np.float32)
 
     img_dir = CFG.image_dir / mode
     embed_path = img_dir / "embeddings.npy"
@@ -854,10 +863,12 @@ def build_image_embeddings(df: pd.DataFrame, mode: str, force: bool = False) -> 
     ])
 
     vectors = []
-    for idx in df.index:
+    success, missing, failed = 0, 0, 0
+
+    for idx in tqdm(df.index, desc=f"Embedding images ({mode})"):
         img_file = img_dir / f"{idx}.jpg"
         if not img_file.exists():
-            log.warning(f"Image missing: {img_file}")
+            missing += 1
             vectors.append(np.zeros(2048, dtype=np.float32))
             continue
         try:
@@ -865,21 +876,21 @@ def build_image_embeddings(df: pd.DataFrame, mode: str, force: bool = False) -> 
             with torch.no_grad():
                 t = preprocess(img).unsqueeze(0).to(device)
                 vec = model(t).squeeze().cpu().numpy()
+            success += 1
         except Exception as e:
-            log.warning(f"Failed to process image {img_file}: {e}")
+            log.warning(f"Failed to process {img_file}: {e}")
             vec = np.zeros(2048, dtype=np.float32)
+            failed += 1
         vectors.append(vec)
-
-    if not vectors:
-        log.warning(f"[{mode.upper()}] No image embeddings generated — returning empty array.")
-        return np.empty((0, 2048), dtype=np.float32)
 
     arr = np.vstack(vectors)
     embed_path.parent.mkdir(parents=True, exist_ok=True)
     np.save(embed_path, arr)
-    log.info(f"Saved embeddings to {embed_path}")
-    return arr
 
+    log.info(
+        f"[{mode}] Image embedding complete: {success} ok, {missing} missing, {failed} failed, total {len(df)}")
+    log.info(f"[{mode}] Saved embeddings to {embed_path}")
+    return arr
 
 
 def combine_features(X_text, X_image) -> csr_matrix:
@@ -920,8 +931,6 @@ def apply_smote(X, y, max_dense_size: int = int(5e7)):
         smote = SMOTE(sampling_strategy=0.3, rrandom_state=42)
         return smote.fit_resample(X, y)
     return X, y
-
-
 
 
 # ============================================================================
@@ -1092,7 +1101,8 @@ def run_mode_A(X_vec, clean, X_gold, silver, gold):
         ys, yt = silver[col].values, gold[f"label_{task}"].values
         X_os, y_os = apply_smote(X_vec, ys)
         log.info(f"[{task.upper()}] Silver image rows before SMOTE: {len(ys)}")
-        log.info(f"[{task.upper()}] Silver image rows after  SMOTE: {len(y_os)}")
+        log.info(
+            f"[{task.upper()}] Silver image rows after  SMOTE: {len(y_os)}")
         show_balance(pd.DataFrame({col: y_os}),
                      f"Oversampled {task.capitalize()}")
 
@@ -1324,67 +1334,64 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
 # ============================================================================
 # MAIN PIPELINE
 # ============================================================================
+
+
 def run_full_pipeline(mode: str = "both", force: bool = False):
     """
-    Run the complete training and evaluation pipeline.
+    Run the complete training and evaluation pipeline on the full dataset.
 
     Args:
         mode: 'text', 'image', or 'both' to control input modality.
         force: Recompute image embeddings even if cached.
     """
-    # Load datasets
+    # Load full datasets
     silver, gold, recipes = load_datasets_fixed()
 
-    # Display class balance
     show_balance(gold, "Gold")
     show_balance(silver, "Silver")
 
-    # --- TEXT FEATURE EXTRACTION ---
+    # --- TEXT FEATURES ---
     vec = TfidfVectorizer(**CFG.vec_kwargs)
     X_text_silver = vec.fit_transform(silver.clean)
     X_text_gold = vec.transform(gold.clean)
 
     results, res_text, res_img = [], [], []
 
-    # --- IMAGE-ONLY PIPELINE (Runs First if mode is 'both') ---
+    # --- IMAGE PIPELINE ---
     if mode in {"image", "both"}:
-        # Download missing images
-        _download_images(silver, CFG.image_dir / "silver")
-        _download_images(gold, CFG.image_dir / "gold")
+        _download_images(silver, "silver")
+        _download_images(gold, "gold")
 
-        # Filter to rows with downloaded images
-        img_silver_df = filter_silver_by_downloaded_images(silver, CFG.image_dir)
-        img_gold_df = filter_photo_rows(gold)
+        silver["image_path"] = silver.index.to_series().apply(
+            lambda i: CFG.image_dir / "silver" / f"{i}.jpg")
+        gold["image_path"] = gold.index.to_series().apply(
+            lambda i: CFG.image_dir / "gold" / f"{i}.jpg")
 
-        # Extract image embeddings
-        img_silver = build_image_embeddings(img_silver_df, "silver", force=force)
-        img_gold = build_image_embeddings(img_gold_df, "gold", force=force)
-
-        # Save reproducibility index
-        idx_path = CFG.image_dir / "silver" / "used_indices.txt"
-        idx_path.parent.mkdir(parents=True, exist_ok=True)
-        img_silver_df.index.to_series().to_csv(idx_path, index=False, header=False)
-        log.info(f"Saved image index for reproducibility to: {idx_path}")
+        # No filtering — embedding code should skip missing paths
+        img_silver = build_image_embeddings(silver, "silver", force=force)
+        img_gold = build_image_embeddings(gold, "gold", force=force)
 
         X_img_silver = csr_matrix(img_silver)
         X_img_gold = csr_matrix(img_gold)
 
-        res_img = run_mode_A(
-            X_img_silver, img_gold_df.clean, X_img_gold, img_silver_df, img_gold_df
-        )
+        res_img = run_mode_A(X_img_silver, gold.clean,
+                             X_img_gold, silver, gold)
         results.extend(res_img)
 
-    # --- TEXT-ONLY PIPELINE (Runs Second if mode is 'both') ---
+    # --- TEXT PIPELINE ---
     if mode in {"text", "both"}:
-        res_text = run_mode_A(X_text_silver, gold.clean, X_text_gold, silver, gold)
+        res_text = run_mode_A(X_text_silver, gold.clean,
+                              X_text_gold, silver, gold)
         results.extend(res_text)
 
-    # --- TEXT+IMAGE ENSEMBLE ---
+    # --- ENSEMBLE ---
     if mode == "both" and res_text and res_img:
         ensemble_results = []
         for task in ["keto", "vegan"]:
-            best_text = max((r for r in res_text if r["task"] == task), key=lambda r: r["F1"])
-            best_img = max((r for r in res_img if r["task"] == task), key=lambda r: r["F1"])
+            best_text = max(
+                (r for r in res_text if r["task"] == task), key=lambda r: r["F1"])
+            best_img = max(
+                (r for r in res_img if r["task"] == task), key=lambda r: r["F1"])
             avg_prob = (best_text["prob"] + best_img["prob"]) / 2
             ensemble_result = pack(gold[f"label_{task}"].values, avg_prob) | {
                 "model": "TxtImg",
@@ -1394,16 +1401,15 @@ def run_full_pipeline(mode: str = "both", force: bool = False):
         table("Ensemble Text+Image", ensemble_results)
         results.extend(ensemble_results)
 
-    # --- RECOMBINED FINAL EVALUATION ---
+    # --- FINAL EVAL ON COMBINED FEATURES ---
     if mode == "text":
         X_silver, X_gold = X_text_silver, X_text_gold
     elif mode == "image":
-        X_silver, X_gold = csr_matrix(img_silver), csr_matrix(img_gold)
+        X_silver, X_gold = X_img_silver, X_img_gold
     else:
         X_silver = combine_features(X_text_silver, img_silver)
         X_gold = combine_features(X_text_gold, img_gold)
 
-    # Final evaluation and best ensemble tracking
     res = run_mode_A(X_silver, gold.clean, X_gold, silver, gold)
     res_ens = [
         best_ensemble("keto", res, X_silver, gold.clean, X_gold, silver, gold),
@@ -1411,15 +1417,14 @@ def run_full_pipeline(mode: str = "both", force: bool = False):
     ]
     table("MODE A Ensemble (Best)", res_ens)
 
-    # Save final hyperparameters
     with open("best_params.json", "w") as fp:
-        json.dump({k: v.get_params() for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
+        json.dump({k: v.get_params()
+                  for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
 
     return vec, silver, gold, results
 
-
-
-# ============================================================================
+# ============================================
+# ================================
 # SIMPLE INTERFACE FOR ASSESSMENT (Required functions)
 # ============================================================================
 
@@ -1452,7 +1457,8 @@ def _ensure_pipeline():
                 # Select best models as done in CLI training
                 best_models = {}
                 for task in ["keto", "vegan"]:
-                    task_res = [r for r in res if r["task"] == task and r["model"] != "TxtImg"]
+                    task_res = [r for r in res if r["task"]
+                                == task and r["model"] != "TxtImg"]
                     best = max(task_res, key=lambda x: x['F1'])
                     model_name = best['model']
 
@@ -1523,10 +1529,13 @@ def is_ingredient_keto(ingredient: str) -> bool:
                 X = _pipeline_state['vectorizer'].transform([normalized])
                 prob = model.predict_proba(X)[0, 1]
             except Exception as e:
-                log.warning("Vectorizer failed: %s. Using rule-based fallback.", e)
-                prob = RuleModel("keto", RX_KETO, RX_WL_KETO).predict_proba([normalized])[0, 1]
+                log.warning(
+                    "Vectorizer failed: %s. Using rule-based fallback.", e)
+                prob = RuleModel("keto", RX_KETO, RX_WL_KETO).predict_proba(
+                    [normalized])[0, 1]
         else:
-            prob = RuleModel("keto", RX_KETO, RX_WL_KETO).predict_proba([normalized])[0, 1]
+            prob = RuleModel("keto", RX_KETO, RX_WL_KETO).predict_proba(
+                [normalized])[0, 1]
 
         # Apply verification
         prob_adj = verify_with_rules(
@@ -1572,10 +1581,13 @@ def is_ingredient_vegan(ingredient: str) -> bool:
                 X = _pipeline_state['vectorizer'].transform([normalized])
                 prob = model.predict_proba(X)[0, 1]
             except Exception as e:
-                log.warning("Vectorizer failed: %s. Using rule-based fallback.", e)
-                prob = RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN).predict_proba([normalized])[0, 1]
+                log.warning(
+                    "Vectorizer failed: %s. Using rule-based fallback.", e)
+                prob = RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN).predict_proba(
+                    [normalized])[0, 1]
         else:
-            prob = RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN).predict_proba([normalized])[0, 1]
+            prob = RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN).predict_proba(
+                [normalized])[0, 1]
 
         # Apply verification
         prob_adj = verify_with_rules(
@@ -1596,7 +1608,8 @@ def is_keto(ingredients: Iterable[str] | str) -> bool:
             if ingredients.startswith('['):
                 ingredients = json.loads(ingredients)
             else:
-                ingredients = [i.strip() for i in ingredients.split(',') if i.strip()]
+                ingredients = [i.strip()
+                               for i in ingredients.split(',') if i.strip()]
         except Exception:
             ingredients = [ingredients]
     return all(is_ingredient_keto(ing) for ing in ingredients)
@@ -1613,7 +1626,8 @@ def is_vegan(ingredients: Iterable[str] | str) -> bool:
             if ingredients.startswith('['):
                 ingredients = json.loads(ingredients)
             else:
-                ingredients = [i.strip() for i in ingredients.split(',') if i.strip()]
+                ingredients = [i.strip()
+                               for i in ingredients.split(',') if i.strip()]
         except Exception:
             ingredients = [ingredients]
     return all(is_ingredient_vegan(ing) for ing in ingredients)
@@ -1646,7 +1660,8 @@ def main():
         if args.ingredients.startswith('['):
             ingredients = json.loads(args.ingredients)
         else:
-            ingredients = [i.strip() for i in args.ingredients.split(',') if i.strip()]
+            ingredients = [i.strip()
+                           for i in args.ingredients.split(',') if i.strip()]
 
         keto = is_keto(ingredients)
         vegan = is_vegan(ingredients)
@@ -1655,7 +1670,8 @@ def main():
 
     elif args.train:
         # Run full pipeline with selected feature mode
-        vec, silver, gold, res = run_full_pipeline(mode=args.mode, force=args.force)
+        vec, silver, gold, res = run_full_pipeline(
+            mode=args.mode, force=args.force)
 
         # Save models
         try:
