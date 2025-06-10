@@ -1359,8 +1359,8 @@ def run_full_pipeline(mode: str = "both", force: bool = False):
 
     # --- IMAGE PIPELINE ---
     if mode in {"image", "both"}:
-        _download_images(silver, "silver")
-        _download_images(gold, "gold")
+        _download_images(silver, CFG.image_dir / "silver")
+        _download_images(gold, CFG.image_dir / "gold")
 
         silver["image_path"] = silver.index.to_series().apply(
             lambda i: CFG.image_dir / "silver" / f"{i}.jpg")
