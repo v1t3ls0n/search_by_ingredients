@@ -822,27 +822,26 @@ def _download_images(df: pd.DataFrame, split: str) -> None:
 
         
 
-def build_image_embeddings(df: pd.DataFrame, split: str, force: bool = False) -> np.ndarray:
+def build_image_embeddings(df: pd.DataFrame, mode: str, force: bool = False) -> np.ndarray:
     """Return or compute image embeddings for the given dataframe."""
     if not TORCH_AVAILABLE:
+        log.warning("Torch not available — returning zero vectors.")
         return np.zeros((len(df), 2048), dtype=np.float32)
 
-    img_dir = CFG.image_dir / split
+    img_dir = CFG.image_dir / mode
     embed_path = img_dir / "embeddings.npy"
     if embed_path.exists() and not force:
+        log.info(f"Loading cached embeddings from {embed_path}")
         return np.load(embed_path)
 
-    # Load the original full silver file and download images from it
-    full_silver_df = pd.read_parquet(CFG.silver_path)
-    valid_image_rows = full_silver_df[full_silver_df['photo_url'].apply(lambda x: isinstance(x, str) and x.strip().startswith("http"))]
-    _download_images(valid_image_rows, "silver")
-
-
+    log.info(f"Computing embeddings for {len(df)} images in '{mode}' mode...")
+    
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
     model.fc = torch.nn.Identity()
     model.eval()
     model.to(device)
+
     preprocess = transforms.Compose([
         transforms.Resize(256),
         transforms.CenterCrop(224),
@@ -855,6 +854,7 @@ def build_image_embeddings(df: pd.DataFrame, split: str, force: bool = False) ->
     for idx in df.index:
         img_file = img_dir / f"{idx}.jpg"
         if not img_file.exists():
+            log.warning(f"Image missing: {img_file}")
             vectors.append(np.zeros(2048, dtype=np.float32))
             continue
         try:
@@ -862,12 +862,14 @@ def build_image_embeddings(df: pd.DataFrame, split: str, force: bool = False) ->
             with torch.no_grad():
                 t = preprocess(img).unsqueeze(0).to(device)
                 vec = model(t).squeeze().cpu().numpy()
-        except Exception:
+        except Exception as e:
+            log.warning(f"Failed to process image {img_file}: {e}")
             vec = np.zeros(2048, dtype=np.float32)
         vectors.append(vec)
 
     arr = np.vstack(vectors)
     np.save(embed_path, arr)
+    log.info(f"Saved embeddings to {embed_path}")
     return arr
 
 
@@ -1317,66 +1319,68 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
 def run_full_pipeline(mode: str = "both", force: bool = False):
     """
     Run the complete training and evaluation pipeline.
-    
+
     Args:
-        mode: 'text', 'image', or 'both'. Default 'both' trains both pipelines.
-        force: If True, recompute image embeddings even if cached.
+        mode: 'text', 'image', or 'both' to control input modality.
+        force: Recompute image embeddings even if cached.
     """
-    # Load datasets (includes silver labels, gold truth, and raw recipes)
+    # Load datasets
     silver, gold, recipes = load_datasets_fixed()
 
-    # Report class balance
+    # Display class balance
     show_balance(gold, "Gold")
     show_balance(silver, "Silver")
 
-    # Text vectorization
+    # --- TEXT FEATURE EXTRACTION ---
     vec = TfidfVectorizer(**CFG.vec_kwargs)
     X_text_silver = vec.fit_transform(silver.clean)
     X_text_gold = vec.transform(gold.clean)
 
-    results = []
-    res_text = []
-    res_img = []
+    results, res_text, res_img = [], [], []
 
-    # Run text-only pipeline
+    # --- TEXT-ONLY PIPELINE ---
     if mode in {"text", "both"}:
         res_text = run_mode_A(X_text_silver, gold.clean, X_text_gold, silver, gold)
         results.extend(res_text)
 
-    # Run image-only pipeline
+    # --- IMAGE-ONLY PIPELINE ---
     if mode in {"image", "both"}:
-        # Keep only rows with downloaded images
         img_silver_df = filter_silver_by_downloaded_images(silver, CFG.image_dir)
         img_gold_df = filter_photo_rows(gold)
 
-        # Extract image embeddings
+        # Save reproducibility index
+        idx_path = CFG.image_dir / "silver" / "used_indices.txt"
+        idx_path.parent.mkdir(parents=True, exist_ok=True)
+        img_silver_df.index.to_series().to_csv(idx_path, index=False, header=False)
+        log.info(f"Saved image index for reproducibility to: {idx_path}")
+
         img_silver = build_image_embeddings(img_silver_df, "silver", force=force)
         img_gold = build_image_embeddings(img_gold_df, "gold", force=force)
 
-        # Convert to sparse matrices
         X_img_silver = csr_matrix(img_silver)
         X_img_gold = csr_matrix(img_gold)
 
-        # Train models and evaluate
-        res_img = run_mode_A(X_img_silver, img_gold_df.clean, X_img_gold, img_silver_df, img_gold_df)
+        res_img = run_mode_A(
+            X_img_silver, img_gold_df.clean, X_img_gold, img_silver_df, img_gold_df
+        )
         results.extend(res_img)
 
-    # If both text and image are used, ensemble their best models
+    # --- TEXT+IMAGE ENSEMBLE ---
     if mode == "both" and res_text and res_img:
-        ens = []
+        ensemble_results = []
         for task in ["keto", "vegan"]:
-            best_text = max([r for r in res_text if r["task"] == task], key=lambda x: x["F1"])
-            best_img = max([r for r in res_img if r["task"] == task], key=lambda x: x["F1"])
+            best_text = max((r for r in res_text if r["task"] == task), key=lambda r: r["F1"])
+            best_img = max((r for r in res_img if r["task"] == task), key=lambda r: r["F1"])
             avg_prob = (best_text["prob"] + best_img["prob"]) / 2
-            r = pack(gold[f"label_{task}"].values, avg_prob) | {
+            ensemble_result = pack(gold[f"label_{task}"].values, avg_prob) | {
                 "model": "TxtImg",
                 "task": task
             }
-            ens.append(r)
-        table("Ensemble Text+Image", ens)
-        results.extend(ens)
+            ensemble_results.append(ensemble_result)
+        table("Ensemble Text+Image", ensemble_results)
+        results.extend(ensemble_results)
 
-    # Final full feature recombination (optional full model run)
+    # --- RECOMBINED FINAL EVALUATION ---
     if mode == "text":
         X_silver, X_gold = X_text_silver, X_text_gold
     elif mode == "image":
@@ -1385,17 +1389,15 @@ def run_full_pipeline(mode: str = "both", force: bool = False):
         X_silver = combine_features(X_text_silver, img_silver)
         X_gold = combine_features(X_text_gold, img_gold)
 
-    # Run main evaluation for final ensemble selection
+    # Final evaluation and best ensemble tracking
     res = run_mode_A(X_silver, gold.clean, X_gold, silver, gold)
-
-    # Best ensemble per task (text/image/fusion)
     res_ens = [
         best_ensemble("keto", res, X_silver, gold.clean, X_gold, silver, gold),
-        best_ensemble("vegan", res, X_silver, gold.clean, X_gold, silver, gold),
+        best_ensemble("vegan", res, X_silver, gold.clean, X_gold, silver, gold)
     ]
     table("MODE A Ensemble (Best)", res_ens)
 
-    # Save best model hyperparameters
+    # Save final hyperparameters
     with open("best_params.json", "w") as fp:
         json.dump({k: v.get_params() for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
 

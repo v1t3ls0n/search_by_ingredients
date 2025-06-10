@@ -1,13 +1,26 @@
 #!/bin/bash
 
-set -e  # Exit on error
-set -x  # Print commands for debug
+set -e
 
-# Step 1: Build Docker containers
+echo "🛠️ Building Docker containers..."
 docker compose build
 
-# Step 2: Start containers in the background
+echo "🚀 Starting containers in detached mode..."
 docker compose up -d
 
-# Step 3: Run the full training pipeline using both text+image on ground truth
-docker compose exec web bash -c "python web/diet_classifiers.py --train --mode both"
+echo "⏳ Waiting for 'web' service to be ready..."
+sleep 10  # adjust if necessary depending on container startup
+
+echo "🐳 Entering container and running pipeline on ground truth..."
+docker compose exec web bash -c "
+    echo '📦 Installing dependencies (if needed)...'
+    pip install -r requirements.txt >/dev/null 2>&1 || true
+
+    echo '🧠 Training and testing using both image and text classifiers...'
+    python web/diet_classifiers.py --train --mode both
+
+    echo '🧪 Evaluating on provided gold set...'
+    python web/diet_classifiers.py --ground_truth /usr/src/data/ground_truth_sample.csv
+"
+
+echo "✅ Done!"
