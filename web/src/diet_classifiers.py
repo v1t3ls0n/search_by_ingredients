@@ -21,10 +21,10 @@ from sklearn.svm import SVC
 import nltk
 import json
 import logging
+import warnings
 import re
 import unicodedata
 import urllib.request
-import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 
