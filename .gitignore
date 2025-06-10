@@ -2,7 +2,9 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
+*.csv
+allrecipes.parquet
+best_params.json
 # C extensions
 *.so
 
