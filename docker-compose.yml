@@ -42,6 +42,7 @@ services:
       - "8080:8080"
     volumes:
       - ./web/src:/app/web
+      - ./data/ground_truth_sample.csv:/usr/src/data/ground_truth_sample.csv
     networks:
       - argmax
     depends_on:

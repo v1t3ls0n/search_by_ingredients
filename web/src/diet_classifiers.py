@@ -868,6 +868,7 @@ def build_image_embeddings(df: pd.DataFrame, mode: str, force: bool = False) -> 
         vectors.append(vec)
 
     arr = np.vstack(vectors)
+    embed_path.parent.mkdir(parents=True, exist_ok=True)
     np.save(embed_path, arr)
     log.info(f"Saved embeddings to {embed_path}")
     return arr
