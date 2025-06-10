@@ -12,100 +12,36 @@ Complete implementation including:
 - False prediction logging
 """
 
+# --- Future ---
 from __future__ import annotations
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
-import warnings
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
-import joblib
-import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix, roc_curve, ConfusionMatrixDisplay, RocCurveDisplay
 
-
-# ---------------------------------------------------------------------------
-# Optional scikit-learn imports
-# ---------------------------------------------------------------------------
-try:
-    from sklearn.pipeline import make_pipeline
-    from sklearn.metrics import precision_recall_curve
-    from sklearn.kernel_approximation import RBFSampler
-    from sklearn.svm import SVC
-    from sklearn.base import BaseEstimator, ClassifierMixin, clone
-    from sklearn.calibration import CalibratedClassifierCV
-    from sklearn.ensemble import VotingClassifier
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    from sklearn.linear_model import LogisticRegression, SGDClassifier
-    from sklearn.metrics import (accuracy_score, average_precision_score,
-                                 confusion_matrix, f1_score, precision_score,
-                                 recall_score, roc_auc_score)
-    from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
-    from sklearn.neural_network import MLPClassifier
-    from sklearn.svm import LinearSVC
-    from sklearn.naive_bayes import MultinomialNB
-    from sklearn.linear_model import PassiveAggressiveClassifier, RidgeClassifier
-    SKLEARN_AVAILABLE = True
-except ImportError as e:  # pragma: no cover - optional dependency
-    warnings.warn(
-        f"scikit-learn not installed ({e}). ML features will be disabled.",
-        stacklevel=2,
-    )
-    SKLEARN_AVAILABLE = False
-
-    class BaseEstimator:  # type: ignore
-        pass
-
-    class ClassifierMixin:  # type: ignore
-        pass
-
-    def clone(obj):  # type: ignore
-        return obj
-
-    def make_pipeline(*args, **kwargs):  # type: ignore
-        raise ImportError("scikit-learn is required for this functionality")
-
-    def precision_recall_curve(*args, **kwargs):  # type: ignore
-        raise ImportError("scikit-learn is required for this functionality")
-
-    class RBFSampler:  # type: ignore
-        pass
-
-    class SVC:  # type: ignore
-        pass
-
-    class CalibratedClassifierCV:  # type: ignore
-        pass
-
-    class VotingClassifier:  # type: ignore
-        pass
-
-    class TfidfVectorizer:  # type: ignore
-        def __init__(self, **kwargs):
-            raise ImportError(
-                "scikit-learn is required for this functionality")
-
-    class LogisticRegression:  # type: ignore
-        pass
-
-    LinearSVC = MLPClassifier = GridSearchCV = RandomizedSearchCV = None  # type: ignore
-    accuracy_score = average_precision_score = confusion_matrix = f1_score = precision_score = recall_score = roc_auc_score = None  # type: ignore
-    SGDClassifier = MultinomialNB = PassiveAggressiveClassifier = RidgeClassifier = None  # type: ignore
-
-import nltk
+# --- Standard library ---
 import json
 import logging
-import warnings
 import re
 import unicodedata
+import warnings
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 
+# --- Third-party (core) ---
+import joblib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from nltk.stem import WordNetLemmatizer
 from tqdm import tqdm
-from imblearn.over_sampling import SMOTE, RandomOverSampler
+from scipy.sparse import hstack, csr_matrix
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score,
+    roc_auc_score, confusion_matrix, roc_curve,
+    ConfusionMatrixDisplay, RocCurveDisplay
+)
 
-# Download NLTK data
+# --- NLTK setup ---
+import nltk
 try:
     nltk.download('wordnet', quiet=True)
     nltk.download('omw-1.4', quiet=True)
@@ -113,7 +49,46 @@ try:
 except:
     wnl = None
 
-# Optional LightGBM
+# --- Optional: scikit-learn extended modules ---
+try:
+    from sklearn.base import BaseEstimator, ClassifierMixin, clone
+    from sklearn.calibration import CalibratedClassifierCV
+    from sklearn.ensemble import VotingClassifier
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.kernel_approximation import RBFSampler
+    from sklearn.linear_model import (
+        LogisticRegression, SGDClassifier,
+        PassiveAggressiveClassifier, RidgeClassifier
+    )
+    from sklearn.metrics import average_precision_score, precision_recall_curve
+    from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+    from sklearn.naive_bayes import MultinomialNB
+    from sklearn.neural_network import MLPClassifier
+    from sklearn.pipeline import make_pipeline
+    from sklearn.svm import SVC, LinearSVC
+    SKLEARN_AVAILABLE = True
+except ImportError as e:  # pragma: no cover
+    warnings.warn(f"scikit-learn not installed ({e}). ML features will be disabled.", stacklevel=2)
+    SKLEARN_AVAILABLE = False
+
+    # Fallbacks
+    class BaseEstimator: pass
+    class ClassifierMixin: pass
+    def clone(obj): return obj
+    def make_pipeline(*args, **kwargs): raise ImportError("scikit-learn is required")
+    def precision_recall_curve(*args, **kwargs): raise ImportError("scikit-learn is required")
+    class RBFSampler: pass
+    class SVC: pass
+    class CalibratedClassifierCV: pass
+    class VotingClassifier: pass
+    class TfidfVectorizer:
+        def __init__(self, **kwargs): raise ImportError("scikit-learn is required")
+    class LogisticRegression: pass
+    LinearSVC = MLPClassifier = GridSearchCV = RandomizedSearchCV = None
+    accuracy_score = average_precision_score = confusion_matrix = f1_score = precision_score = recall_score = roc_auc_score = None
+    SGDClassifier = MultinomialNB = PassiveAggressiveClassifier = RidgeClassifier = None
+
+# --- Optional: LightGBM ---
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=UserWarning)
     try:
@@ -121,26 +96,25 @@ with warnings.catch_warnings():
     except ImportError:
         lgb = None
 
-# Optional PyTorch for image embeddings
-try:  # pragma: no cover - optional dependency
+# --- Optional: PyTorch + torchvision ---
+try:  # pragma: no cover
     from PIL import Image
     import requests
     import torch
     from torchvision import models, transforms
     TORCH_AVAILABLE = True
-except Exception as e:  # pragma: no cover - optional dependency
-    warnings.warn(
-        f"PyTorch/torchvision not installed ({e}). Image features disabled.",
-        stacklevel=2,
-    )
-    Image = None  # type: ignore
-    requests = None  # type: ignore
-    torch = None  # type: ignore
-    models = None  # type: ignore
-    transforms = None  # type: ignore
+except Exception as e:  # pragma: no cover
+    warnings.warn(f"PyTorch/torchvision not installed ({e}). Image features disabled.", stacklevel=2)
+    Image = None
+    requests = None
+    torch = None
+    models = None
+    transforms = None
     TORCH_AVAILABLE = False
 
-from scipy.sparse import hstack, csr_matrix
+# --- Optional: Imbalanced data tools ---
+from imblearn.over_sampling import SMOTE, RandomOverSampler
+
 
 # ============================================================================
 # DOMAIN HARDCODED LISTS (HEURISTICS) - Complete from original
@@ -1458,15 +1432,24 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
         pred = r.get("pred")
         true = gold[f"label_{task}"].values
 
+        # inside your loop:
         row = {
             "model": model,
             "task": task,
-            "F1": r.get("F1", None),
+            "accuracy": None,
+            "precision": None,
+            "recall": None,
+            "F1": None,
             "AUC": None
         }
 
-        # Confusion matrix
+        # Only compute if predictions are available
         if pred is not None:
+            row["accuracy"] = accuracy_score(true, pred)
+            row["precision"] = precision_score(true, pred, zero_division=0)
+            row["recall"] = recall_score(true, pred, zero_division=0)
+            row["F1"] = f1_score(true, pred, zero_division=0)
+
             cm = confusion_matrix(true, pred)
             disp = ConfusionMatrixDisplay(cm)
             disp.plot()
@@ -1474,19 +1457,23 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
             plt.savefig(f"plots/{model}_{task}_confusion.png")
             plt.close()
 
-        # ROC + AUC + F1 annotation
+
+        # Compute AUC + ROC if probs are available
         if prob is not None and hasattr(prob, "__len__"):
             try:
                 auc = roc_auc_score(true, prob)
-                f1 = f1_score(true, pred) if pred is not None else None
                 row["AUC"] = auc
                 fpr, tpr, _ = roc_curve(true, prob)
                 RocCurveDisplay(fpr=fpr, tpr=tpr).plot()
-                plt.title(f"{model} - {task} - ROC\nAUC={auc:.3f}, F1={f1:.3f}" if f1 else f"AUC={auc:.3f}")
+                title = f"{model} - {task} - ROC\nAUC={auc:.3f}"
+                if row["F1"] is not None:
+                    title += f", F1={row['F1']:.3f}"
+                plt.title(title)
                 plt.savefig(f"plots/{model}_{task}_roc.png")
                 plt.close()
             except Exception as e:
                 print(f"[Warning] Failed ROC/AUC for {model} {task}: {e}")
+
 
         rows.append(row)
 
