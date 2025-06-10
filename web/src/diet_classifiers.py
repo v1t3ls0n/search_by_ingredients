@@ -114,6 +114,27 @@ with warnings.catch_warnings():
     except ImportError:
         lgb = None
 
+# Optional PyTorch for image embeddings
+try:  # pragma: no cover - optional dependency
+    from PIL import Image
+    import requests
+    import torch
+    from torchvision import models, transforms
+    TORCH_AVAILABLE = True
+except Exception as e:  # pragma: no cover - optional dependency
+    warnings.warn(
+        f"PyTorch/torchvision not installed ({e}). Image features disabled.",
+        stacklevel=2,
+    )
+    Image = None  # type: ignore
+    requests = None  # type: ignore
+    torch = None  # type: ignore
+    models = None  # type: ignore
+    transforms = None  # type: ignore
+    TORCH_AVAILABLE = False
+
+from scipy.sparse import hstack, csr_matrix
+
 # ============================================================================
 # DOMAIN HARDCODED LISTS (HEURISTICS) - Complete from original
 # ============================================================================
@@ -591,6 +612,7 @@ class Config:
     })
     vec_kwargs: Dict[str, Any] = field(default_factory=lambda: dict(
         min_df=2, ngram_range=(1, 3), max_features=50000, sublinear_tf=True))
+    image_dir: Path = Path("dataset/arg_max/images")
 
 
 CFG = Config()
@@ -734,6 +756,78 @@ def load_datasets() -> tuple[pd.DataFrame, pd.DataFrame]:
     recipes = pd.read_parquet(CFG.url_map["allrecipes.parquet"])
     ground_truth = pd.read_csv(CFG.url_map["ground_truth_sample.csv"])
     return recipes, ground_truth
+
+
+def _download_images(df: pd.DataFrame, split: str) -> None:
+    """Download images to the configured image directory."""
+    if not TORCH_AVAILABLE:
+        return
+    img_dir = CFG.image_dir / split
+    img_dir.mkdir(parents=True, exist_ok=True)
+    if 'photo_url' not in df.columns:
+        return
+    for idx, url in df['photo_url'].items():
+        f = img_dir / f"{idx}.jpg"
+        if f.exists() or not isinstance(url, str) or not url:
+            continue
+        try:
+            resp = requests.get(url, timeout=10)
+            resp.raise_for_status()
+            with open(f, 'wb') as fh:
+                fh.write(resp.content)
+        except Exception:
+            continue
+
+
+def build_image_embeddings(df: pd.DataFrame, split: str, force: bool = False) -> np.ndarray:
+    """Return or compute image embeddings for the given dataframe."""
+    if not TORCH_AVAILABLE:
+        return np.zeros((len(df), 2048), dtype=np.float32)
+
+    img_dir = CFG.image_dir / split
+    embed_path = img_dir / "embeddings.npy"
+    if embed_path.exists() and not force:
+        return np.load(embed_path)
+
+    _download_images(df, split)
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+    model.fc = torch.nn.Identity()
+    model.eval()
+    model.to(device)
+    preprocess = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                             std=[0.229, 0.224, 0.225]),
+    ])
+
+    vectors = []
+    for idx in df.index:
+        img_file = img_dir / f"{idx}.jpg"
+        if not img_file.exists():
+            vectors.append(np.zeros(2048, dtype=np.float32))
+            continue
+        try:
+            img = Image.open(img_file).convert('RGB')
+            with torch.no_grad():
+                t = preprocess(img).unsqueeze(0).to(device)
+                vec = model(t).squeeze().cpu().numpy()
+        except Exception:
+            vec = np.zeros(2048, dtype=np.float32)
+        vectors.append(vec)
+
+    arr = np.vstack(vectors)
+    np.save(embed_path, arr)
+    return arr
+
+
+def combine_features(X_text, X_image) -> csr_matrix:
+    """Concatenate sparse text matrix with dense image array."""
+    img_sparse = csr_matrix(X_image)
+    return hstack([X_text, img_sparse])
 
 
 
@@ -1137,8 +1231,13 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
 # ============================================================================
 
 
-def run_full_pipeline():
-    """Run the complete training and evaluation pipeline."""
+def run_full_pipeline(mode: str = "both", force: bool = False):
+    """Run the complete training and evaluation pipeline.
+
+    Args:
+        mode: 'text', 'image', or 'both' to specify feature set.
+        force: Recompute image embeddings even if cached.
+    """
     # Load datasets in memory
     recipes, gold = load_datasets()
     gold["label_keto"] = gold.filter(regex="keto").iloc[:, 0].astype(int)
@@ -1150,10 +1249,26 @@ def run_full_pipeline():
     show_balance(gold, "Gold")
     show_balance(silver, "Silver")
 
-    # Vectorize
     vec = TfidfVectorizer(**CFG.vec_kwargs)
-    X_silver = vec.fit_transform(silver.clean)
-    X_gold = vec.transform(gold.clean)
+    X_text_silver = vec.fit_transform(silver.clean)
+    X_text_gold = vec.transform(gold.clean)
+
+    # Image embeddings if requested
+    if mode in {"image", "both"}:
+        img_silver = build_image_embeddings(recipes, "silver", force=force)
+        img_gold = build_image_embeddings(gold, "gold", force=force)
+    else:
+        img_silver = img_gold = None
+
+    if mode == "text":
+        X_silver = X_text_silver
+        X_gold = X_text_gold
+    elif mode == "image":
+        X_silver = csr_matrix(img_silver)
+        X_gold = csr_matrix(img_gold)
+    else:
+        X_silver = combine_features(X_text_silver, img_silver)
+        X_gold = combine_features(X_text_gold, img_gold)
 
     # Run mode A
     res = run_mode_A(X_silver, gold.clean, X_gold, silver, gold)
@@ -1200,8 +1315,8 @@ def _ensure_pipeline():
                 with open(models_path, 'rb') as f:
                     _pipeline_state['models'] = pickle.load(f)
             else:
-                # No trained models available, run full pipeline
-                vec, _, _, res = run_full_pipeline()
+                # No trained models available, run full pipeline with images
+                vec, _, _, res = run_full_pipeline(mode="both")
 
                 # Select best models as done in CLI training
                 best_models = {}
@@ -1388,6 +1503,10 @@ def main():
                         help='Run full training pipeline')
     parser.add_argument('--ingredients', type=str,
                         help='Comma separated ingredients to classify')
+    parser.add_argument('--mode', choices=['text', 'image', 'both'],
+                        default='both', help='Feature mode for training')
+    parser.add_argument('--force', action='store_true',
+                        help='Recompute image embeddings')
     args = parser.parse_args()
 
     if args.ingredients:
@@ -1402,8 +1521,8 @@ def main():
         return
 
     elif args.train:
-        # Run full pipeline
-        vec, silver, gold, res = run_full_pipeline()
+        # Run full pipeline with selected feature mode
+        vec, silver, gold, res = run_full_pipeline(mode=args.mode, force=args.force)
 
         # Save models
         try:
@@ -1491,7 +1610,7 @@ def main():
 
     else:
         # Run full pipeline in dev mode
-        run_full_pipeline()
+        run_full_pipeline(mode=args.mode, force=args.force)
 
 
 if __name__ == "__main__":
