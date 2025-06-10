@@ -852,6 +852,7 @@ def apply_smote(X, y):
 
 
 
+
 # ============================================================================
 # SILVER LABELS GENERATION
 # ============================================================================
@@ -1254,11 +1255,14 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
 
 def run_full_pipeline(mode: str = "both", force: bool = False):
     """Run the complete training and evaluation pipeline.
-
     Args:
         mode: 'text', 'image', or 'both'. Default 'both' trains both pipelines.
         force: Recompute image embeddings even if cached.
+        mode: 'text', 'image', or 'both' to specify feature set.
+        force: Recompute image embeddings even if cached.
     """
+    
+    # Load datasets in memory
     recipes, gold = load_datasets()
     gold["label_keto"] = gold.filter(regex="keto").iloc[:, 0].astype(int)
     gold["label_vegan"] = gold.filter(regex="vegan").iloc[:, 0].astype(int)
@@ -1308,6 +1312,33 @@ def run_full_pipeline(mode: str = "both", force: bool = False):
         table("Ensemble Text+Image", ens)
         results.extend(ens)
 
+# Image embeddings if requested
+    if mode in {"image", "both"}:
+        img_silver = build_image_embeddings(recipes, "silver", force=force)
+        img_gold = build_image_embeddings(gold, "gold", force=force)
+    else:
+        img_silver = img_gold = None
+
+    if mode == "text":
+        X_silver = X_text_silver
+        X_gold = X_text_gold
+    elif mode == "image":
+        X_silver = csr_matrix(img_silver)
+        X_gold = csr_matrix(img_gold)
+    else:
+        X_silver = combine_features(X_text_silver, img_silver)
+        X_gold = combine_features(X_text_gold, img_gold)
+
+    # Run mode A
+    res = run_mode_A(X_silver, gold.clean, X_gold, silver, gold)
+
+    # Find best ensembles
+    res_ens = [
+        best_ensemble("keto", res, X_silver, gold.clean, X_gold, silver, gold),
+        best_ensemble("vegan", res, X_silver,
+                      gold.clean, X_gold, silver, gold),
+    ]
+    table("MODE A Ensemble (Best)", res_ens)
     with open("best_params.json", "w") as fp:
         json.dump({k: v.get_params() for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
 
@@ -1416,11 +1447,11 @@ def is_ingredient_keto(ingredient: str) -> bool:
             try:
                 X = _pipeline_state['vectorizer'].transform([normalized])
                 prob = model.predict_proba(X)[0, 1]
-            except:
-                # Fallback to rule-based
-                prob = model.predict_proba([normalized])[0, 1]
+            except Exception as e:
+                log.warning("Vectorizer failed: %s. Using rule-based fallback.", e)
+                prob = RuleModel("keto", RX_KETO, RX_WL_KETO).predict_proba([normalized])[0, 1]
         else:
-            prob = model.predict_proba([normalized])[0, 1]
+            prob = RuleModel("keto", RX_KETO, RX_WL_KETO).predict_proba([normalized])[0, 1]
 
         # Apply verification
         prob_adj = verify_with_rules(
@@ -1465,11 +1496,11 @@ def is_ingredient_vegan(ingredient: str) -> bool:
             try:
                 X = _pipeline_state['vectorizer'].transform([normalized])
                 prob = model.predict_proba(X)[0, 1]
-            except:
-                # Fallback to rule-based
-                prob = model.predict_proba([normalized])[0, 1]
+            except Exception as e:
+                log.warning("Vectorizer failed: %s. Using rule-based fallback.", e)
+                prob = RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN).predict_proba([normalized])[0, 1]
         else:
-            prob = model.predict_proba([normalized])[0, 1]
+            prob = RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN).predict_proba([normalized])[0, 1]
 
         # Apply verification
         prob_adj = verify_with_rules(
@@ -1529,6 +1560,7 @@ def main():
     parser.add_argument('--ingredients', type=str,
                         help='Comma separated ingredients to classify')
     # Use both text and image features by default
+
     parser.add_argument('--mode', choices=['text', 'image', 'both'],
                         default='both', help='Feature mode for training')
     parser.add_argument('--force', action='store_true',
