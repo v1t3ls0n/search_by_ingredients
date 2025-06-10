@@ -16,6 +16,11 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+import joblib
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, roc_curve, ConfusionMatrixDisplay, RocCurveDisplay
+
 
 # ---------------------------------------------------------------------------
 # Optional scikit-learn imports
@@ -780,7 +785,6 @@ def load_datasets_fixed() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     return silver, ground_truth, recipes
 
 
-
 def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> None:
     """Download images using multithreading, with logging and progress bar."""
     if not TORCH_AVAILABLE:
@@ -815,7 +819,8 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
     failed_urls = []
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(fetch, (idx, url)) for idx, url in df['photo_url'].items()]
+        futures = [executor.submit(fetch, (idx, url))
+                   for idx, url in df['photo_url'].items()]
         for future in tqdm(as_completed(futures), total=len(futures), desc=f"📥 Downloading {img_dir.name} images"):
             result, idx, url, err = future.result()
             stats[result] += 1
@@ -830,8 +835,8 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
         with open(fail_log_path, "w") as f:
             for idx, url, err in failed_urls:
                 f.write(f"{idx}\t{url}\t{err}\n")
-        log.warning(f"[{img_dir.name}] Logged {len(failed_urls)} failed downloads to {fail_log_path}")
-
+        log.warning(
+            f"[{img_dir.name}] Logged {len(failed_urls)} failed downloads to {fail_log_path}")
 
 
 def build_image_embeddings(df: pd.DataFrame, mode: str, force: bool = False) -> np.ndarray:
@@ -1335,6 +1340,7 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
 # MAIN PIPELINE
 # ============================================================================
 
+
 def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: float = None):
     """
     Run the complete training and evaluation pipeline.
@@ -1347,36 +1353,44 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
     # Load datasets
     silver, gold, recipes = load_datasets_fixed()
 
-    # Filter only rows with usable photo URLs
+    # Filter rows with usable photo URLs
     silver = filter_photo_rows(silver)
     gold = filter_photo_rows(gold)
 
-    # Optional subsample (for large silver set)
+    # Optional subsample
     if sample_frac:
         silver = silver.sample(frac=sample_frac, random_state=42).copy()
 
-    # Display class balance
+    # Show balance
     show_balance(gold, "Gold")
     show_balance(silver, "Silver")
 
-    # --- TEXT FEATURE EXTRACTION ---
+    # --- TEXT FEATURES ---
     vec = TfidfVectorizer(**CFG.vec_kwargs)
     X_text_silver = vec.fit_transform(silver.clean)
     X_text_gold = vec.transform(gold.clean)
-    results, res_text, res_img = [], [], []
 
+    # Save text gold features
+    Path("embeddings").mkdir(exist_ok=True)
+    joblib.dump(X_text_gold, "embeddings/text_gold.pkl")
+
+    results, res_text, res_img = [], [], []
     img_silver = img_gold = None
 
-    # --- IMAGE-ONLY PIPELINE (Runs First if mode is 'both') ---
+    # --- IMAGE FEATURES ---
     if mode in {"image", "both"}:
         _download_images(silver, CFG.image_dir / "silver")
         _download_images(gold, CFG.image_dir / "gold")
 
-        img_silver_df = filter_silver_by_downloaded_images(silver, CFG.image_dir)
+        img_silver_df = filter_silver_by_downloaded_images(
+            silver, CFG.image_dir)
         img_gold_df = filter_photo_rows(gold)
 
-        img_silver = build_image_embeddings(img_silver_df, "silver", force=force)
+        img_silver = build_image_embeddings(
+            img_silver_df, "silver", force=force)
         img_gold = build_image_embeddings(img_gold_df, "gold", force=force)
+
+        joblib.dump(img_gold, "embeddings/img_gold.pkl")
 
         idx_path = CFG.image_dir / "silver" / "used_indices.txt"
         idx_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1391,17 +1405,20 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
         )
         results.extend(res_img)
 
-    # --- TEXT-ONLY PIPELINE (Runs Second if mode is 'both') ---
+    # --- TEXT-ONLY PIPELINE ---
     if mode in {"text", "both"}:
-        res_text = run_mode_A(X_text_silver, gold.clean, X_text_gold, silver, gold)
+        res_text = run_mode_A(X_text_silver, gold.clean,
+                              X_text_gold, silver, gold)
         results.extend(res_text)
 
     # --- TEXT+IMAGE ENSEMBLE ---
     if mode == "both" and res_text and res_img:
         ensemble_results = []
         for task in ["keto", "vegan"]:
-            best_text = max((r for r in res_text if r["task"] == task), key=lambda r: r["F1"])
-            best_img = max((r for r in res_img if r["task"] == task), key=lambda r: r["F1"])
+            best_text = max(
+                (r for r in res_text if r["task"] == task), key=lambda r: r["F1"])
+            best_img = max(
+                (r for r in res_img if r["task"] == task), key=lambda r: r["F1"])
             avg_prob = (best_text["prob"] + best_img["prob"]) / 2
             ensemble_result = pack(gold[f"label_{task}"].values, avg_prob) | {
                 "model": "TxtImg",
@@ -1411,7 +1428,7 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
         table("Ensemble Text+Image", ensemble_results)
         results.extend(ensemble_results)
 
-    # --- RECOMBINED FINAL EVALUATION ---
+    # --- FINAL EVALUATION ---
     if mode == "text":
         X_silver, X_gold = X_text_silver, X_text_gold
     elif mode == "image":
@@ -1421,24 +1438,72 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
         X_gold = combine_features(X_text_gold, img_gold)
 
     res = run_mode_A(X_silver, gold.clean, X_gold, silver, gold)
+    results.extend(res)
+
     res_ens = [
         best_ensemble("keto", res, X_silver, gold.clean, X_gold, silver, gold),
         best_ensemble("vegan", res, X_silver, gold.clean, X_gold, silver, gold)
     ]
     table("MODE A Ensemble (Best)", res_ens)
+    results.extend(res_ens)
 
+
+    Path("plots").mkdir(exist_ok=True)
+    rows = []
+
+    for r in tqdm(results, desc="Saving plots and metrics"):
+        task = r["task"]
+        model = r["model"]
+        prob = r.get("prob")
+        pred = r.get("pred")
+        true = gold[f"label_{task}"].values
+
+        row = {
+            "model": model,
+            "task": task,
+            "F1": r.get("F1", None),
+            "AUC": None
+        }
+
+        # Confusion matrix
+        if pred is not None:
+            cm = confusion_matrix(true, pred)
+            disp = ConfusionMatrixDisplay(cm)
+            disp.plot()
+            plt.title(f"{model} - {task} - Confusion Matrix")
+            plt.savefig(f"plots/{model}_{task}_confusion.png")
+            plt.close()
+
+        # ROC + AUC + F1 annotation
+        if prob is not None and hasattr(prob, "__len__"):
+            try:
+                auc = roc_auc_score(true, prob)
+                f1 = f1_score(true, pred) if pred is not None else None
+                row["AUC"] = auc
+                fpr, tpr, _ = roc_curve(true, prob)
+                RocCurveDisplay(fpr=fpr, tpr=tpr).plot()
+                plt.title(f"{model} - {task} - ROC\nAUC={auc:.3f}, F1={f1:.3f}" if f1 else f"AUC={auc:.3f}")
+                plt.savefig(f"plots/{model}_{task}_roc.png")
+                plt.close()
+            except Exception as e:
+                print(f"[Warning] Failed ROC/AUC for {model} {task}: {e}")
+
+        rows.append(row)
+
+    # Export all results to CSV
+    df_eval = pd.DataFrame(rows)
+    df_eval.to_csv("evaluation_results.csv", index=False)
+    log.info("Saved evaluation results to evaluation_results.csv")
+
+    # --- Save Best Model Params ---
     with open("best_params.json", "w") as fp:
         json.dump({k: v.get_params() for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
 
     return vec, silver, gold, results
 
-
-
 # ============================================================================
 # SIMPLE INTERFACE FOR ASSESSMENT (Required functions)
 # ============================================================================
-
-
 # Global state for simple interface
 _pipeline_state = {
     'vectorizer': None,
@@ -1713,8 +1778,10 @@ def main():
             df = pd.read_csv(args.ground_truth)
             df = filter_photo_rows(df)
 
-            keto_col = next((col for col in df.columns if 'keto' in col.lower()), None)
-            vegan_col = next((col for col in df.columns if 'vegan' in col.lower()), None)
+            keto_col = next(
+                (col for col in df.columns if 'keto' in col.lower()), None)
+            vegan_col = next(
+                (col for col in df.columns if 'vegan' in col.lower()), None)
 
             if 'ingredients' not in df.columns:
                 print("Error: 'ingredients' column required")
@@ -1728,10 +1795,12 @@ def main():
                     import ast
                     ingredients = ast.literal_eval(row['ingredients'])
                 else:
-                    ingredients = [i.strip() for i in str(row['ingredients']).split(',')]
+                    ingredients = [i.strip()
+                                   for i in str(row['ingredients']).split(',')]
 
                 pred_keto = all(is_ingredient_keto(ing) for ing in ingredients)
-                pred_vegan = all(is_ingredient_vegan(ing) for ing in ingredients)
+                pred_vegan = all(is_ingredient_vegan(ing)
+                                 for ing in ingredients)
 
                 if keto_col and pred_keto == bool(row[keto_col]):
                     correct_keto += 1
@@ -1741,9 +1810,11 @@ def main():
             total = len(df)
             print("\n=== Evaluation Results ===")
             if keto_col:
-                print(f"Keto:  {correct_keto}/{total} ({correct_keto/total:.1%})")
+                print(
+                    f"Keto:  {correct_keto}/{total} ({correct_keto/total:.1%})")
             if vegan_col:
-                print(f"Vegan: {correct_vegan}/{total} ({correct_vegan/total:.1%})")
+                print(
+                    f"Vegan: {correct_vegan}/{total} ({correct_vegan/total:.1%})")
 
         except Exception as e:
             print(f"Error: {e}")
@@ -1751,7 +1822,8 @@ def main():
             traceback.print_exc()
 
     else:
-        run_full_pipeline(mode=args.mode, force=args.force, sample_frac=args.sample_frac)
+        run_full_pipeline(mode=args.mode, force=args.force,
+                          sample_frac=args.sample_frac)
 
 
 if __name__ == "__main__":
