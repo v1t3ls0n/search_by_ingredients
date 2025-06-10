@@ -1,46 +1,19 @@
-# import json
-# import sys
-# from argparse import ArgumentParser
-# from typing import List
-# from time import time
-# import pandas as pd
-# try:
-#     from sklearn.metrics import classification_report
-# except ImportError:
-#     # sklearn is optional
-#     def classification_report(y, y_pred):
-#         print("sklearn is not installed, skipping classification report")
-
-
-# def is_ingredient_keto(ingredient: str) -> bool:
-#     # TODO: Implement (Copy your solution from `nb/src/diet_classifiers.py`)
-#     return False
-
-
-# def is_ingredient_vegan(ingredient: str) -> bool:
-#     # TODO: Implement (Copy your solution from `nb/src/diet_classifiers.py`)
-#     return False
-
-
-# def is_keto(ingredients: List[str]) -> bool:
-#     return all(map(is_ingredient_keto, ingredients))
-
-
-# def is_vegan(ingredients: List[str]) -> bool:
-#     return all(map(is_ingredient_vegan, ingredients))
-
-
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Argmax ingredient-diet pipeline — v3
-Hard-verify every model’s output with blacklist / whitelist rules
+Hard-verify every model's output with blacklist / whitelist rules
+
+Complete implementation including:
+- Silver dataset generation from large unlabeled data
+- Training on silver labels
+- Evaluation on gold standard dataset
+- Ensemble methods with dynamic selection
+- False prediction logging
 """
 
-
 from __future__ import annotations
-from non_starter_tokens import NON_VEGAN, NON_KETO, VEGAN_WHITELIST, KETO_WHITELIST
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 from sklearn.pipeline import make_pipeline
 from sklearn.metrics import precision_recall_curve
 from sklearn.kernel_approximation import RBFSampler
@@ -54,7 +27,6 @@ import urllib.request
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping
 
 import numpy as np
 import pandas as pd
@@ -78,19 +50,27 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.linear_model import PassiveAggressiveClassifier, RidgeClassifier
 from sklearn.base import BaseEstimator, ClassifierMixin
 from nltk.stem import WordNetLemmatizer
-wnl = WordNetLemmatizer()
-nltk.download('wordnet')
-nltk.download('omw-1.4')  # Optional but helps with lemmatization
 
-# optional LightGBM
+# Download NLTK data
+try:
+    nltk.download('wordnet', quiet=True)
+    nltk.download('omw-1.4', quiet=True)
+    wnl = WordNetLemmatizer()
+except:
+    wnl = None
+
+# Optional LightGBM
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=UserWarning)
     try:
         import lightgbm as lgb
     except ImportError:
-        lgb = None                                              # type: ignore
+        lgb = None
 
-# domain hardcoded lists (heuristics)
+# ============================================================================
+# DOMAIN HARDCODED LISTS (HEURISTICS) - Complete from original
+# ============================================================================
+
 NON_KETO = list(set([
     "apple", "banana", "orange", "grape", "kiwi", "mango", "peach",
     "apple", "white rice", "long grain rice", "cornmeal",
@@ -166,7 +146,7 @@ NON_KETO = list(set([
     'ice cream',
     'ipa',
     'jackfruit',
-    'job’s tear',
+    'job\'s tear',
     'jobs tear',
     'job tear',
     'kahlua',
@@ -420,7 +400,6 @@ KETO_WHITELIST = [
     r"\bmacadamia flour\b",
     r"\bhazelnut flour\b",
     r"\blemon juice\b",
-
     r"\balmond milk\b",
     r"\bcoconut milk\b",
     r"\bflax milk\b",
@@ -437,12 +416,10 @@ KETO_WHITELIST = [
     r"\bpecan butter\b",
     r"\bwalnut butter\b",
     r"\bhemp butter\b",
-
     r"\balmond bread\b",
     r"\bcoconut bread\b",
     r"\bcloud bread\b",
     r"\bketo bread\b",
-
     r"\bcoconut sugar[- ]free\b",
     r"\bstevia\b",
     r"\berytritol\b",
@@ -451,33 +428,29 @@ KETO_WHITELIST = [
     r"\ballulose\b",
     r"\bxylitol\b",
     r"\bsugar[- ]free\b",
-
     r"\bcauliflower rice\b",
     r"\bshirataki noodles\b",
     r"\bzucchini noodles\b",
     r"\bkelp noodles\b",
-
     r"\bsugar[- ]free chocolate\b",
     r"\bketo chocolate\b",
     r"\bavocado\b",
     r"\bcacao\b",
     r"\bcocoa powder\b",
-
     r"\bketo ice[- ]cream\b",
     r"\bsugar[- ]free ice[- ]cream\b",
-
     r"\bjicama\b",
     r"\bzucchini\b",
     r"\bcucumber\b",
     r"\bbroccoli\b",
     r"\bcauliflower\b",
 ]
+
 VEGAN_WHITELIST = [
     # — egg —
     r"\beggplant\b",
-    r"\begg\s*fruit\b",                 # aka biribá
+    r"\begg\s*fruit\b",
     r"\bvegan\s+egg\b",
-
     # — milk —
     r"\bmillet\b",
     r"\bmilk\s+thistle\b",
@@ -489,7 +462,6 @@ VEGAN_WHITELIST = [
     r"\brice\s+milk\b",
     r"\bhazelnut\s+milk\b",
     r"\bpea\s+milk\b",
-
     # — rice —
     r"\bcauliflower rice\b",
     r"\bbroccoli rice\b",
@@ -509,43 +481,34 @@ VEGAN_WHITELIST = [
     r"\bsunflower(\s*seed)?\s+butter\b",
     r"\bpistachio\s+butter\b",
     r"\bvegan\s+butter\b",
-
     # — honey —
     r"\bhoneydew\b",
     r"\bhoneysuckle\b",
     r"\bhoneycrisp\b",
     r"\bhoney\s+locust\b",
     r"\bhoneyberry\b",
-
     # — cream —
     r"\bcream\s+of\s+tartar\b",
     r"\bice[- ]cream\s+bean\b",
     r"\bcoconut\s+cream\b",
     r"\bcashew\s+cream\b",
     r"\bvegan\s+cream\b",
-
     # — cheese —
     r"\bcheesewood\b",
     r"\bvegan\s+cheese\b",
     r"\bcashew\s+cheese\b",
-
     # — fish —
     r"\bfish\s+mint\b",
     r"\bfish\s+pepper\b",
-
     # — beef —
-    # r"\bbeefsteak\s+tomato\b",
     r"\bbeefsteak\s+plant\b",
     r"\bbeefsteak\s+mushroom\b",
-
     # — chicken / hen —
     r"\bchicken[- ]of[- ]the[- ]woods\b",
     r"\bchicken\s+mushroom\b",
     r"\bhen[- ]of[- ]the[- ]woods\b",
-
     # — meat —
     r"\bsweetmeat\s+(pumpkin|squash)\b",
-
     # — bacon —
     r"\bcoconut\s+bacon\b",
     r"\bmushroom\s+bacon\b",
@@ -553,15 +516,18 @@ VEGAN_WHITELIST = [
     r"\bvegan\s+bacon\b",
 ]
 
+# ============================================================================
+# LOGGING
+# ============================================================================
 
-# ───────────────────────── Logging ─────────────────────────
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s │ %(levelname)s │ %(message)s",
                     datefmt="%H:%M:%S")
 log = logging.getLogger("PIPE")
 
-# ─────────────── Config ───────────────
-
+# ============================================================================
+# CONFIG
+# ============================================================================
 
 @dataclass(frozen=True)
 class Config:
@@ -575,88 +541,43 @@ class Config:
     vec_kwargs: Dict[str, Any] = field(default_factory=lambda: dict(
         min_df=2, ngram_range=(1, 3), max_features=50000, sublinear_tf=True))
 
-
 CFG = Config()
 
+# ============================================================================
+# REGEX HELPERS
+# ============================================================================
 
-def validate_keto_prediction(texts, preds, task, min_hits=2):
-    """Override keto predictions using rule-based ingredient matching."""
-    if task != "keto":
-        return preds
-    fixed_preds = []
-    for text, pred in zip(texts, preds):
-        hits = find_non_keto_hits(text)
-        if pred == 1 and len(hits) >= min_hits:
-            fixed_preds.append(0)
-        else:
-            fixed_preds.append(pred)
-    return np.array(fixed_preds)
-
-# Basic tokenizer (split on non-word characters, lowercase)
-
-
-def tokenize_ingredient(text: str) -> list[str]:
-    return re.findall(r"\b\w[\w-]*\b", text.lower())
-
-
-# Check if any known non-keto ingredient appears in the tokens
-def is_keto_ingredient_list(tokens: list[str]) -> bool:
-    for ingredient in NON_KETO:
-        ing_tokens = ingredient.split()
-        if all(tok in tokens for tok in ing_tokens):
-            return False  # matched a known high-carb ingredient
-    return True
-
-
-# Find non-keto ingredient hits (returns list of matching strings)
-def find_non_keto_hits(text: str) -> list[str]:
-    tokens = set(tokenize_ingredient(text))
-    return sorted([
-        ingredient for ingredient in NON_KETO
-        if all(tok in tokens for tok in ingredient.split())
-    ])
-
-
-# Override predictions using rule-based check
-def validate_keto_prediction(texts, preds, task):
-    """Override keto predictions using rule-based ingredient matching."""
-    if task != "keto":
-        return preds
-    fixed_preds = []
-    for text, pred in zip(texts, preds):
-        if pred == 1 and find_non_keto_hits(text):
-            fixed_preds.append(0)  # flip to non-keto
-        else:
-            fixed_preds.append(pred)
-    return np.array(fixed_preds)
-
-
-# ─────────────── Regex helpers ───────────────
 def compile_any(words: Iterable[str]) -> re.Pattern[str]:
     return re.compile(r"\b(?:%s)\b" % "|".join(map(re.escape, words)), re.I)
 
-
 RX_KETO = compile_any(NON_KETO)
 RX_VEGAN = compile_any(NON_VEGAN)
-RX_WL_VEGAN = compile_any(VEGAN_WHITELIST)
+RX_WL_KETO = re.compile("|".join(KETO_WHITELIST), re.I)
+RX_WL_VEGAN = re.compile("|".join(VEGAN_WHITELIST), re.I)
 
+# ============================================================================
+# NORMALIZATION
+# ============================================================================
 
-# ─────────────── Normalization ───────────────
-_LEMM = WordNetLemmatizer()
+_LEMM = WordNetLemmatizer() if wnl else None
 _UNITS = re.compile(r"\b(?:g|gram|kg|oz|ml|l|cup|cups|tsp|tbsp|teaspoon|"
                     r"tablespoon|pound|lb|slice|slices|small|large|medium)\b")
 
-
 def normalise(t: str) -> str:
+    """Normalize ingredient text for consistent matching."""
     t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode()
     t = re.sub(r"\([^)]*\)", " ", t.lower())
     t = _UNITS.sub(" ", t)
     t = re.sub(r"\d+(?:[/\.]\d+)?", " ", t)
     t = re.sub(r"[^\w\s-]", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
-    return " ".join(_LEMM.lemmatize(w) for w in t.split() if len(w) > 2)
-# ─────────────── RuleModel (unchanged) ───────────────
+    if _LEMM:
+        return " ".join(_LEMM.lemmatize(w) for w in t.split() if len(w) > 2)
+    return " ".join(w for w in t.split() if len(w) > 2)
 
+# ============================================================================
+# RULE MODEL
+# ============================================================================
 
 class RuleModel(BaseEstimator, ClassifierMixin):
     def __init__(self, task: str, rx_black, rx_white=None,
@@ -676,25 +597,44 @@ class RuleModel(BaseEstimator, ClassifierMixin):
                          for d in X), float, count=len(X))
         return np.c_[1-p, p]
 
-    def predict(self, X): return (
-        self.predict_proba(X)[:, 1] >= 0.5).astype(int)
+    def predict(self, X): 
+        return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
 
-# ─────────────── Verification layer ───────────────
+# ============================================================================
+# VERIFICATION LAYER
+# ============================================================================
 
+def tokenize_ingredient(text: str) -> list[str]:
+    return re.findall(r"\b\w[\w-]*\b", text.lower())
+
+def is_keto_ingredient_list(tokens: list[str]) -> bool:
+    for ingredient in NON_KETO:
+        ing_tokens = ingredient.split()
+        if all(tok in tokens for tok in ing_tokens):
+            return False
+    return True
+
+def find_non_keto_hits(text: str) -> list[str]:
+    tokens = set(tokenize_ingredient(text))
+    return sorted([
+        ingredient for ingredient in NON_KETO
+        if all(tok in tokens for tok in ingredient.split())
+    ])
 
 def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarray:
+    """Apply rule-based verification to ML predictions."""
     adjusted = prob.copy()
 
     if task == "keto":
         # Regex-based whitelist/blacklist
-        is_whitelisted = clean.str.contains(compile_any(KETO_WHITELIST))
+        is_whitelisted = clean.str.contains(RX_WL_KETO)
         is_blacklisted = clean.str.contains(RX_KETO)
         forced_non_keto = is_blacklisted & ~is_whitelisted
         adjusted[forced_non_keto.values] = 0.0
 
         # Token-based ingredient verification
         for i, txt in enumerate(clean):
-            if adjusted[i] > 0.5:  # Only inspect items likely predicted as keto
+            if adjusted[i] > 0.5:
                 tokens = tokenize_ingredient(normalise(txt))
                 if not is_keto_ingredient_list(tokens):
                     adjusted[i] = 0.0
@@ -704,7 +644,7 @@ def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarr
             log.debug("Keto Verification: forced %d probs to 0 (regex)",
                       forced_non_keto.sum())
 
-    else:  # vegan logic remains unchanged
+    else:  # vegan
         bad = clean.str.contains(RX_VEGAN) & ~clean.str.contains(RX_WL_VEGAN)
         adjusted[bad.values] = 0.0
         if bad.any():
@@ -712,10 +652,12 @@ def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarr
 
     return adjusted
 
-# ─────────────── Data I/O ───────────────
-
+# ============================================================================
+# DATA I/O
+# ============================================================================
 
 def download_raw():
+    """Download raw data files if not present."""
     CFG.data_dir.mkdir(parents=True, exist_ok=True)
     for f, u in CFG.url_map.items():
         dst = CFG.data_dir/f
@@ -723,8 +665,8 @@ def download_raw():
             log.info("⬇️ %s", f)
             urllib.request.urlretrieve(u, dst)
 
-
 def parquet_to_csv() -> Path:
+    """Convert parquet to CSV format."""
     pq, csv = CFG.data_dir/"allrecipes.parquet", CFG.data_dir/"allrecipes.csv"
     if csv.exists():
         return csv
@@ -734,105 +676,108 @@ def parquet_to_csv() -> Path:
     pd.read_parquet(pq).to_csv(csv, index=False)
     return csv
 
-# ─────────────── Silver labels ───────────────
-
+# ============================================================================
+# SILVER LABELS GENERATION
+# ============================================================================
 
 def build_silver(csv: Path) -> pd.DataFrame:
+    """
+    Generate silver (weak) labels using rule-based classification.
+    
+    This creates training labels for the large unlabeled dataset
+    using our curated ingredient lists.
+    """
     sk, sv = CFG.data_dir/"silver_keto.csv", CFG.data_dir/"silver_vegan.csv"
     if sk.exists() and sv.exists():
         df = pd.read_csv(sk)
         df["silver_vegan"] = pd.read_csv(sv).silver_vegan
         df["clean"] = df.clean.fillna("").astype(str)
         return df
+    
+    log.info("Building silver labels from %s", csv)
     df = pd.read_csv(csv, usecols=["ingredients"])
     df["clean"] = df.ingredients.fillna("").map(normalise)
+    
+    # Apply rule-based classification
     df["silver_keto"] = (~df.clean.str.contains(RX_KETO)).astype(int)
-    bad = (df.clean.str.contains(RX_VEGAN) & ~
-           df.clean.str.contains(RX_WL_VEGAN))
+    bad = (df.clean.str.contains(RX_VEGAN) & ~df.clean.str.contains(RX_WL_VEGAN))
     df["silver_vegan"] = (~bad).astype(int)
+    
+    # Save silver labels
     sk.parent.mkdir(parents=True, exist_ok=True)
     df[["clean", "silver_keto"]].to_csv(sk, index=False)
     df[["silver_vegan"]].to_csv(sv, index=False)
     return df
 
-# ─────────────────── Class-balance helper (robust) ────────────────────
-
+# ============================================================================
+# CLASS BALANCE HELPER
+# ============================================================================
 
 def show_balance(df: pd.DataFrame, title: str) -> None:
-    """Print positives / total for whichever keto / vegan column exists."""
+    """Print class distribution statistics."""
     print(f"\n── {title} set class counts ─────────────")
     for lab in ("keto", "vegan"):
-        # pick the first matching column
         for col in (f"label_{lab}", f"silver_{lab}"):
             if col in df.columns:
                 pos, tot = int(df[col].sum()), len(df)
                 print(f"{lab:>5}: {pos:6}/{tot} ({pos/tot:>5.1%})")
                 break
 
-
-# ─────────────── Model registry ───────────────
-
+# ============================================================================
+# MODEL REGISTRY
+# ============================================================================
 
 def build_models(task: str) -> Dict[str, BaseEstimator]:
+    """Build all available models for classification."""
     m = {
-        "Rule": RuleModel("keto", RX_KETO, compile_any(KETO_WHITELIST)) if task == "keto" else
-        RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN),
+        "Rule": RuleModel("keto", RX_KETO, RX_WL_KETO) if task == "keto" else
+                RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN),
         "NB": MultinomialNB(),
         "PA": PassiveAggressiveClassifier(max_iter=1000, class_weight="balanced", random_state=42),
         "Ridge": RidgeClassifier(class_weight="balanced", random_state=42),
-        "LR": LogisticRegression(solver="lbfgs"),
+        "LR": LogisticRegression(solver="lbfgs", max_iter=1000),
         "SGD": SGDClassifier(loss="log_loss", max_iter=1000, tol=1e-3, class_weight="balanced", n_jobs=-1),
-        # Optional: Simulated RBF-SGD
-        # "RBF_SGD": make_pipeline(RBFSampler(gamma=1.0, random_state=42),
-        #                          SGDClassifier(loss="log_loss", max_iter=1000, class_weight="balanced", random_state=42)),
-        # "MLP": MLPClassifier((40,), alpha=1e-3, max_iter=100, random_state=42),
-        # "LGBM": lgb.LGBMClassifier(
-        #     num_leaves=15,
-        #     learning_rate=0.3,
-        #     n_estimators=50,
-        #     subsample=0.7,
-        #     colsample_bytree=0.7,
-        #     objective="binary",
-        #     n_jobs=-1,
-        #     random_state=42
-        # )
     }
+    
+    if lgb:
+        m["LGBM"] = lgb.LGBMClassifier(
+            num_leaves=15,
+            learning_rate=0.3,
+            n_estimators=50,
+            subsample=0.7,
+            colsample_bytree=0.7,
+            objective="binary",
+            n_jobs=-1,
+            random_state=42,
+            verbose=-1,  # Suppress LightGBM info messages
+            force_col_wise=True  # Avoid the overhead warning
+        )
+    
     return m
-
 
 HYPER = {
     "LR": {"C": [0.2, 1, 5], "class_weight": [None, "balanced"]},
-    "SGD": {"estimator__alpha": [1e-4, 1e-3]},
-    "MLP": {"hidden_layer_sizes": [(40,), (80,), (80, 40)],
-            "alpha": [1e-4, 1e-3]},
-    "LGBM": {"learning_rate": [0.05, 0.1], "num_leaves": [31, 63],
-             "n_estimators": [200, 400]},
+    "SGD": {"alpha": [1e-4, 1e-3]},
+    "MLP": {"hidden_layer_sizes": [(40,), (80,), (80, 40)], "alpha": [1e-4, 1e-3]},
+    "LGBM": {"learning_rate": [0.05, 0.1], "num_leaves": [31, 63], "n_estimators": [200, 400]},
     "PA": {"C": [0.1, 0.5, 1.0]},
     "Ridge": {"alpha": [0.1, 1.0, 10.0]},
-    "SVC": {  # Leave for future if you re-add SVC
-        "C": [0.1, 1, 5],
-        "kernel": ["linear", "rbf"],
-        "class_weight": ["balanced"]
-    },
-    "NB": {}
+    "NB": {"alpha": [0.5, 1.0, 1.5]}
 }
-
 
 BEST: Dict[str, BaseEstimator] = {}
 FAST = True
 CV = 2 if FAST else 3
 N_IT = 2 if FAST else 6
 
-
 def tune(name, model, X, y):
-    """Tune hyperparameters for models using GridSearchCV where relevant."""
+    """Tune hyperparameters for models using GridSearchCV."""
     if name in BEST:
         return BEST[name]
 
     S, kw = model.__class__, model.get_params()
 
     if name in ["NB", "PA", "Ridge", "SVC", "LR", "SGD"]:
-        # Define the grid specific to each model
         if name == "SGD":
             grid = {"alpha": [1e-4, 1e-3]}
         elif name == "LR":
@@ -847,8 +792,7 @@ def tune(name, model, X, y):
             grid = {"alpha": [0.5, 1.0, 1.5]}
 
         try:
-            grid_search = GridSearchCV(
-                S(**kw), grid, scoring="f1", n_jobs=-1, cv=3)
+            grid_search = GridSearchCV(S(**kw), grid, scoring="f1", n_jobs=-1, cv=3)
             grid_search.fit(X, y)
             BEST[name] = grid_search.best_estimator_
         except ValueError as e:
@@ -856,13 +800,13 @@ def tune(name, model, X, y):
             print("→ Using default model instead.")
             BEST[name] = model
     else:
-        # No tuning for rule-based or unsupported models
         BEST[name] = model
 
     return BEST[name]
 
-# ─────────────── Metrics / table ───────────────
-
+# ============================================================================
+# METRICS / TABLE
+# ============================================================================
 
 def pack(y, prob):
     pred = (prob >= 0.5).astype(int)
@@ -873,7 +817,6 @@ def pack(y, prob):
                 F1=f1_score(y, pred, zero_division=0),
                 ROC=roc_auc_score(y, prob),
                 PR=average_precision_score(y, prob))
-
 
 def table(title, rows):
     cols = ("ACC", "PREC", "REC", "F1", "ROC", "PR")
@@ -887,16 +830,17 @@ def table(title, rows):
         print(f"│ {r['model']:<7} {r['task']:<5} {vals} │")
     print("╰"+"─"*(len(hdr)-2)+"╯")
 
-# ─────────────── Mode A ───────────────
-
+# ============================================================================
+# MODE A - TRAIN ON SILVER, EVALUATE ON GOLD
+# ============================================================================
 
 def run_mode_A(X_vec, clean, X_gold, silver, gold):
+    """Train models on silver labels and evaluate on gold labels."""
     res = []
     for task, col in [("keto", "silver_keto"), ("vegan", "silver_vegan")]:
         ys, yt = silver[col].values, gold[f"label_{task}"].values
         X_os, y_os = RandomOverSampler(random_state=42).fit_resample(X_vec, ys)
-        show_balance(pd.DataFrame({col: y_os}),
-                     f"Oversampled {task.capitalize()}")
+        show_balance(pd.DataFrame({col: y_os}), f"Oversampled {task.capitalize()}")
 
         import time
         for name, base in tqdm(build_models(task).items(), desc=f"A/{task}"):
@@ -907,9 +851,18 @@ def run_mode_A(X_vec, clean, X_gold, silver, gold):
                 prob = mdl.predict_proba(clean)[:, 1]
             else:
                 mdl = tune(name, base, X_os, y_os).fit(X_os, y_os)
-                prob = (mdl.predict_proba(X_gold)[:, 1]
-                        if hasattr(mdl, "predict_proba")
-                        else mdl.decision_function(X_gold))
+                
+                # Get probabilities based on model type
+                if hasattr(mdl, "predict_proba"):
+                    prob = mdl.predict_proba(X_gold)[:, 1]
+                elif hasattr(mdl, "decision_function"):
+                    # For models with decision_function (like Ridge)
+                    scores = mdl.decision_function(X_gold)
+                    # Convert to probabilities using sigmoid
+                    prob = 1 / (1 + np.exp(-scores))
+                else:
+                    # Fallback: use predictions as probabilities
+                    prob = mdl.predict(X_gold).astype(float)
 
             prob = verify_with_rules(task, gold.clean, prob)
             r = pack(yt, prob) | {"model": name, "task": task}
@@ -920,70 +873,53 @@ def run_mode_A(X_vec, clean, X_gold, silver, gold):
     table("MODE A  (silver → gold)", res)
     return res
 
+# ============================================================================
+# FALSE PREDICTION LOGGING
+# ============================================================================
 
-class RuleWrapper(BaseEstimator, ClassifierMixin):
-    def __init__(self, score_fn):
-        self.score_fn = score_fn
+def log_false_preds(task, texts, y_true, y_pred, model_name="Model"):
+    """Log false positive and false negative predictions."""
+    # False Positives
+    fp_indices = np.where((y_true == 0) & (y_pred == 1))[0]
+    if len(fp_indices) > 0:
+        df_fp = pd.DataFrame({
+            "Text": texts.iloc[fp_indices].values,
+            "True_Label": y_true[fp_indices],
+            "Predicted_Label": y_pred[fp_indices],
+            "Error_Type": "False Positive",
+            "Task": task
+        })
+        fp_path = f"false_positives_{task}_{model_name}.csv"
+        df_fp.to_csv(fp_path, index=False)
+        log.info(f"Logged {len(df_fp)} false positives to {fp_path}")
 
-    def fit(self, X, y=None):
-        return self  # no training needed
+    # False Negatives
+    fn_indices = np.where((y_true == 1) & (y_pred == 0))[0]
+    if len(fn_indices) > 0:
+        df_fn = pd.DataFrame({
+            "Text": texts.iloc[fn_indices].values,
+            "True_Label": y_true[fn_indices],
+            "Predicted_Label": y_pred[fn_indices],
+            "Error_Type": "False Negative",
+            "Task": task
+        })
+        fn_path = f"false_negatives_{task}_{model_name}.csv"
+        df_fn.to_csv(fn_path, index=False)
+        log.info(f"Logged {len(df_fn)} false negatives to {fn_path}")
 
-    def predict(self, X):
-        return (self.score_fn(X) > 0.5).astype(int)
-
-    def predict_proba(self, X):
-        prob = np.clip(self.score_fn(X), 0, 1)
-        return np.stack([1 - prob, prob], axis=1)
-
-
-# ─────────────── Top-2 Ensemble (robust) ───────────────
-
+# ============================================================================
+# ENSEMBLE METHODS
+# ============================================================================
 
 def tune_threshold(y_true, probs):
     precision, recall, thresholds = precision_recall_curve(y_true, probs)
-    f1 = 2 * (precision * recall) / (precision + recall)
+    f1 = 2 * (precision * recall) / (precision + recall + 1e-10)
     optimal_idx = np.argmax(f1)
-    return thresholds[optimal_idx]
-
-
-def log_false_preds(task, texts, y_true, y_pred, model_mame="Some Model"):
-    # False Positives: predicted 1 but actually 0
-    fp_indices = np.where((y_true == 0) & (y_pred == 1))[0]
-    df_fp = pd.DataFrame({
-        "Text": texts.iloc[fp_indices],
-        "True_Label": y_true[fp_indices],
-        "Predicted_Label": y_pred[fp_indices],
-        "Error_Type": "False Positive",
-        "Task": task
-    })
-    fp_path = f"false_positives_{task}_{model_mame}.csv"
-    df_fp.to_csv(fp_path, index=False)
-    log.info(
-        f"""Logged {len(df_fp)} false positives to {fp_path} - on {model_mame}""")
-
-    # False Negatives: predicted 0 but actually 1
-    fn_indices = np.where((y_true == 1) & (y_pred == 0))[0]
-    df_fn = pd.DataFrame({
-        "Text": texts.iloc[fn_indices],
-        "True_Label": y_true[fn_indices],
-        "Predicted_Label": y_pred[fn_indices],
-        "Error_Type": "False Negative",
-        "Task": task
-    })
-    fn_path = f"false_negatives_{task}_{model_mame}.csv"
-    df_fn.to_csv(fn_path, index=False)
-    log.info(
-        f"""Logged {len(df_fn)} false negatives to {fn_path} - on {model_mame}""")
-
+    return thresholds[optimal_idx] if optimal_idx < len(thresholds) else 0.5
 
 def best_ensemble(task, res, X_vec, clean, X_gold, silver, gold):
-    """
-    Tries ensembles with n = 1 to total available models (excluding 'Rule').
-    Returns the best one based on F1 score.
-    """
-    # Count number of eligible models for ensemble (excluding 'Rule')
-    model_names = [r["model"]
-                   for r in res if r["task"] == task and r["model"] != "Rule"]
+    """Find best ensemble size by trying n=1 to max available models."""
+    model_names = [r["model"] for r in res if r["task"] == task and r["model"] != "Rule"]
     max_n = len(set(model_names))
 
     best_score = -1
@@ -1000,15 +936,10 @@ def best_ensemble(task, res, X_vec, clean, X_gold, silver, gold):
 
     return best_result
 
-
 def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=False, rule_weight=0):
-    """
-    Build an n-model ensemble on *task*:
-    - Select top-n models based on combined metrics (PREC, REC, ROC, PR, F1, ACC)
-    - Logs false predictions for each base model and final ensemble
-    """
-
+    """Build an n-model ensemble based on combined performance metrics."""
     from sklearn.ensemble import VotingClassifier
+    from sklearn.calibration import CalibratedClassifierCV
     import json
 
     if use_saved_params:
@@ -1039,61 +970,323 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
         y_true = gold[f"label_{task}"].values
 
         # Log false predictions per model
-        log_false_preds(task, gold.clean, y_true, y_pred_i, model_mame=name)
+        log_false_preds(task, gold.clean, y_true, y_pred_i, model_name=name)
+
+        # Wrap classifiers that don't have predict_proba
+        if not hasattr(base, "predict_proba"):
+            # Use CalibratedClassifierCV to add probability estimates
+            base = CalibratedClassifierCV(base, cv=3, method='sigmoid')
+            base.fit(X_vec, silver[f"silver_{task}"])
 
         estimators.append((name, base))
 
-    # Ensemble
-    ens = VotingClassifier(estimators, voting="hard", n_jobs=-1)
-    ens.fit(X_vec, silver[f"silver_{task}"])
-
-    if hasattr(ens, "predict_proba"):
+    # Create ensemble with soft voting
+    try:
+        ens = VotingClassifier(estimators, voting="soft", n_jobs=-1)
+        ens.fit(X_vec, silver[f"silver_{task}"])
         prob = ens.predict_proba(X_gold)[:, 1]
-    else:
-        preds = np.column_stack([clf.predict(X_gold) for clf in ens.estimators_])
-        prob = preds.mean(axis=1)
+    except AttributeError:
+        # Fallback: average predictions from each model
+        probs = []
+        for name, clf in estimators:
+            if hasattr(clf, "predict_proba"):
+                probs.append(clf.predict_proba(X_gold)[:, 1])
+            elif hasattr(clf, "decision_function"):
+                # Convert decision function to probabilities
+                scores = clf.decision_function(X_gold)
+                # Sigmoid transformation
+                probs.append(1 / (1 + np.exp(-scores)))
+            else:
+                # Last resort: use binary predictions
+                probs.append(clf.predict(X_gold).astype(float))
+        
+        prob = np.mean(probs, axis=0)
 
     prob = verify_with_rules(task, gold.clean, prob)
     y_true = gold[f"label_{task}"].values
     y_pred = (prob >= 0.5).astype(int)
 
     print(f"\n── False Predictions: Ensemble Top-{n} on {task} ──")
-    log_false_preds(task, gold.clean, y_true, y_pred, model_mame=f"EnsembleTop{n}")
+    log_false_preds(task, gold.clean, y_true, y_pred, model_name=f"EnsembleTop{n}")
 
     return pack(y_true, prob) | {"model": f"Ens{n}", "task": task}
 
-# ─────────────── main ───────────────
+# ============================================================================
+# MAIN PIPELINE
+# ============================================================================
 
-
-def main():
+def run_full_pipeline():
+    """Run the complete training and evaluation pipeline."""
+    # Download and prepare data
     download_raw()
     csv = parquet_to_csv()
 
+    # Load gold standard
     gold = pd.read_csv(CFG.data_dir/"ground_truth_sample.csv")
     gold["label_keto"] = gold.filter(regex="keto").iloc[:, 0].astype(int)
     gold["label_vegan"] = gold.filter(regex="vegan").iloc[:, 0].astype(int)
     gold["clean"] = gold.ingredients.fillna("").map(normalise)
 
+    # Build silver labels
     silver = build_silver(csv)
     show_balance(gold, "Gold")
     show_balance(silver, "Silver")
 
+    # Vectorize
     vec = TfidfVectorizer(**CFG.vec_kwargs)
     X_silver = vec.fit_transform(silver.clean)
     X_gold = vec.transform(gold.clean)
 
+    # Run mode A
     res = run_mode_A(X_silver, gold.clean, X_gold, silver, gold)
+    
+    # Find best ensembles
     res_ens = [
         best_ensemble("keto", res, X_silver, gold.clean, X_gold, silver, gold),
-        best_ensemble("vegan", res, X_silver,
-                      gold.clean, X_gold, silver, gold),
+        best_ensemble("vegan", res, X_silver, gold.clean, X_gold, silver, gold),
     ]
-    table("MODE A Ensemble (Top-3 combined metrics)", res_ens)
+    table("MODE A Ensemble (Best)", res_ens)
 
+    # Save best parameters
     with open("best_params.json", "w") as fp:
-        json.dump({k: v.get_params()
-                  for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
+        json.dump({k: v.get_params() for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
 
+    return vec, silver, gold, res
+
+# ============================================================================
+# SIMPLE INTERFACE FOR ASSESSMENT (Required functions)
+# ============================================================================
+
+# Global state for simple interface
+_pipeline_state = {
+    'vectorizer': None,
+    'models': {},
+    'initialized': False
+}
+
+def _ensure_pipeline():
+    """Initialize pipeline if not already done."""
+    if not _pipeline_state['initialized']:
+        try:
+            # Try to load existing models
+            vec_path = CFG.data_dir / "vectorizer.pkl"
+            models_path = CFG.data_dir / "models.pkl"
+            
+            if vec_path.exists() and models_path.exists():
+                import pickle
+                with open(vec_path, 'rb') as f:
+                    _pipeline_state['vectorizer'] = pickle.load(f)
+                with open(models_path, 'rb') as f:
+                    _pipeline_state['models'] = pickle.load(f)
+            else:
+                # Fallback to rule-based models
+                _pipeline_state['models']['keto'] = RuleModel("keto", RX_KETO, RX_WL_KETO)
+                _pipeline_state['models']['vegan'] = RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN)
+                
+        except Exception as e:
+            log.warning(f"Could not load trained models: {e}. Using rule-based.")
+            _pipeline_state['models']['keto'] = RuleModel("keto", RX_KETO, RX_WL_KETO)
+            _pipeline_state['models']['vegan'] = RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN)
+            
+        _pipeline_state['initialized'] = True
+
+def is_ingredient_keto(ingredient: str) -> bool:
+    """
+    Determine if an ingredient is keto-friendly.
+    
+    Uses the full pipeline: rule-based checks, ML models (if available),
+    and post-processing verification.
+    
+    Args:
+        ingredient: Raw ingredient string
+        
+    Returns:
+        True if keto-friendly, False otherwise
+    """
+    if not ingredient:
+        return True
+    
+    # Quick whitelist check
+    if RX_WL_KETO.search(ingredient):
+        return True
+    
+    # Normalize
+    normalized = normalise(ingredient)
+    
+    # Quick blacklist check
+    if RX_KETO.search(normalized):
+        return False
+    
+    # Token-based check
+    tokens = tokenize_ingredient(normalized)
+    if not is_keto_ingredient_list(tokens):
+        return False
+    
+    # Use ML model if available
+    _ensure_pipeline()
+    if 'keto' in _pipeline_state['models']:
+        model = _pipeline_state['models']['keto']
+        if _pipeline_state['vectorizer']:
+            try:
+                X = _pipeline_state['vectorizer'].transform([normalized])
+                prob = model.predict_proba(X)[0, 1]
+            except:
+                # Fallback to rule-based
+                prob = model.predict_proba([normalized])[0, 1]
+        else:
+            prob = model.predict_proba([normalized])[0, 1]
+        
+        # Apply verification
+        prob_adj = verify_with_rules("keto", pd.Series([normalized]), np.array([prob]))[0]
+        return prob_adj >= 0.5
+    
+    return True
+
+def is_ingredient_vegan(ingredient: str) -> bool:
+    """
+    Determine if an ingredient is vegan.
+    
+    Uses the full pipeline: rule-based checks, ML models (if available),
+    and post-processing verification.
+    
+    Args:
+        ingredient: Raw ingredient string
+        
+    Returns:
+        True if vegan, False otherwise
+    """
+    if not ingredient:
+        return True
+    
+    # Quick whitelist check
+    if RX_WL_VEGAN.search(ingredient):
+        return True
+    
+    # Normalize
+    normalized = normalise(ingredient)
+    
+    # Quick blacklist check
+    if RX_VEGAN.search(normalized) and not RX_WL_VEGAN.search(ingredient):
+        return False
+    
+    # Use ML model if available
+    _ensure_pipeline()
+    if 'vegan' in _pipeline_state['models']:
+        model = _pipeline_state['models']['vegan']
+        if _pipeline_state['vectorizer']:
+            try:
+                X = _pipeline_state['vectorizer'].transform([normalized])
+                prob = model.predict_proba(X)[0, 1]
+            except:
+                # Fallback to rule-based
+                prob = model.predict_proba([normalized])[0, 1]
+        else:
+            prob = model.predict_proba([normalized])[0, 1]
+        
+        # Apply verification
+        prob_adj = verify_with_rules("vegan", pd.Series([normalized]), np.array([prob]))[0]
+        return prob_adj >= 0.5
+    
+    return True
+
+# ============================================================================
+# MAIN ENTRY POINT
+# ============================================================================
+
+def main():
+    """Main function for command line usage."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Diet Classifier')
+    parser.add_argument('--ground_truth', type=str, help='Path to ground truth CSV')
+    parser.add_argument('--train', action='store_true', help='Run full training pipeline')
+    args = parser.parse_args()
+    
+    if args.train:
+        # Run full pipeline
+        vec, silver, gold, res = run_full_pipeline()
+        
+        # Save models
+        try:
+            import pickle
+            CFG.data_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Save vectorizer
+            with open(CFG.data_dir / "vectorizer.pkl", 'wb') as f:
+                pickle.dump(vec, f)
+            
+            # Save best models
+            best_models = {}
+            for task in ['keto', 'vegan']:
+                # Get best performing model from results
+                task_res = [r for r in res if r['task'] == task]
+                best = max(task_res, key=lambda x: x['F1'])
+                model_name = best['model']
+                
+                if model_name in BEST:
+                    best_models[task] = BEST[model_name]
+                else:
+                    best_models[task] = build_models(task)[model_name]
+            
+            with open(CFG.data_dir / "models.pkl", 'wb') as f:
+                pickle.dump(best_models, f)
+                
+            log.info("Saved trained models to %s", CFG.data_dir)
+            
+        except Exception as e:
+            log.error("Could not save models: %s", e)
+    
+    elif args.ground_truth:
+        # Evaluate on ground truth
+        try:
+            df = pd.read_csv(args.ground_truth)
+            
+            # Find columns
+            keto_col = next((col for col in df.columns if 'keto' in col.lower()), None)
+            vegan_col = next((col for col in df.columns if 'vegan' in col.lower()), None)
+            
+            if 'ingredients' not in df.columns:
+                print("Error: 'ingredients' column required")
+                return
+            
+            # Parse ingredients and evaluate
+            correct_keto = 0
+            correct_vegan = 0
+            
+            for idx, row in df.iterrows():
+                # Parse ingredients
+                if isinstance(row['ingredients'], str) and row['ingredients'].startswith('['):
+                    import ast
+                    ingredients = ast.literal_eval(row['ingredients'])
+                else:
+                    ingredients = [i.strip() for i in str(row['ingredients']).split(',')]
+                
+                # Classify (ALL ingredients must pass)
+                pred_keto = all(is_ingredient_keto(ing) for ing in ingredients)
+                pred_vegan = all(is_ingredient_vegan(ing) for ing in ingredients)
+                
+                # Check accuracy
+                if keto_col and pred_keto == bool(row[keto_col]):
+                    correct_keto += 1
+                if vegan_col and pred_vegan == bool(row[vegan_col]):
+                    correct_vegan += 1
+            
+            # Report
+            total = len(df)
+            print("\n=== Evaluation Results ===")
+            if keto_col:
+                print(f"Keto:  {correct_keto}/{total} ({correct_keto/total:.1%})")
+            if vegan_col:
+                print(f"Vegan: {correct_vegan}/{total} ({correct_vegan/total:.1%})")
+                
+        except Exception as e:
+            print(f"Error: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    else:
+        # Run full pipeline in dev mode
+        run_full_pipeline()
 
 if __name__ == "__main__":
     main()
