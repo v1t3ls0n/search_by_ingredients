@@ -89,7 +89,6 @@ import logging
 import warnings
 import re
 import unicodedata
-import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -619,8 +618,19 @@ _UNITS = re.compile(r"\b(?:g|gram|kg|oz|ml|l|cup|cups|tsp|tbsp|teaspoon|"
                     r"tablespoon|pound|lb|slice|slices|small|large|medium)\b")
 
 
-def normalise(t: str) -> str:
-    """Normalize ingredient text for consistent matching."""
+def normalise(t: str | list | tuple | np.ndarray) -> str:
+    """Normalize ingredient text for consistent matching.
+
+    The ``ingredients`` field from the allrecipes dataset may be stored as a
+    list/array of strings when loaded from parquet.  ``normalise`` now accepts
+    such iterables and joins them before applying text cleanup so that both
+    CSV and parquet formats behave the same.
+    """
+    if not isinstance(t, str):
+        if isinstance(t, (list, tuple, np.ndarray)):
+            t = " ".join(map(str, t))
+        else:
+            t = str(t)
     t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode()
     t = re.sub(r"\([^)]*\)", " ", t.lower())
     t = _UNITS.sub(" ", t)
@@ -718,60 +728,29 @@ def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarr
 # ============================================================================
 
 
-def download_raw():
-    """Download raw data files if not present."""
-    CFG.data_dir.mkdir(parents=True, exist_ok=True)
-    for f, u in CFG.url_map.items():
-        dst = CFG.data_dir/f
-        if not dst.exists():
-            log.info("⬇️ %s", f)
-            urllib.request.urlretrieve(u, dst)
+def load_datasets() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load datasets directly into memory without saving them."""
+    log.info("Loading datasets into memory")
+    recipes = pd.read_parquet(CFG.url_map["allrecipes.parquet"])
+    ground_truth = pd.read_csv(CFG.url_map["ground_truth_sample.csv"])
+    return recipes, ground_truth
 
 
-def parquet_to_csv() -> Path:
-    """Convert parquet to CSV format."""
-    pq, csv = CFG.data_dir/"allrecipes.parquet", CFG.data_dir/"allrecipes.csv"
-    if csv.exists():
-        return csv
-    if not pq.exists():
-        raise FileNotFoundError("Run download_raw first")
-    log.info("Parquet → CSV")
-    pd.read_parquet(pq).to_csv(csv, index=False)
-    return csv
 
 # ============================================================================
 # SILVER LABELS GENERATION
 # ============================================================================
 
 
-def build_silver(csv: Path) -> pd.DataFrame:
-    """
-    Generate silver (weak) labels using rule-based classification.
-
-    This creates training labels for the large unlabeled dataset
-    using our curated ingredient lists.
-    """
-    sk, sv = CFG.data_dir/"silver_keto.csv", CFG.data_dir/"silver_vegan.csv"
-    if sk.exists() and sv.exists():
-        df = pd.read_csv(sk)
-        df["silver_vegan"] = pd.read_csv(sv).silver_vegan
-        df["clean"] = df.clean.fillna("").astype(str)
-        return df
-
-    log.info("Building silver labels from %s", csv)
-    df = pd.read_csv(csv, usecols=["ingredients"])
+def build_silver(recipes: pd.DataFrame) -> pd.DataFrame:
+    """Generate silver (weak) labels in memory."""
+    df = recipes[["ingredients"]].copy()
     df["clean"] = df.ingredients.fillna("").map(normalise)
 
     # Apply rule-based classification
     df["silver_keto"] = (~df.clean.str.contains(RX_KETO)).astype(int)
-    bad = (df.clean.str.contains(RX_VEGAN) & ~
-           df.clean.str.contains(RX_WL_VEGAN))
+    bad = df.clean.str.contains(RX_VEGAN) & ~df.clean.str.contains(RX_WL_VEGAN)
     df["silver_vegan"] = (~bad).astype(int)
-
-    # Save silver labels
-    sk.parent.mkdir(parents=True, exist_ok=True)
-    df[["clean", "silver_keto"]].to_csv(sk, index=False)
-    df[["silver_vegan"]].to_csv(sv, index=False)
     return df
 
 # ============================================================================
@@ -1160,18 +1139,14 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
 
 def run_full_pipeline():
     """Run the complete training and evaluation pipeline."""
-    # Download and prepare data
-    download_raw()
-    csv = parquet_to_csv()
-
-    # Load gold standard
-    gold = pd.read_csv(CFG.data_dir/"ground_truth_sample.csv")
+    # Load datasets in memory
+    recipes, gold = load_datasets()
     gold["label_keto"] = gold.filter(regex="keto").iloc[:, 0].astype(int)
     gold["label_vegan"] = gold.filter(regex="vegan").iloc[:, 0].astype(int)
     gold["clean"] = gold.ingredients.fillna("").map(normalise)
 
-    # Build silver labels
-    silver = build_silver(csv)
+    # Build silver labels from recipes
+    silver = build_silver(recipes)
     show_balance(gold, "Gold")
     show_balance(silver, "Silver")
 
