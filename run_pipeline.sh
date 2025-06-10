@@ -19,7 +19,7 @@ docker compose exec web bash -c "
     pip install -r requirements.txt >/dev/null 2>&1 || true
 
     echo '🧠 [TRAINING] Training with both image and text features (image first)...'
-    python web/diet_classifiers.py --train --mode both
+    python web/diet_classifiers.py --train --mode both --sample_frac 0.0135
 
     echo '🧪 [EVALUATION] Evaluating on full gold set...'
     python web/diet_classifiers.py --ground_truth /usr/src/data/ground_truth_sample.csv

@@ -1715,8 +1715,8 @@ def main():
                         default='both', help='Feature mode for training')
     parser.add_argument('--force', action='store_true',
                         help='Recompute image embeddings')
-    parser.add_argument('--sample-frac', type=float, default=None,
-                        help='Fraction (0 < x <= 1) of silver set to use')
+    parser.add_argument('--sample_frac', type=float, default=None, help="Fraction of silver set to sample.")
+
     args = parser.parse_args()
 
     if args.ingredients:
