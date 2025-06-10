@@ -14,10 +14,75 @@ Complete implementation including:
 
 from __future__ import annotations
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
-from sklearn.pipeline import make_pipeline
-from sklearn.metrics import precision_recall_curve
-from sklearn.kernel_approximation import RBFSampler
-from sklearn.svm import SVC
+import warnings
+
+# ---------------------------------------------------------------------------
+# Optional scikit-learn imports
+# ---------------------------------------------------------------------------
+try:
+    from sklearn.pipeline import make_pipeline
+    from sklearn.metrics import precision_recall_curve
+    from sklearn.kernel_approximation import RBFSampler
+    from sklearn.svm import SVC
+    from sklearn.base import BaseEstimator, ClassifierMixin, clone
+    from sklearn.calibration import CalibratedClassifierCV
+    from sklearn.ensemble import VotingClassifier
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.linear_model import LogisticRegression, SGDClassifier
+    from sklearn.metrics import (accuracy_score, average_precision_score,
+                                 confusion_matrix, f1_score, precision_score,
+                                 recall_score, roc_auc_score)
+    from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+    from sklearn.neural_network import MLPClassifier
+    from sklearn.svm import LinearSVC
+    from sklearn.naive_bayes import MultinomialNB
+    from sklearn.linear_model import PassiveAggressiveClassifier, RidgeClassifier
+    SKLEARN_AVAILABLE = True
+except ImportError as e:  # pragma: no cover - optional dependency
+    warnings.warn(
+        f"scikit-learn not installed ({e}). ML features will be disabled.",
+        stacklevel=2,
+    )
+    SKLEARN_AVAILABLE = False
+
+    class BaseEstimator:  # type: ignore
+        pass
+
+    class ClassifierMixin:  # type: ignore
+        pass
+
+    def clone(obj):  # type: ignore
+        return obj
+
+    def make_pipeline(*args, **kwargs):  # type: ignore
+        raise ImportError("scikit-learn is required for this functionality")
+
+    def precision_recall_curve(*args, **kwargs):  # type: ignore
+        raise ImportError("scikit-learn is required for this functionality")
+
+    class RBFSampler:  # type: ignore
+        pass
+
+    class SVC:  # type: ignore
+        pass
+
+    class CalibratedClassifierCV:  # type: ignore
+        pass
+
+    class VotingClassifier:  # type: ignore
+        pass
+
+    class TfidfVectorizer:  # type: ignore
+        def __init__(self, **kwargs):
+            raise ImportError("scikit-learn is required for this functionality")
+
+    class LogisticRegression:  # type: ignore
+        pass
+
+    LinearSVC = MLPClassifier = GridSearchCV = RandomizedSearchCV = None  # type: ignore
+    accuracy_score = average_precision_score = confusion_matrix = f1_score = precision_score = recall_score = roc_auc_score = None  # type: ignore
+    SGDClassifier = MultinomialNB = PassiveAggressiveClassifier = RidgeClassifier = None  # type: ignore
+
 import nltk
 import json
 import logging
@@ -33,22 +98,6 @@ import pandas as pd
 from nltk.stem import WordNetLemmatizer
 from tqdm import tqdm
 from imblearn.over_sampling import RandomOverSampler
-
-from sklearn.base import BaseEstimator, ClassifierMixin, clone
-from sklearn.calibration import CalibratedClassifierCV
-from sklearn.ensemble import VotingClassifier
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (accuracy_score, average_precision_score,
-                             confusion_matrix, f1_score, precision_score,
-                             recall_score, roc_auc_score)
-from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
-from sklearn.neural_network import MLPClassifier
-from sklearn.svm import LinearSVC
-from sklearn.linear_model import SGDClassifier
-from sklearn.naive_bayes import MultinomialNB
-from sklearn.linear_model import PassiveAggressiveClassifier, RidgeClassifier
-from nltk.stem import WordNetLemmatizer
 
 # Download NLTK data
 try:
@@ -1166,7 +1215,6 @@ def _ensure_pipeline():
     """Initialize pipeline if not already done."""
     if not _pipeline_state['initialized']:
         try:
-            # Try to load existing models
             vec_path = CFG.data_dir / "vectorizer.pkl"
             models_path = CFG.data_dir / "models.pkl"
 
@@ -1177,15 +1225,34 @@ def _ensure_pipeline():
                 with open(models_path, 'rb') as f:
                     _pipeline_state['models'] = pickle.load(f)
             else:
-                # Fallback to rule-based models
-                _pipeline_state['models']['keto'] = RuleModel(
-                    "keto", RX_KETO, RX_WL_KETO)
-                _pipeline_state['models']['vegan'] = RuleModel(
-                    "vegan", RX_VEGAN, RX_WL_VEGAN)
+                # No trained models available, run full pipeline
+                vec, _, _, res = run_full_pipeline()
+
+                # Select best models as done in CLI training
+                best_models = {}
+                for task in ["keto", "vegan"]:
+                    task_res = [r for r in res if r["task"] == task]
+                    best = max(task_res, key=lambda x: x['F1'])
+                    model_name = best['model']
+
+                    if model_name in BEST:
+                        best_models[task] = BEST[model_name]
+                    else:
+                        best_models[task] = build_models(task)[model_name]
+
+                CFG.data_dir.mkdir(parents=True, exist_ok=True)
+                with open(vec_path, 'wb') as f:
+                    import pickle
+                    pickle.dump(vec, f)
+                with open(models_path, 'wb') as f:
+                    pickle.dump(best_models, f)
+
+                _pipeline_state['vectorizer'] = vec
+                _pipeline_state['models'] = best_models
 
         except Exception as e:
             log.warning(
-                f"Could not load trained models: {e}. Using rule-based.")
+                f"Could not load or train models: {e}. Using rule-based.")
             _pipeline_state['models']['keto'] = RuleModel(
                 "keto", RX_KETO, RX_WL_KETO)
             _pipeline_state['models']['vegan'] = RuleModel(
@@ -1295,6 +1362,40 @@ def is_ingredient_vegan(ingredient: str) -> bool:
         return prob_adj >= 0.5
 
     return True
+
+
+def is_keto(ingredients: Iterable[str] | str) -> bool:
+    """Check if all ingredients are keto-friendly.
+
+    This will automatically train models on first use if none are saved.
+    """
+    _ensure_pipeline()
+    if isinstance(ingredients, str):
+        try:
+            if ingredients.startswith('['):
+                ingredients = json.loads(ingredients)
+            else:
+                ingredients = [i.strip() for i in ingredients.split(',') if i.strip()]
+        except Exception:
+            ingredients = [ingredients]
+    return all(is_ingredient_keto(ing) for ing in ingredients)
+
+
+def is_vegan(ingredients: Iterable[str] | str) -> bool:
+    """Check if all ingredients are vegan.
+
+    This will automatically train models on first use if none are saved.
+    """
+    _ensure_pipeline()
+    if isinstance(ingredients, str):
+        try:
+            if ingredients.startswith('['):
+                ingredients = json.loads(ingredients)
+            else:
+                ingredients = [i.strip() for i in ingredients.split(',') if i.strip()]
+        except Exception:
+            ingredients = [ingredients]
+    return all(is_ingredient_vegan(ing) for ing in ingredients)
 
 # ============================================================================
 # MAIN ENTRY POINT
