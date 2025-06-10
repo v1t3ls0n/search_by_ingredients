@@ -1335,17 +1335,25 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
 # MAIN PIPELINE
 # ============================================================================
 
-
-def run_full_pipeline(mode: str = "both", force: bool = False):
+def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: float = None):
     """
     Run the complete training and evaluation pipeline.
 
     Args:
         mode: 'text', 'image', or 'both' to control input modality.
         force: Recompute image embeddings even if cached.
+        sample_frac: Optional float (0 < x <= 1.0) to subsample silver set.
     """
     # Load datasets
     silver, gold, recipes = load_datasets_fixed()
+
+    # Filter only rows with usable photo URLs
+    silver = filter_photo_rows(silver)
+    gold = filter_photo_rows(gold)
+
+    # Optional subsample (for large silver set)
+    if sample_frac:
+        silver = silver.sample(frac=sample_frac, random_state=42).copy()
 
     # Display class balance
     show_balance(gold, "Gold")
@@ -1355,24 +1363,21 @@ def run_full_pipeline(mode: str = "both", force: bool = False):
     vec = TfidfVectorizer(**CFG.vec_kwargs)
     X_text_silver = vec.fit_transform(silver.clean)
     X_text_gold = vec.transform(gold.clean)
-
     results, res_text, res_img = [], [], []
+
+    img_silver = img_gold = None
 
     # --- IMAGE-ONLY PIPELINE (Runs First if mode is 'both') ---
     if mode in {"image", "both"}:
-        # Download missing images (corrected to use Path)
         _download_images(silver, CFG.image_dir / "silver")
         _download_images(gold, CFG.image_dir / "gold")
 
-        # Filter to rows with downloaded images
         img_silver_df = filter_silver_by_downloaded_images(silver, CFG.image_dir)
         img_gold_df = filter_photo_rows(gold)
 
-        # Extract image embeddings
         img_silver = build_image_embeddings(img_silver_df, "silver", force=force)
         img_gold = build_image_embeddings(img_gold_df, "gold", force=force)
 
-        # Save reproducibility index
         idx_path = CFG.image_dir / "silver" / "used_indices.txt"
         idx_path.parent.mkdir(parents=True, exist_ok=True)
         img_silver_df.index.to_series().to_csv(idx_path, index=False, header=False)
@@ -1426,6 +1431,7 @@ def run_full_pipeline(mode: str = "both", force: bool = False):
         json.dump({k: v.get_params() for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
 
     return vec, silver, gold, results
+
 
 
 # ============================================================================
@@ -1652,12 +1658,12 @@ def main():
                         help='Run full training pipeline')
     parser.add_argument('--ingredients', type=str,
                         help='Comma separated ingredients to classify')
-    # Use both text and image features by default
-
     parser.add_argument('--mode', choices=['text', 'image', 'both'],
                         default='both', help='Feature mode for training')
     parser.add_argument('--force', action='store_true',
                         help='Recompute image embeddings')
+    parser.add_argument('--sample-frac', type=float, default=None,
+                        help='Fraction (0 < x <= 1) of silver set to use')
     args = parser.parse_args()
 
     if args.ingredients:
@@ -1673,23 +1679,18 @@ def main():
         return
 
     elif args.train:
-        # Run full pipeline with selected feature mode
         vec, silver, gold, res = run_full_pipeline(
-            mode=args.mode, force=args.force)
+            mode=args.mode, force=args.force, sample_frac=args.sample_frac)
 
-        # Save models
         try:
             import pickle
             CFG.data_dir.mkdir(parents=True, exist_ok=True)
 
-            # Save vectorizer
             with open(CFG.data_dir / "vectorizer.pkl", 'wb') as f:
                 pickle.dump(vec, f)
 
-            # Save best models
             best_models = {}
             for task in ['keto', 'vegan']:
-                # Get best performing model from results
                 task_res = [r for r in res if r['task'] == task]
                 best = max(task_res, key=lambda x: x['F1'])
                 model_name = best['model']
@@ -1708,53 +1709,41 @@ def main():
             log.error("Could not save models: %s", e)
 
     elif args.ground_truth:
-        # Evaluate on ground truth
         try:
             df = pd.read_csv(args.ground_truth)
+            df = filter_photo_rows(df)
 
-            # Find columns
-            keto_col = next(
-                (col for col in df.columns if 'keto' in col.lower()), None)
-            vegan_col = next(
-                (col for col in df.columns if 'vegan' in col.lower()), None)
+            keto_col = next((col for col in df.columns if 'keto' in col.lower()), None)
+            vegan_col = next((col for col in df.columns if 'vegan' in col.lower()), None)
 
             if 'ingredients' not in df.columns:
                 print("Error: 'ingredients' column required")
                 return
 
-            # Parse ingredients and evaluate
             correct_keto = 0
             correct_vegan = 0
 
             for idx, row in df.iterrows():
-                # Parse ingredients
                 if isinstance(row['ingredients'], str) and row['ingredients'].startswith('['):
                     import ast
                     ingredients = ast.literal_eval(row['ingredients'])
                 else:
-                    ingredients = [i.strip()
-                                   for i in str(row['ingredients']).split(',')]
+                    ingredients = [i.strip() for i in str(row['ingredients']).split(',')]
 
-                # Classify (ALL ingredients must pass)
                 pred_keto = all(is_ingredient_keto(ing) for ing in ingredients)
-                pred_vegan = all(is_ingredient_vegan(ing)
-                                 for ing in ingredients)
+                pred_vegan = all(is_ingredient_vegan(ing) for ing in ingredients)
 
-                # Check accuracy
                 if keto_col and pred_keto == bool(row[keto_col]):
                     correct_keto += 1
                 if vegan_col and pred_vegan == bool(row[vegan_col]):
                     correct_vegan += 1
 
-            # Report
             total = len(df)
             print("\n=== Evaluation Results ===")
             if keto_col:
-                print(
-                    f"Keto:  {correct_keto}/{total} ({correct_keto/total:.1%})")
+                print(f"Keto:  {correct_keto}/{total} ({correct_keto/total:.1%})")
             if vegan_col:
-                print(
-                    f"Vegan: {correct_vegan}/{total} ({correct_vegan/total:.1%})")
+                print(f"Vegan: {correct_vegan}/{total} ({correct_vegan/total:.1%})")
 
         except Exception as e:
             print(f"Error: {e}")
@@ -1762,8 +1751,7 @@ def main():
             traceback.print_exc()
 
     else:
-        # Run full pipeline in dev mode
-        run_full_pipeline(mode=args.mode, force=args.force)
+        run_full_pipeline(mode=args.mode, force=args.force, sample_frac=args.sample_frac)
 
 
 if __name__ == "__main__":
