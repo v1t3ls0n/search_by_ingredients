@@ -1164,7 +1164,6 @@ def _ensure_pipeline():
     """Initialize pipeline if not already done."""
     if not _pipeline_state['initialized']:
         try:
-            # Try to load existing models
             vec_path = CFG.data_dir / "vectorizer.pkl"
             models_path = CFG.data_dir / "models.pkl"
 
@@ -1175,15 +1174,34 @@ def _ensure_pipeline():
                 with open(models_path, 'rb') as f:
                     _pipeline_state['models'] = pickle.load(f)
             else:
-                # Fallback to rule-based models
-                _pipeline_state['models']['keto'] = RuleModel(
-                    "keto", RX_KETO, RX_WL_KETO)
-                _pipeline_state['models']['vegan'] = RuleModel(
-                    "vegan", RX_VEGAN, RX_WL_VEGAN)
+                # No trained models available, run full pipeline
+                vec, _, _, res = run_full_pipeline()
+
+                # Select best models as done in CLI training
+                best_models = {}
+                for task in ["keto", "vegan"]:
+                    task_res = [r for r in res if r["task"] == task]
+                    best = max(task_res, key=lambda x: x['F1'])
+                    model_name = best['model']
+
+                    if model_name in BEST:
+                        best_models[task] = BEST[model_name]
+                    else:
+                        best_models[task] = build_models(task)[model_name]
+
+                CFG.data_dir.mkdir(parents=True, exist_ok=True)
+                with open(vec_path, 'wb') as f:
+                    import pickle
+                    pickle.dump(vec, f)
+                with open(models_path, 'wb') as f:
+                    pickle.dump(best_models, f)
+
+                _pipeline_state['vectorizer'] = vec
+                _pipeline_state['models'] = best_models
 
         except Exception as e:
             log.warning(
-                f"Could not load trained models: {e}. Using rule-based.")
+                f"Could not load or train models: {e}. Using rule-based.")
             _pipeline_state['models']['keto'] = RuleModel(
                 "keto", RX_KETO, RX_WL_KETO)
             _pipeline_state['models']['vegan'] = RuleModel(
@@ -1293,6 +1311,40 @@ def is_ingredient_vegan(ingredient: str) -> bool:
         return prob_adj >= 0.5
 
     return True
+
+
+def is_keto(ingredients: Iterable[str] | str) -> bool:
+    """Check if all ingredients are keto-friendly.
+
+    This will automatically train models on first use if none are saved.
+    """
+    _ensure_pipeline()
+    if isinstance(ingredients, str):
+        try:
+            if ingredients.startswith('['):
+                ingredients = json.loads(ingredients)
+            else:
+                ingredients = [i.strip() for i in ingredients.split(',') if i.strip()]
+        except Exception:
+            ingredients = [ingredients]
+    return all(is_ingredient_keto(ing) for ing in ingredients)
+
+
+def is_vegan(ingredients: Iterable[str] | str) -> bool:
+    """Check if all ingredients are vegan.
+
+    This will automatically train models on first use if none are saved.
+    """
+    _ensure_pipeline()
+    if isinstance(ingredients, str):
+        try:
+            if ingredients.startswith('['):
+                ingredients = json.loads(ingredients)
+            else:
+                ingredients = [i.strip() for i in ingredients.split(',') if i.strip()]
+        except Exception:
+            ingredients = [ingredients]
+    return all(is_ingredient_vegan(ing) for ing in ingredients)
 
 # ============================================================================
 # MAIN ENTRY POINT
