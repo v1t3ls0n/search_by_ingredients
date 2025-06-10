@@ -1338,60 +1338,65 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
 
 def run_full_pipeline(mode: str = "both", force: bool = False):
     """
-    Run the complete training and evaluation pipeline on the full dataset.
+    Run the complete training and evaluation pipeline.
 
     Args:
         mode: 'text', 'image', or 'both' to control input modality.
         force: Recompute image embeddings even if cached.
     """
-    # Load full datasets
+    # Load datasets
     silver, gold, recipes = load_datasets_fixed()
 
+    # Display class balance
     show_balance(gold, "Gold")
     show_balance(silver, "Silver")
 
-    # --- TEXT FEATURES ---
+    # --- TEXT FEATURE EXTRACTION ---
     vec = TfidfVectorizer(**CFG.vec_kwargs)
     X_text_silver = vec.fit_transform(silver.clean)
     X_text_gold = vec.transform(gold.clean)
 
     results, res_text, res_img = [], [], []
 
-    # --- IMAGE PIPELINE ---
+    # --- IMAGE-ONLY PIPELINE (Runs First if mode is 'both') ---
     if mode in {"image", "both"}:
+        # Download missing images (corrected to use Path)
         _download_images(silver, CFG.image_dir / "silver")
         _download_images(gold, CFG.image_dir / "gold")
 
-        silver["image_path"] = silver.index.to_series().apply(
-            lambda i: CFG.image_dir / "silver" / f"{i}.jpg")
-        gold["image_path"] = gold.index.to_series().apply(
-            lambda i: CFG.image_dir / "gold" / f"{i}.jpg")
+        # Filter to rows with downloaded images
+        img_silver_df = filter_silver_by_downloaded_images(silver, CFG.image_dir)
+        img_gold_df = filter_photo_rows(gold)
 
-        # No filtering — embedding code should skip missing paths
-        img_silver = build_image_embeddings(silver, "silver", force=force)
-        img_gold = build_image_embeddings(gold, "gold", force=force)
+        # Extract image embeddings
+        img_silver = build_image_embeddings(img_silver_df, "silver", force=force)
+        img_gold = build_image_embeddings(img_gold_df, "gold", force=force)
+
+        # Save reproducibility index
+        idx_path = CFG.image_dir / "silver" / "used_indices.txt"
+        idx_path.parent.mkdir(parents=True, exist_ok=True)
+        img_silver_df.index.to_series().to_csv(idx_path, index=False, header=False)
+        log.info(f"Saved image index for reproducibility to: {idx_path}")
 
         X_img_silver = csr_matrix(img_silver)
         X_img_gold = csr_matrix(img_gold)
 
-        res_img = run_mode_A(X_img_silver, gold.clean,
-                             X_img_gold, silver, gold)
+        res_img = run_mode_A(
+            X_img_silver, img_gold_df.clean, X_img_gold, img_silver_df, img_gold_df
+        )
         results.extend(res_img)
 
-    # --- TEXT PIPELINE ---
+    # --- TEXT-ONLY PIPELINE (Runs Second if mode is 'both') ---
     if mode in {"text", "both"}:
-        res_text = run_mode_A(X_text_silver, gold.clean,
-                              X_text_gold, silver, gold)
+        res_text = run_mode_A(X_text_silver, gold.clean, X_text_gold, silver, gold)
         results.extend(res_text)
 
-    # --- ENSEMBLE ---
+    # --- TEXT+IMAGE ENSEMBLE ---
     if mode == "both" and res_text and res_img:
         ensemble_results = []
         for task in ["keto", "vegan"]:
-            best_text = max(
-                (r for r in res_text if r["task"] == task), key=lambda r: r["F1"])
-            best_img = max(
-                (r for r in res_img if r["task"] == task), key=lambda r: r["F1"])
+            best_text = max((r for r in res_text if r["task"] == task), key=lambda r: r["F1"])
+            best_img = max((r for r in res_img if r["task"] == task), key=lambda r: r["F1"])
             avg_prob = (best_text["prob"] + best_img["prob"]) / 2
             ensemble_result = pack(gold[f"label_{task}"].values, avg_prob) | {
                 "model": "TxtImg",
@@ -1401,11 +1406,11 @@ def run_full_pipeline(mode: str = "both", force: bool = False):
         table("Ensemble Text+Image", ensemble_results)
         results.extend(ensemble_results)
 
-    # --- FINAL EVAL ON COMBINED FEATURES ---
+    # --- RECOMBINED FINAL EVALUATION ---
     if mode == "text":
         X_silver, X_gold = X_text_silver, X_text_gold
     elif mode == "image":
-        X_silver, X_gold = X_img_silver, X_img_gold
+        X_silver, X_gold = csr_matrix(img_silver), csr_matrix(img_gold)
     else:
         X_silver = combine_features(X_text_silver, img_silver)
         X_gold = combine_features(X_text_gold, img_gold)
@@ -1418,13 +1423,12 @@ def run_full_pipeline(mode: str = "both", force: bool = False):
     table("MODE A Ensemble (Best)", res_ens)
 
     with open("best_params.json", "w") as fp:
-        json.dump({k: v.get_params()
-                  for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
+        json.dump({k: v.get_params() for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
 
     return vec, silver, gold, results
 
-# ============================================
-# ================================
+
+# ============================================================================
 # SIMPLE INTERFACE FOR ASSESSMENT (Required functions)
 # ============================================================================
 
