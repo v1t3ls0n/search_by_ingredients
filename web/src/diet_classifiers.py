@@ -1276,11 +1276,11 @@ def is_ingredient_keto(ingredient: str) -> bool:
             try:
                 X = _pipeline_state['vectorizer'].transform([normalized])
                 prob = model.predict_proba(X)[0, 1]
-            except:
-                # Fallback to rule-based
-                prob = model.predict_proba([normalized])[0, 1]
+            except Exception as e:
+                log.warning("Vectorizer failed: %s. Using rule-based fallback.", e)
+                prob = RuleModel("keto", RX_KETO, RX_WL_KETO).predict_proba([normalized])[0, 1]
         else:
-            prob = model.predict_proba([normalized])[0, 1]
+            prob = RuleModel("keto", RX_KETO, RX_WL_KETO).predict_proba([normalized])[0, 1]
 
         # Apply verification
         prob_adj = verify_with_rules(
@@ -1325,11 +1325,11 @@ def is_ingredient_vegan(ingredient: str) -> bool:
             try:
                 X = _pipeline_state['vectorizer'].transform([normalized])
                 prob = model.predict_proba(X)[0, 1]
-            except:
-                # Fallback to rule-based
-                prob = model.predict_proba([normalized])[0, 1]
+            except Exception as e:
+                log.warning("Vectorizer failed: %s. Using rule-based fallback.", e)
+                prob = RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN).predict_proba([normalized])[0, 1]
         else:
-            prob = model.predict_proba([normalized])[0, 1]
+            prob = RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN).predict_proba([normalized])[0, 1]
 
         # Apply verification
         prob_adj = verify_with_rules(
