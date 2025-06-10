@@ -1,0 +1,5 @@
+setup:
+  - pip install -r web/requirements.txt
+  - pip install -r nb/requirements.txt
+check:
+  - python -m py_compile web/src/diet_classifiers.py nb/src/diet_classifiers.py
