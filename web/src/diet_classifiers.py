@@ -96,7 +96,7 @@ import numpy as np
 import pandas as pd
 from nltk.stem import WordNetLemmatizer
 from tqdm import tqdm
-from imblearn.over_sampling import RandomOverSampler
+from imblearn.over_sampling import SMOTE
 
 # Download NLTK data
 try:
@@ -830,6 +830,28 @@ def combine_features(X_text, X_image) -> csr_matrix:
     return hstack([X_text, img_sparse])
 
 
+def filter_photo_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Return rows with usable photo URLs."""
+    if 'photo_url' not in df.columns:
+        return df.iloc[0:0].copy()
+    mask = ~df['photo_url'].str.contains(
+        r"nophoto|nopic|nopicture", case=False, na=False)
+    mask &= df['photo_url'].astype(bool)
+    return df.loc[mask].copy()
+
+
+def apply_smote(X, y):
+    """Apply SMOTE when classes are imbalanced (<40% minority)."""
+    counts = np.bincount(y)
+    ratio = counts.min() / counts.sum()
+    if ratio < 0.4:
+        smote = SMOTE(random_state=42)
+        X_dense = X.toarray() if hasattr(X, 'toarray') else X
+        return smote.fit_resample(X_dense, y)
+    return X, y
+
+
+
 
 # ============================================================================
 # SILVER LABELS GENERATION
@@ -997,7 +1019,7 @@ def run_mode_A(X_vec, clean, X_gold, silver, gold):
     res = []
     for task, col in [("keto", "silver_keto"), ("vegan", "silver_vegan")]:
         ys, yt = silver[col].values, gold[f"label_{task}"].values
-        X_os, y_os = RandomOverSampler(random_state=42).fit_resample(X_vec, ys)
+        X_os, y_os = apply_smote(X_vec, ys)
         show_balance(pd.DataFrame({col: y_os}),
                      f"Oversampled {task.capitalize()}")
 
@@ -1024,7 +1046,7 @@ def run_mode_A(X_vec, clean, X_gold, silver, gold):
                     prob = mdl.predict(X_gold).astype(float)
 
             prob = verify_with_rules(task, gold.clean, prob)
-            r = pack(yt, prob) | {"model": name, "task": task}
+            r = pack(yt, prob) | {"model": name, "task": task, "prob": prob}
             print(f"\n{name:<7} {task:<5} " + " ".join(f"{m}:{r[m]:>6.2f}" for m in ("ACC", "PREC", "REC", "F1", "ROC", "PR")),
                   f"⏱ {time.time() - t0:.1f}s")
             res.append(r)
@@ -1233,19 +1255,23 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
 
 def run_full_pipeline(mode: str = "both", force: bool = False):
     """Run the complete training and evaluation pipeline.
-
     Args:
+        mode: 'text', 'image', or 'both'. Default 'both' trains both pipelines.
+        force: Recompute image embeddings even if cached.
         mode: 'text', 'image', or 'both' to specify feature set.
         force: Recompute image embeddings even if cached.
     """
+    
     # Load datasets in memory
     recipes, gold = load_datasets()
     gold["label_keto"] = gold.filter(regex="keto").iloc[:, 0].astype(int)
     gold["label_vegan"] = gold.filter(regex="vegan").iloc[:, 0].astype(int)
     gold["clean"] = gold.ingredients.fillna("").map(normalise)
 
-    # Build silver labels from recipes
     silver = build_silver(recipes)
+    silver["photo_url"] = recipes.get("photo_url")
+    gold["photo_url"] = gold.get("photo_url")
+
     show_balance(gold, "Gold")
     show_balance(silver, "Silver")
 
@@ -1253,7 +1279,40 @@ def run_full_pipeline(mode: str = "both", force: bool = False):
     X_text_silver = vec.fit_transform(silver.clean)
     X_text_gold = vec.transform(gold.clean)
 
-    # Image embeddings if requested
+    results = []
+    res_text = []
+    res_img = []
+
+    if mode in {"text", "both"}:
+        res_text = run_mode_A(X_text_silver, gold.clean, X_text_gold, silver, gold)
+        results.extend(res_text)
+
+    if mode in {"image", "both"}:
+        img_silver_df = filter_photo_rows(silver)
+        img_gold_df = filter_photo_rows(gold)
+        img_silver = build_image_embeddings(img_silver_df, "silver", force=force)
+        img_gold = build_image_embeddings(img_gold_df, "gold", force=force)
+        X_img_silver = csr_matrix(img_silver)
+        X_img_gold = csr_matrix(img_gold)
+        res_img = run_mode_A(
+            X_img_silver, img_gold_df.clean, X_img_gold, img_silver_df, img_gold_df)
+        results.extend(res_img)
+
+    if mode == "both" and res_text and res_img:
+        ens = []
+        for task in ["keto", "vegan"]:
+            t = max([r for r in res_text if r["task"] == task],
+                    key=lambda x: x["F1"])
+            i = max([r for r in res_img if r["task"] == task],
+                    key=lambda x: x["F1"])
+            avg = (t["prob"] + i["prob"]) / 2
+            r = pack(gold[f"label_{task}"].values, avg) | {
+                "model": "TxtImg", "task": task}
+            ens.append(r)
+        table("Ensemble Text+Image", ens)
+        results.extend(ens)
+
+# Image embeddings if requested
     if mode in {"image", "both"}:
         img_silver = build_image_embeddings(recipes, "silver", force=force)
         img_gold = build_image_embeddings(gold, "gold", force=force)
@@ -1280,13 +1339,10 @@ def run_full_pipeline(mode: str = "both", force: bool = False):
                       gold.clean, X_gold, silver, gold),
     ]
     table("MODE A Ensemble (Best)", res_ens)
-
-    # Save best parameters
     with open("best_params.json", "w") as fp:
-        json.dump({k: v.get_params()
-                  for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
+        json.dump({k: v.get_params() for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
 
-    return vec, silver, gold, res
+    return vec, silver, gold, results
 
 # ============================================================================
 # SIMPLE INTERFACE FOR ASSESSMENT (Required functions)
@@ -1321,7 +1377,7 @@ def _ensure_pipeline():
                 # Select best models as done in CLI training
                 best_models = {}
                 for task in ["keto", "vegan"]:
-                    task_res = [r for r in res if r["task"] == task]
+                    task_res = [r for r in res if r["task"] == task and r["model"] != "TxtImg"]
                     best = max(task_res, key=lambda x: x['F1'])
                     model_name = best['model']
 
@@ -1503,6 +1559,8 @@ def main():
                         help='Run full training pipeline')
     parser.add_argument('--ingredients', type=str,
                         help='Comma separated ingredients to classify')
+    # Use both text and image features by default
+
     parser.add_argument('--mode', choices=['text', 'image', 'both'],
                         default='both', help='Feature mode for training')
     parser.add_argument('--force', action='store_true',
