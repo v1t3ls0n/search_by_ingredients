@@ -528,7 +528,7 @@ VEGAN_WHITELIST = [
     r"\bcocoa\s+butter\b",
     r"\bpeanut\s+butter\b",
     r"\balmond\s+butter\b",
-    r"\bsunflower(\s*seed)?\s+butter\b",
+    r"\bsunflower(?:\s*seed)?\s+butter\b",
     r"\bpistachio\s+butter\b",
     r"\bvegan\s+butter\b",
     # — honey —
@@ -558,7 +558,7 @@ VEGAN_WHITELIST = [
     r"\bchicken\s+mushroom\b",
     r"\bhen[- ]of[- ]the[- ]woods\b",
     # — meat —
-    r"\bsweetmeat\s+(pumpkin|squash)\b",
+    r"\bsweetmeat\s+(?:pumpkin|squash)\b",
     # — bacon —
     r"\bcoconut\s+bacon\b",
     r"\bmushroom\s+bacon\b",
