@@ -1,6 +1,7 @@
 FROM python:3.11-slim
 
 WORKDIR /app
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -11,16 +12,16 @@ RUN apt-get update && apt-get install -y \
 # Create data directory
 RUN mkdir -p /app/data
 
-# Download the parquet file
-RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/allrecipes.parquet -o /app/data/allrecipes.parquet
+# Download the parquet (silver) and gold CSV data
+RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/allrecipes.parquet -o /app/data/allrecipes.parquet \
+ && curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/ground_truth_sample.csv -o /app/data/ground_truth_sample.csv
 
-# Copy requirements first to leverage Docker cache
+# Copy requirements and install Python deps
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-
-# Expose the port the app runs on
+# Expose app port
 EXPOSE 8080
 
-# Command to run the application - make init.sh executable first
+# Run init script inside the container
 CMD ["sh", "-c", "dos2unix web/init.sh && chmod +x web/init.sh && ./web/init.sh"]

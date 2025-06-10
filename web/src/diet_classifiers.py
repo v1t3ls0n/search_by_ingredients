@@ -821,12 +821,15 @@ def _download_images(df: pd.DataFrame, split: str) -> None:
         log.warning(f"[{split}] Logged {len(failed_urls)} failed downloads to {fail_log_path}")
 
         
-
 def build_image_embeddings(df: pd.DataFrame, mode: str, force: bool = False) -> np.ndarray:
     """Return or compute image embeddings for the given dataframe."""
     if not TORCH_AVAILABLE:
         log.warning("Torch not available — returning zero vectors.")
         return np.zeros((len(df), 2048), dtype=np.float32)
+
+    if df.empty:
+        log.warning(f"[{mode.upper()}] Empty DataFrame passed to build_image_embeddings — returning empty array.")
+        return np.empty((0, 2048), dtype=np.float32)
 
     img_dir = CFG.image_dir / mode
     embed_path = img_dir / "embeddings.npy"
@@ -835,7 +838,7 @@ def build_image_embeddings(df: pd.DataFrame, mode: str, force: bool = False) -> 
         return np.load(embed_path)
 
     log.info(f"Computing embeddings for {len(df)} images in '{mode}' mode...")
-    
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
     model.fc = torch.nn.Identity()
@@ -867,11 +870,16 @@ def build_image_embeddings(df: pd.DataFrame, mode: str, force: bool = False) -> 
             vec = np.zeros(2048, dtype=np.float32)
         vectors.append(vec)
 
+    if not vectors:
+        log.warning(f"[{mode.upper()}] No image embeddings generated — returning empty array.")
+        return np.empty((0, 2048), dtype=np.float32)
+
     arr = np.vstack(vectors)
     embed_path.parent.mkdir(parents=True, exist_ok=True)
     np.save(embed_path, arr)
     log.info(f"Saved embeddings to {embed_path}")
     return arr
+
 
 
 def combine_features(X_text, X_image) -> csr_matrix:
@@ -1345,9 +1353,19 @@ def run_full_pipeline(mode: str = "both", force: bool = False):
         results.extend(res_text)
 
     # --- IMAGE-ONLY PIPELINE ---
+    # Run image-only pipeline
     if mode in {"image", "both"}:
+        # Download missing images
+        _download_images(silver, CFG.image_dir / "silver")
+        _download_images(gold, CFG.image_dir / "gold")
+
+        # Filter to rows with downloaded images
         img_silver_df = filter_silver_by_downloaded_images(silver, CFG.image_dir)
         img_gold_df = filter_photo_rows(gold)
+
+        # Extract image embeddings
+        img_silver = build_image_embeddings(img_silver_df, "silver", force=force)
+        img_gold = build_image_embeddings(img_gold_df, "gold", force=force)
 
         # Save reproducibility index
         idx_path = CFG.image_dir / "silver" / "used_indices.txt"
