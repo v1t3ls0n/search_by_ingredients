@@ -12,7 +12,7 @@ Complete implementation including:
 - False prediction logging
 """
 
-# --- Future ---
+# --- Future compatibility ---
 from __future__ import annotations
 
 # --- Standard library ---
@@ -26,22 +26,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 
-# --- Third-party (core) ---
+# --- Third-party: core ---
 import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from nltk.stem import WordNetLemmatizer
 from tqdm import tqdm
 from scipy.sparse import hstack, csr_matrix
-from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score, f1_score,
-    roc_auc_score, confusion_matrix, roc_curve,
-    ConfusionMatrixDisplay, RocCurveDisplay
-)
 
-# --- NLTK setup ---
+# --- NLTK (used for lemmatization) ---
 import nltk
+from nltk.stem import WordNetLemmatizer
 try:
     nltk.download('wordnet', quiet=True)
     nltk.download('omw-1.4', quiet=True)
@@ -49,7 +44,7 @@ try:
 except:
     wnl = None
 
-# --- Optional: scikit-learn extended modules ---
+# --- Optional: scikit-learn ---
 try:
     from sklearn.base import BaseEstimator, ClassifierMixin, clone
     from sklearn.calibration import CalibratedClassifierCV
@@ -60,7 +55,12 @@ try:
         LogisticRegression, SGDClassifier,
         PassiveAggressiveClassifier, RidgeClassifier
     )
-    from sklearn.metrics import average_precision_score, precision_recall_curve
+    from sklearn.metrics import (
+        accuracy_score, average_precision_score, confusion_matrix,
+        precision_score, recall_score, f1_score, roc_auc_score,
+        precision_recall_curve, roc_curve,
+        ConfusionMatrixDisplay, RocCurveDisplay
+    )
     from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
     from sklearn.naive_bayes import MultinomialNB
     from sklearn.neural_network import MLPClassifier
@@ -96,10 +96,10 @@ with warnings.catch_warnings():
     except ImportError:
         lgb = None
 
-# --- Optional: PyTorch + torchvision ---
+# --- Optional: PyTorch and torchvision (for image embeddings) ---
 try:  # pragma: no cover
-    from PIL import Image
     import requests
+    from PIL import Image
     import torch
     from torchvision import models, transforms
     TORCH_AVAILABLE = True
@@ -112,8 +112,9 @@ except Exception as e:  # pragma: no cover
     transforms = None
     TORCH_AVAILABLE = False
 
-# --- Optional: Imbalanced data tools ---
+# --- Imbalanced learning ---
 from imblearn.over_sampling import SMOTE, RandomOverSampler
+
 
 
 # ============================================================================
