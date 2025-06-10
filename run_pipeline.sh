@@ -2,25 +2,30 @@
 
 set -e
 
-echo "🛠️ Building Docker containers..."
+start_time=$(date +%s)
+
+echo "🛠️  [1/5] Building Docker containers..."
 docker compose build
 
-echo "🚀 Starting containers in detached mode..."
+echo "🚀 [2/5] Starting containers in detached mode..."
 docker compose up -d
 
-echo "⏳ Waiting for 'web' service to be ready..."
-sleep 10  # adjust if needed depending on hardware
+echo "⏳ [3/5] Waiting for 'web' service to be ready..."
+sleep 10  # You can adjust this or add a healthcheck poll if needed
 
-echo "🐳 Entering 'web' container and running full training + evaluation..."
+echo "🐳 [4/5] Entering 'web' container and running full training + evaluation..."
 docker compose exec web bash -c "
-    echo '📦 Installing dependencies...'
+    echo '📦 Installing Python dependencies...'
     pip install -r requirements.txt >/dev/null 2>&1 || true
 
-    echo '🧠 Training and testing on silver set (both text + image)...'
+    echo '🧠 [TRAINING] Training with both image and text features (image first)...'
     python web/diet_classifiers.py --train --mode both
 
-    echo '🧪 Evaluating on provided gold set...'
+    echo '🧪 [EVALUATION] Evaluating on full gold set...'
     python web/diet_classifiers.py --ground_truth /usr/src/data/ground_truth_sample.csv
 "
 
-echo "✅ Done!"
+end_time=$(date +%s)
+elapsed=$((end_time - start_time))
+
+echo "✅ [5/5] Done! Total time: ${elapsed}s"
