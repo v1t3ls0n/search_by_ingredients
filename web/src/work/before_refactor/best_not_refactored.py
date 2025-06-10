@@ -777,6 +777,12 @@ def build_models(task: str) -> Dict[str, BaseEstimator]:
     m = {
         "Rule": RuleModel("keto", RX_KETO, RX_WL_KETO) if task == "keto" else
                 RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN),
+        "Softmax": LogisticRegression(
+        solver="lbfgs",
+        max_iter=1000,
+        class_weight="balanced",
+        random_state=42
+    ),
         "NB": MultinomialNB(),
         "PA": PassiveAggressiveClassifier(max_iter=1000, class_weight="balanced", random_state=42),
         "Ridge": RidgeClassifier(class_weight="balanced", random_state=42),
@@ -801,6 +807,7 @@ def build_models(task: str) -> Dict[str, BaseEstimator]:
     return m
 
 HYPER = {
+    "Softmax": {"C": [0.05, 0.2, 1, 5, 10]},
     "LR": {"C": [0.2, 1, 5], "class_weight": [None, "balanced"]},
     "SGD": {"alpha": [1e-4, 1e-3]},
     # "MLP": {"hidden_layer_sizes": [(40,), (80,), (80, 40)], "alpha": [1e-4, 1e-3]}, not used in this version
