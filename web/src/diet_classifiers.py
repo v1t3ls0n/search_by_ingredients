@@ -618,8 +618,19 @@ _UNITS = re.compile(r"\b(?:g|gram|kg|oz|ml|l|cup|cups|tsp|tbsp|teaspoon|"
                     r"tablespoon|pound|lb|slice|slices|small|large|medium)\b")
 
 
-def normalise(t: str) -> str:
-    """Normalize ingredient text for consistent matching."""
+def normalise(t: str | list | tuple | np.ndarray) -> str:
+    """Normalize ingredient text for consistent matching.
+
+    The ``ingredients`` field from the allrecipes dataset may be stored as a
+    list/array of strings when loaded from parquet.  ``normalise`` now accepts
+    such iterables and joins them before applying text cleanup so that both
+    CSV and parquet formats behave the same.
+    """
+    if not isinstance(t, str):
+        if isinstance(t, (list, tuple, np.ndarray)):
+            t = " ".join(map(str, t))
+        else:
+            t = str(t)
     t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode()
     t = re.sub(r"\([^)]*\)", " ", t.lower())
     t = _UNITS.sub(" ", t)
