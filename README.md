@@ -39,50 +39,78 @@ Unlike typical supervised learning tasks, **no ground truth labels** are provide
 
 ## 🔍 Model Performance & Evaluation Considerations
 
-### Results Summary
-- **Text-Only Ensemble**: F1 = 0.96-0.97 (keto), F1 = 0.97 (vegan)
-╭─ MODE A Ensemble (Best) ──────────────────────────────────────
-│ model task     ACC    PREC     REC      F1     ROC      PR    │
-├───────────────────────────────────────────────────────────────┤
-│ Ens1    keto     0.97    0.95    0.97    0.96    0.99    0.98 │
-│ Ens3    vegan    0.98    0.97    0.97    0.97    0.99    0.98 │
-╰───────────────────────────────────────────────────────────────╯
-- **Multimodal Ensemble**: F1 = 0.88-0.92 (pending results)
+### 📊 Results Summary
 
-### Important Evaluation Considerations
+#### 📝 Text-Only Ensemble
 
-#### Small Test Set Limitations (100 samples)
-The current evaluation is performed on only 100 test samples, which introduces several considerations:
+**F1 Score**
 
-- **Statistical Variance**: With only 40 positive samples per class, small changes can significantly impact metrics
-- **Potential Overfitting**: High performance (F1>0.95) on such a small set may not generalize to larger, more diverse datasets
-- **Limited Error Analysis**: Insufficient samples for robust evaluation of edge cases and failure modes
+* **Keto**: `0.96 – 0.97`
+* **Vegan**: `0.97`
 
-#### Multimodal vs Text-Only Trade-offs
+```
+╭─ MODE A Ensemble (Best) ─────────────────────────────────────╮
+│ Model   Task     ACC    PREC    REC     F1      ROC     PR │
+├────────────────────────────────────────────────────────────┤
+│ Ens1    Keto     0.97   0.95    0.97    0.96    0.99    0.98 │
+│ Ens3    Vegan    0.98   0.97    0.97    0.97    0.99    0.98 │
+╰────────────────────────────────────────────────────────────╯
+```
 
-**Text-Only Models:**
-- ✅ Excellent performance on current test set (F1=0.96-0.97)
-- ⚠️ May overfit to ingredient name patterns
-- ⚠️ Vulnerable to synonyms, regional variations, and adversarial inputs
+#### 🖼️ Multimodal Ensemble
 
-**Multimodal Approach:**
-- ✅ More robust feature representation (text + visual)
-- ✅ Better generalization to unseen data patterns  
-- ✅ Catches visual cues missed by text (e.g., obvious meat/dairy in images)
-- ⚠️ Potentially lower performance on small test sets
-- ⚠️ Higher computational requirements
-
-#### Production Recommendations
-
-For a **production system**, I recommend the multimodal approach because:
-1. **Robustness**: Less likely to fail on edge cases
-2. **Complementary Features**: Text and images catch different types of errors
-3. **User Trust**: Visual validation increases confidence in predictions
-4. **Scalability**: Better performance as dataset grows
-
-For **benchmark optimization** on this specific 100-sample test set, text-only models provide optimal metrics.
+* **F1 Score (estimated)**: `0.88 – 0.92` *(pending full evaluation)*
 
 ---
+
+### ⚠️ Evaluation Caveats: Small Test Set
+
+> Evaluation is based on only **100 test samples**, including **\~40 positive** samples per class.
+
+Key implications:
+
+* 🎲 **High Variance**: Small metric changes can skew results significantly
+* 🧠 **Overfitting Risk**: High F1 (>0.95) may not hold on real-world data
+* 🔬 **Weak Error Analysis**: Not enough edge cases to reveal true model limitations
+
+---
+
+### 🤖 Text vs Multimodal: Strengths & Trade-offs
+
+#### 📝 Text-Only Models
+
+* ✅ Excellent current-set performance (`F1 = 0.96–0.97`)
+* ⚠️ Sensitive to ingredient phrasing, spelling, and region-specific names
+* ⚠️ Limited robustness to synonym variants or adversarial inputs
+
+#### 🧠 Multimodal Models (Text + Image)
+
+* ✅ Learns both ingredient text and visual cues
+* ✅ Captures obvious food types missed by text alone
+* ✅ Expected to generalize better on larger, more diverse datasets
+* ⚠️ Slightly lower performance on small datasets
+* ⚠️ Higher training and inference cost
+
+---
+
+### 🚀 Recommendations for Deployment
+
+#### ✅ For **Production Systems**:
+
+* Prefer **multimodal models**
+* Combine text and visual features for:
+
+  * 🛡️ **Robustness** against outliers and unseen inputs
+  * 🧩 **Complementarity** between text and image signals
+  * 👁️ **Explainability** via visual feedback for users
+  * 📈 **Scalability** as more data is added
+
+#### 🧪 For **Benchmarking on Current Test Set**:
+
+* Use **text-only models** for best F1 scores on the 100-sample test set
+
+---
+
 
 
 ## 🧠 Core Implementation Strategy
