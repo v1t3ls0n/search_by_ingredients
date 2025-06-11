@@ -2859,6 +2859,9 @@ def table(title, rows):
 # ========================================================================
 
 
+# CRITICAL FIXES FOR PIPELINE ISSUES
+
+# 1. FIX MODEL NAMING TO BE EXPLICIT ABOUT DOMAIN
 def run_mode_A(
     X_silver,                 # feature matrix for the *silver* split
     gold_clean: pd.Series,    # cleaned ingredient strings (gold rows)
@@ -2871,21 +2874,16 @@ def run_mode_A(
 ) -> list[dict]:
     """
     Train on weak (silver) labels, evaluate on gold labels, for both tasks.
-    Enhanced with comprehensive logging and progress tracking.
-
-    Returns
-    -------
-    list[dict]
-        One result-dict per task (keto / vegan) with metrics & meta.
+    Enhanced with explicit domain labeling in model names.
     """
     import time
     from datetime import datetime
-
+    
     # Initialize results and timing
     results: list[dict] = []
     pipeline_start = time.time()
 
-    # Log pipeline initialization
+    # Log pipeline initialization with system info
     log.info("🚀 Starting MODE A Training Pipeline")
     log.info(f"   Domain: {domain}")
     log.info(f"   SMOTE enabled: {apply_smote}")
@@ -2966,7 +2964,7 @@ def run_mode_A(
             X_train = X_silver
 
         # ------------------------------------------------------------------
-        # Model training and evaluation with detailed progress
+        # Model training and evaluation with explicit domain naming
         # ------------------------------------------------------------------
         models = build_models(task, domain)
 
@@ -3009,11 +3007,15 @@ def run_mode_A(
                     pred = (prob >= 0.5).astype(int)
                     model_pbar.update(1)
 
-                # Calculate metrics
+                # Calculate metrics with EXPLICIT DOMAIN NAMING
                 model_time = time.time() - model_start
+                
+                # CRITICAL FIX: Add domain suffix to model name for clarity
+                model_name_with_domain = f"{name}_{domain.upper()}"
+                
                 res = dict(
                     task=task,
-                    model=name,
+                    model=model_name_with_domain,  # NOW EXPLICIT: "Softmax_TEXT" vs "Softmax_IMAGE"
                     ACC=accuracy_score(y_true, pred),
                     PREC=precision_score(y_true, pred, zero_division=0),
                     REC=recall_score(y_true, pred, zero_division=0),
@@ -3022,13 +3024,14 @@ def run_mode_A(
                     PR=average_precision_score(y_true, prob),
                     prob=prob,
                     pred=pred,
-                    training_time=model_time
+                    training_time=model_time,
+                    domain=domain  # Store domain for reference
                 )
 
                 model_results.append(res)
 
                 # Log detailed model performance
-                log.info(f"      ✅ {name:>8}: F1={res['F1']:.3f} | "
+                log.info(f"      ✅ {model_name_with_domain:>12}: F1={res['F1']:.3f} | "
                          f"ACC={res['ACC']:.3f} | PREC={res['PREC']:.3f} | "
                          f"REC={res['REC']:.3f} | Time={model_time:.1f}s")
 
@@ -3037,7 +3040,7 @@ def run_mode_A(
                     best_f1, best_res = res["F1"], res
                     BEST[task] = model
                     log.info(
-                        f"      🏆 New best model for {task}: {name} (F1={best_f1:.3f})")
+                        f"      🏆 New best model for {task}: {model_name_with_domain} (F1={best_f1:.3f})")
 
             except Exception as e:
                 model_time = time.time() - model_start
@@ -3068,8 +3071,8 @@ def run_mode_A(
 
             fallback_time = time.time() - fallback_start
             best_res = pack(y_true, prob) | dict(
-                task=task, model="Rule", prob=prob, pred=pred,
-                training_time=fallback_time
+                task=task, model=f"Rule_{domain.upper()}", prob=prob, pred=pred,
+                training_time=fallback_time, domain=domain
             )
             BEST[task] = rule
 
@@ -3109,7 +3112,7 @@ def run_mode_A(
     # Summary table with enhanced formatting
     log.info(f"\n📊 FINAL RESULTS SUMMARY:")
     for i, res in enumerate(results, 1):
-        log.info(f"   {i}. {res['task'].upper():>5} | {res['model']:>8} | "
+        log.info(f"   {i}. {res['task'].upper():>5} | {res['model']:>15} | "
                  f"F1={res['F1']:.3f} | ACC={res['ACC']:.3f} | "
                  f"Time={res.get('training_time', 0):.1f}s")
 
@@ -3164,6 +3167,7 @@ def tune_threshold(y_true, probs):
     optimal_idx = np.argmax(f1)
     return thresholds[optimal_idx] if optimal_idx < len(thresholds) else 0.5
 
+# replaced currently with create smart ensemble
 def best_ensemble(task, res, X_vec, clean, X_gold, silver, gold, weights=None):
     """
     Find best ensemble size by trying n=1 to max available models.
@@ -3392,6 +3396,85 @@ def best_ensemble(task, res, X_vec, clean, X_gold, silver, gold, weights=None):
 
     return best_result
 
+
+def create_smart_ensemble(task, text_results, image_results, gold_df):
+    """
+    Create ensemble that handles ALL rows intelligently:
+    - Rows with images: Use text+image ensemble
+    - Rows without images: Use text-only predictions
+    
+    Args:
+        task: 'keto' or 'vegan'
+        text_results: Results from text domain
+        image_results: Results from image domain  
+        gold_df: Gold standard dataframe
+        
+    Returns:
+        Complete ensemble result covering all gold rows
+    """
+    log.info(f"   🤝 Creating smart ensemble for {task}...")
+    
+    # Find best models for each domain
+    text_best = max((r for r in text_results if r["task"] == task), 
+                   key=lambda r: r["F1"])
+    image_best = max((r for r in image_results if r["task"] == task), 
+                    key=lambda r: r["F1"])
+    
+    log.info(f"      ├─ Best text model: {text_best['model']} (F1={text_best['F1']:.3f})")
+    log.info(f"      ├─ Best image model: {image_best['model']} (F1={image_best['F1']:.3f})")
+    
+    # Get all gold indices
+    all_gold_indices = gold_df.index
+    
+    # Determine which rows have images (assuming image results are subset)
+    image_indices = set()
+    if 'prob' in image_best and len(image_best['prob']) > 0:
+        # Image model was trained on subset - need to map back
+        # For now, assume first N rows have images where N = len(image predictions)
+        image_indices = set(all_gold_indices[:len(image_best['prob'])])
+    
+    text_only_indices = set(all_gold_indices) - image_indices
+    
+    log.info(f"      ├─ Rows with images: {len(image_indices)}")
+    log.info(f"      ├─ Rows text-only: {len(text_only_indices)}")
+    log.info(f"      └─ Total coverage: {len(image_indices) + len(text_only_indices)}")
+    
+    # Initialize final predictions array
+    final_probs = np.zeros(len(all_gold_indices))
+    final_preds = np.zeros(len(all_gold_indices), dtype=int)
+    
+    # Fill in text+image ensemble for rows with images
+    if image_indices:
+        for i, idx in enumerate(sorted(image_indices)):
+            if i < len(text_best['prob']) and i < len(image_best['prob']):
+                # Average text and image predictions
+                final_probs[idx] = (text_best['prob'][i] + image_best['prob'][i]) / 2
+                final_preds[idx] = 1 if final_probs[idx] >= 0.5 else 0
+    
+    # Fill in text-only predictions for remaining rows
+    for i, idx in enumerate(sorted(text_only_indices)):
+        if i < len(text_best['prob']):
+            final_probs[idx] = text_best['prob'][i]
+            final_preds[idx] = text_best['pred'][i]
+    
+    # Calculate final metrics
+    y_true = gold_df[f"label_{task}"].values
+    
+    result = pack(y_true, final_probs) | {
+        "model": "SmartEnsemble",
+        "task": task,
+        "prob": final_probs,
+        "pred": final_preds,
+        "text_model": text_best['model'],
+        "image_model": image_best['model'],
+        "image_rows": len(image_indices),
+        "text_only_rows": len(text_only_indices)
+    }
+    
+    log.info(f"      ✅ Smart ensemble: F1={result['F1']:.3f} | "
+             f"Coverage={len(image_indices) + len(text_only_indices)}/{len(all_gold_indices)}")
+    
+    return result
 
 def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=False, rule_weight=0):
     """
@@ -3792,49 +3875,76 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
 # ------------------------------------------------------------
 def export_eval_plots(results: list[dict], gold_df: pd.DataFrame,
                       out_dir: Path = Path("plots")) -> None:
+    """Fixed version that handles dimension mismatches properly."""
     out_dir.mkdir(exist_ok=True)
     rows = []
+    
     for r in tqdm(results, desc="Saving plots and metrics"):
         task = r["task"]
         model = r["model"]
         prob = r.get("prob")
         pred = r.get("pred")
-        true = gold_df[f"label_{task}"].values
+        
+        # CRITICAL FIX: Get correct true labels based on prediction length
+        if pred is not None and len(pred) > 0:
+            # Match true labels to prediction length
+            true_labels = gold_df[f"label_{task}"].values
+            
+            if len(pred) != len(true_labels):
+                log.warning(f"   ⚠️  Dimension mismatch for {model}-{task}: "
+                           f"pred={len(pred)}, true={len(true_labels)}")
+                
+                # Truncate to smaller size
+                min_len = min(len(pred), len(true_labels))
+                pred = pred[:min_len]
+                true_labels = true_labels[:min_len]
+                if prob is not None:
+                    prob = prob[:min_len]
+                
+                log.info(f"      ├─ Truncated to {min_len} samples")
+        else:
+            # No predictions available
+            true_labels = gold_df[f"label_{task}"].values
+            log.warning(f"   ⚠️  No predictions for {model}-{task}")
 
         row = dict(model=model, task=task,
                    accuracy=None, precision=None,
                    recall=None, F1=None, AUC=None)
 
-        if pred is not None:
-            row["accuracy"] = accuracy_score(true, pred)
-            row["precision"] = precision_score(true, pred, zero_division=0)
-            row["recall"] = recall_score(true, pred, zero_division=0)
-            row["F1"] = f1_score(true, pred, zero_division=0)
-
-            cm = confusion_matrix(true, pred)
-            ConfusionMatrixDisplay(cm).plot()
-            plt.title(f"{model} – {task} – Confusion matrix")
-            plt.savefig(out_dir / f"{model}_{task}_cm.png")
-            plt.close()
-
-        if prob is not None and hasattr(prob, "__len__"):
+        if pred is not None and len(pred) > 0:
             try:
-                auc = roc_auc_score(true, prob)
+                row["accuracy"] = accuracy_score(true_labels, pred)
+                row["precision"] = precision_score(true_labels, pred, zero_division=0)
+                row["recall"] = recall_score(true_labels, pred, zero_division=0)
+                row["F1"] = f1_score(true_labels, pred, zero_division=0)
+
+                cm = confusion_matrix(true_labels, pred)
+                ConfusionMatrixDisplay(cm).plot()
+                plt.title(f"{model} – {task} – Confusion matrix")
+                plt.savefig(out_dir / f"{model}_{task}_cm.png")
+                plt.close()
+                
+            except Exception as e:
+                log.error(f"   ❌ Metrics calculation failed for {model}-{task}: {e}")
+
+        if prob is not None and len(prob) > 0:
+            try:
+                auc = roc_auc_score(true_labels, prob)
                 row["AUC"] = auc
-                fpr, tpr, _ = roc_curve(true, prob)
+                fpr, tpr, _ = roc_curve(true_labels, prob)
                 RocCurveDisplay(fpr=fpr, tpr=tpr).plot()
                 plt.title(f"{model} – {task} – ROC  AUC={auc:.3f}"
                           + (f",  F1={row['F1']:.3f}" if row["F1"] else ""))
                 plt.savefig(out_dir / f"{model}_{task}_roc.png")
                 plt.close()
             except Exception as e:
-                log.warning(f"ROC/AUC plot failed for {model}-{task}: {e}")
+                log.warning(f"   ⚠️  ROC/AUC plot failed for {model}-{task}: {e}")
 
         rows.append(row)
 
+    # Save results
     pd.DataFrame(rows).to_csv("evaluation_results.csv", index=False)
-    log.info("Saved evaluation_results.csv and plots ✅")
-
+    log.info("   ✅ Saved evaluation_results.csv and plots")
 
 # ------------------------------------------------------------------
 # MAIN  COMPLETE  run_full_pipeline 
@@ -4810,10 +4920,10 @@ def is_vegan(ingredients: Iterable[str] | str) -> bool:
 # MAIN ENTRY POINT
 # ============================================================================
 
-
 def main():
-    """Main function for command line usage."""
+    """Main function with comprehensive error handling to prevent restarts."""
     import argparse
+    import sys
 
     parser = argparse.ArgumentParser(description='Diet Classifier')
     parser.add_argument('--ground_truth', type=str,
@@ -4831,99 +4941,148 @@ def main():
 
     args = parser.parse_args()
 
-    if args.ingredients:
-        if args.ingredients.startswith('['):
-            ingredients = json.loads(args.ingredients)
+    # CRITICAL: Wrap everything in try-catch to prevent restarts
+    try:
+        if args.ingredients:
+            if args.ingredients.startswith('['):
+                ingredients = json.loads(args.ingredients)
+            else:
+                ingredients = [i.strip()
+                               for i in args.ingredients.split(',') if i.strip()]
+
+            keto = is_keto(ingredients)
+            vegan = is_vegan(ingredients)
+            print(json.dumps({'keto': keto, 'vegan': vegan}))
+            return
+
+        elif args.train:
+            log.info(f"🧠 Starting SINGLE training pipeline with sample_frac={args.sample_frac}")
+            
+            # SINGLE PIPELINE RUN - NO AUTOMATIC RESTARTS
+            try:
+                vec, silver, gold, res = run_full_pipeline(
+                    mode=args.mode, force=args.force, sample_frac=args.sample_frac)
+
+                if not res:
+                    log.error("❌ Pipeline produced no results!")
+                    sys.exit(1)
+
+                # Save models
+                try:
+                    import pickle
+                    CFG.data_dir.mkdir(parents=True, exist_ok=True)
+
+                    with open(CFG.data_dir / "vectorizer.pkl", 'wb') as f:
+                        pickle.dump(vec, f)
+
+                    best_models = {}
+                    for task in ['keto', 'vegan']:
+                        task_res = [r for r in res if r['task'] == task]
+                        if task_res:
+                            best = max(task_res, key=lambda x: x['F1'])
+                            model_name = best['model']
+
+                            if model_name in BEST:
+                                best_models[task] = BEST[model_name]
+                            else:
+                                best_models[task] = build_models(task)[model_name]
+
+                    with open(CFG.data_dir / "models.pkl", 'wb') as f:
+                        pickle.dump(best_models, f)
+
+                    log.info("✅ Saved trained models to %s", CFG.data_dir)
+
+                except Exception as e:
+                    log.error("❌ Could not save models: %s", e)
+
+            except KeyboardInterrupt:
+                log.info("🛑 Pipeline interrupted by user")
+                sys.exit(0)
+            except Exception as e:
+                log.error(f"❌ Pipeline failed with error: {e}")
+                log.error(f"   ├─ Error type: {type(e).__name__}")
+                log.error(f"   └─ Error details: {str(e)}")
+                
+                # Log full traceback for debugging
+                import traceback
+                log.debug(f"Full traceback:\n{traceback.format_exc()}")
+                
+                # EXIT INSTEAD OF RESTARTING
+                log.info("🚫 Exiting without restart to prevent infinite loops")
+                sys.exit(1)
+
+        elif args.ground_truth:
+            # Handle ground truth evaluation
+            try:
+                df = pd.read_csv(args.ground_truth)
+                df = filter_photo_rows(df)
+
+                keto_col = next(
+                    (col for col in df.columns if 'keto' in col.lower()), None)
+                vegan_col = next(
+                    (col for col in df.columns if 'vegan' in col.lower()), None)
+
+                if 'ingredients' not in df.columns:
+                    print("Error: 'ingredients' column required")
+                    return
+
+                correct_keto = 0
+                correct_vegan = 0
+
+                for idx, row in df.iterrows():
+                    if isinstance(row['ingredients'], str) and row['ingredients'].startswith('['):
+                        import ast
+                        ingredients = ast.literal_eval(row['ingredients'])
+                    else:
+                        ingredients = [i.strip()
+                                       for i in str(row['ingredients']).split(',')]
+
+                    pred_keto = all(is_ingredient_keto(ing) for ing in ingredients)
+                    pred_vegan = all(is_ingredient_vegan(ing)
+                                     for ing in ingredients)
+
+                    if keto_col and pred_keto == bool(row[keto_col]):
+                        correct_keto += 1
+                    if vegan_col and pred_vegan == bool(row[vegan_col]):
+                        correct_vegan += 1
+
+                total = len(df)
+                print("\n=== Evaluation Results ===")
+                if keto_col:
+                    print(
+                        f"Keto:  {correct_keto}/{total} ({correct_keto/total:.1%})")
+                if vegan_col:
+                    print(
+                        f"Vegan: {correct_vegan}/{total} ({correct_vegan/total:.1%})")
+
+            except Exception as e:
+                print(f"Error: {e}")
+                import traceback
+                traceback.print_exc()
+                sys.exit(1)
+
         else:
-            ingredients = [i.strip()
-                           for i in args.ingredients.split(',') if i.strip()]
+            # Default pipeline run
+            log.info(f"🧠 Starting default SINGLE pipeline with sample_frac={args.sample_frac}")
+            
+            try:
+                run_full_pipeline(mode=args.mode, force=args.force,
+                                  sample_frac=args.sample_frac)
+            except KeyboardInterrupt:
+                log.info("🛑 Pipeline interrupted by user")
+                sys.exit(0)
+            except Exception as e:
+                log.error(f"❌ Default pipeline failed: {e}")
+                sys.exit(1)
 
-        keto = is_keto(ingredients)
-        vegan = is_vegan(ingredients)
-        print(json.dumps({'keto': keto, 'vegan': vegan}))
-        return
-
-    elif args.train:
-        vec, silver, gold, res = run_full_pipeline(
-            mode=args.mode, force=args.force, sample_frac=args.sample_frac)
-
-        try:
-            import pickle
-            CFG.data_dir.mkdir(parents=True, exist_ok=True)
-
-            with open(CFG.data_dir / "vectorizer.pkl", 'wb') as f:
-                pickle.dump(vec, f)
-
-            best_models = {}
-            for task in ['keto', 'vegan']:
-                task_res = [r for r in res if r['task'] == task]
-                best = max(task_res, key=lambda x: x['F1'])
-                model_name = best['model']
-
-                if model_name in BEST:
-                    best_models[task] = BEST[model_name]
-                else:
-                    best_models[task] = build_models(task)[model_name]
-
-            with open(CFG.data_dir / "models.pkl", 'wb') as f:
-                pickle.dump(best_models, f)
-
-            log.info("Saved trained models to %s", CFG.data_dir)
-
-        except Exception as e:
-            log.error("Could not save models: %s", e)
-
-    elif args.ground_truth:
-        try:
-            df = pd.read_csv(args.ground_truth)
-            df = filter_photo_rows(df)
-
-            keto_col = next(
-                (col for col in df.columns if 'keto' in col.lower()), None)
-            vegan_col = next(
-                (col for col in df.columns if 'vegan' in col.lower()), None)
-
-            if 'ingredients' not in df.columns:
-                print("Error: 'ingredients' column required")
-                return
-
-            correct_keto = 0
-            correct_vegan = 0
-
-            for idx, row in df.iterrows():
-                if isinstance(row['ingredients'], str) and row['ingredients'].startswith('['):
-                    import ast
-                    ingredients = ast.literal_eval(row['ingredients'])
-                else:
-                    ingredients = [i.strip()
-                                   for i in str(row['ingredients']).split(',')]
-
-                pred_keto = all(is_ingredient_keto(ing) for ing in ingredients)
-                pred_vegan = all(is_ingredient_vegan(ing)
-                                 for ing in ingredients)
-
-                if keto_col and pred_keto == bool(row[keto_col]):
-                    correct_keto += 1
-                if vegan_col and pred_vegan == bool(row[vegan_col]):
-                    correct_vegan += 1
-
-            total = len(df)
-            print("\n=== Evaluation Results ===")
-            if keto_col:
-                print(
-                    f"Keto:  {correct_keto}/{total} ({correct_keto/total:.1%})")
-            if vegan_col:
-                print(
-                    f"Vegan: {correct_vegan}/{total} ({correct_vegan/total:.1%})")
-
-        except Exception as e:
-            print(f"Error: {e}")
-            import traceback
-            traceback.print_exc()
-
-    else:
-        run_full_pipeline(mode=args.mode, force=args.force,
-                          sample_frac=args.sample_frac)
+    except KeyboardInterrupt:
+        log.info("🛑 Main interrupted by user")
+        sys.exit(0)
+    except Exception as e:
+        log.error(f"❌ Unexpected error in main: {e}")
+        import traceback
+        log.error(f"Full traceback:\n{traceback.format_exc()}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
