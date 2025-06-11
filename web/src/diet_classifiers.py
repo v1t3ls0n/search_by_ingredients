@@ -4085,9 +4085,10 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
                          bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}]")
 
     for model_res, composite_score in prep_progress:
-        model_start = time.time()
-        name = model_res["model"]
-        prep_progress.set_description(f"   ├─ Preparing {name}")
+        name = model_res["model"]               # e.g. 'Softmax_TEXT'
+        base_key = name.split('_')[0]           # <-- FIX ①  base model name
+        prep_progress.set_description(f"   ├─ {name}")
+
 
         try:
             log.info(f"      ├─ Processing {name} (F1={model_res['F1']:.3f})")
@@ -4097,18 +4098,19 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
                       bar_format="         ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as model_pbar:
 
                 model_pbar.set_description(f"         ├─ {name}: Loading")
-                base = build_models(task)[name]
+                base = build_models(task)[base_key]  
                 model_pbar.update(1)
 
                 # Step 2: Apply hyperparameters
                 model_pbar.set_description(f"         ├─ {name}: Configuring")
-                if use_saved_params and name in saved_params:
-                    base.set_params(**saved_params[name])
+                if use_saved_params and base_key in saved_params:   
+                    base.set_params(**saved_params[base_key])
                     log.info(
                         f"         ├─ Applied saved parameters: {saved_params[name]}")
                 else:
                     log.info(f"         ├─ Tuning hyperparameters...")
-                    base = tune(name, base, X_vec, silver[f"silver_{task}"])
+                    base = tune(base_key, base, X_vec, silver[f"silver_{task}"])
+
                 model_pbar.update(1)
 
                 # Step 3: Model training
