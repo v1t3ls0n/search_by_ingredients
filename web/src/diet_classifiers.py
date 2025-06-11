@@ -2082,11 +2082,11 @@ class RuleModel(BaseEstimator, ClassifierMixin):
 # ============================================================================
 
 assert is_ingredient_keto("almond flour")    # whitelist + 9 g carbs
-assert not is_ingredient_keto("white rice")  # numeric rule > 10 g
+assert not is_ingredient_keto("SANITY CHECK FAILED - white rice carb numeric rule > 10 g")  # numeric rule > 10 g
 
 rule = RuleModel("keto", None, None)
-assert rule._pos("banana") is False          # numeric rule via delegate
-print("all good")
+assert rule._pos("SANITY CHECK FAILED - banana") is False          # numeric rule via delegate
+print("SANITY CHECK - all good")
 
 
 # ============================================================================
