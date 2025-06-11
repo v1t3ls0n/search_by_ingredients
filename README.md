@@ -1,73 +1,176 @@
-# Search by Ingredients
+# 🥑 Search by Ingredients
 
-This repository contains a small demonstration project for indexing recipe data and querying it by ingredients. A Flask based web service provides a search API backed by OpenSearch. Basic rule based classifiers are included to predict whether a recipe is keto friendly or vegan.
+**AI-powered diet labeling from recipe ingredients and images**
+👤 By [Guy Vitelson](https://www.linkedin.com/in/guyvitelson/) · 🐙 [GitHub @v1t3ls0n](https://github.com/v1t3ls0n) · 📧 [guyvitelson@gmail.com](mailto:guyvitelson@gmail.com)
 
-## Project layout
+---
+
+## 🧠 Overview
+
+This project demonstrates a complete pipeline for diet-based recipe classification using both textual ingredient lists and recipe images. It includes:
+
+* ⚡ Silver label generation from raw data using hard-coded heuristics.
+* 🧃 Text-based models: Logistic Regression, SVM, Naive Bayes, Ridge, Passive-Aggressive, LightGBM, etc.
+* 🖼️ Image-based classifier using ResNet embeddings.
+* 🤖 Ensemble of multiple models (text + image) for final prediction.
+* ✅ Hard-verification using blacklists and whitelists.
+* 📊 Full evaluation on a gold-standard dataset with metrics, plots, and logging.
+
+---
+
+## 🗂️ Project Structure
 
 ```
 .
-├── docker-compose.yml    # Docker services for OpenSearch, the web API and a notebook
-├── web/                  # Web API source code and container
-│   ├── Dockerfile
+├── data/                        # Mounted volume with datasets and results
+├── web/                         # Web app and model training code
+│   ├── diet_classifiers.py      # Full ML pipeline, heuristics, training, evaluation
+│   ├── index_data.py            # Index recipe data into OpenSearch
+│   ├── app.py                   # Minimal Flask app
 │   ├── requirements.txt
-│   └── src/
-│       ├── app.py        # Flask application
-│       ├── diet_classifiers.py  # Heuristic and ML classifiers
-│       ├── index_data.py # Script for indexing recipe data into OpenSearch
-│       └── init.sh       # Container entrypoint
-├── nb/                   # Jupyter environment with lightweight examples
 │   ├── Dockerfile
-│   ├── requirements.txt
-│   └── src/
-│       ├── diet_classifiers.py  # Minimal rule based implementation
-│       └── task.ipynb
-├── run_pipeline.sh       # Convenience script: builds containers and trains models
-├── train_and_evaluate.sh # Runs training and evaluation inside containers
+│   └── init.sh
+├── nb/                          # Optional Jupyter exploration environment
+│   ├── task.ipynb
+│   └── Dockerfile
+├── run_pipeline.sh              # One-click train + evaluate runner
+├── train_and_evaluate.sh        # Internal container script
+├── docker-compose.yml
 └── README.md
 ```
 
-## Requirements
+---
 
-* [Docker](https://www.docker.com/) and Docker Compose.
-* Alternatively, Python 3.11 with the packages listed in `web/requirements.txt` and `nb/requirements.txt`.
+## 🧰 Setup Instructions
 
-## Getting started
+### 🔧 Requirements
 
-1. Build the Docker images and start the services:
-   ```bash
-   docker compose build
-   docker compose up -d
-   ```
-   The first run downloads the recipe dataset and indexes it into OpenSearch.
-2. Open <http://localhost:8080> to access the search API.
-3. To experiment in a notebook environment visit <http://localhost:8888>.
+* Docker + Docker Compose
+* OR manually: Python 3.11 + packages in `web/requirements.txt`
 
-The `web` service exposes a small search interface and an endpoint `/search` which accepts ingredient ids and returns matching recipes with predicted diet labels.
-
-## Training the classifiers
-
-The repository includes a script that can download the data, generate image embeddings using ResNet and train text and image based classifiers. Run it inside the `web` container:
+### 🚀 Quickstart
 
 ```bash
-docker compose exec web python web/diet_classifiers.py --train --mode both
+sh run_pipeline.sh
 ```
 
-Evaluation on a small gold dataset can be performed with:
+This script:
+
+1. Builds the Docker containers
+2. Starts services (OpenSearch, Flask, notebook)
+3. Trains models
+4. Evaluates on gold-standard data
+5. Outputs metrics, plots, and logs
+
+### 🧪 Web endpoints
+
+* API: [http://localhost:8080](http://localhost:8080)
+* Notebook: [http://localhost:8888](http://localhost:8888)
+
+---
+
+## 🏗️ Functional Pipeline Overview
+
+### 📦 1. Silver Dataset Generation
+
+Silver labels are heuristically derived for both `vegan` and `keto` using strong dietary blacklists/whitelists applied to the raw recipe ingredient lists. This pseudo-labeling allows weak supervision on the unlabeled corpus.
+
+### 🧠 2. Text Models
+
+Textual ingredient data is encoded using `TfidfVectorizer`. Models trained include:
+
+* `LogisticRegression`
+* `LinearSVC` (calibrated)
+* `SGDClassifier` (hinge/log)
+* `MultinomialNB`
+* `PassiveAggressiveClassifier`
+* `RidgeClassifier`
+* `LightGBM`
+
+All models are optionally tuned via `GridSearchCV` with `class_weight` adjustments.
+
+### 🖼️ 3. Image Embeddings
+
+* Images are filtered using `filter_photo_rows`.
+* Downloaded with progress bars.
+* Features are extracted using `torchvision.models.resnet18` on resized images.
+* Embeddings are saved as `.npz`.
+
+### 🤝 4. Ensemble
+
+Final prediction is a weighted ensemble combining:
+
+* Top-N text-based models (based on F1-score)
+* Image-based classifier (if available)
+* Optional rule-based hard override (blacklist/whitelist)
+* Voting strategy: majority vote with fallback to rules
+
+### 📈 5. Evaluation (Gold Set)
+
+Evaluation is performed using a held-out gold-labeled set with:
+
+* Stratified metrics:
+
+  * Accuracy
+  * Precision
+  * Recall
+  * F1-score
+  * AUC
+  * Kappa
+  * MCC
+* ROC Curves (annotated)
+* Confusion Matrix (auto-saved)
+* Class-specific performance breakdown
+* CSV export of results
+
+Progress bars (`tqdm`) are integrated for all key steps.
+
+---
+
+## 🔍 Evaluation Output Example
+
+* `results/metrics_keto.csv`
+* `results/roc_keto.png`
+* `results/confusion_matrix_vegan.png`
+
+All assets are auto-generated and saved.
+
+---
+
+## 🧪 Manual Evaluation
 
 ```bash
 docker compose exec web python web/diet_classifiers.py --ground_truth /usr/src/data/ground_truth_sample.csv
 ```
 
-The `run_pipeline.sh` helper script combines the above steps.
-
-## Indexing new data
-
-`web/src/index_data.py` reads a parquet file of recipes and loads them into OpenSearch. It is executed automatically the first time the container starts, but can be run manually:
+Or train only:
 
 ```bash
-python web/src/index_data.py --data_file data/allrecipes.parquet --opensearch_url http://localhost:9200
+docker compose exec web python web/diet_classifiers.py --train --mode both
 ```
 
-## License
+---
 
-This project is provided as a coding exercise and carries no explicit license.
+## 🌐 Indexing New Data
+
+```bash
+docker compose exec web python web/index_data.py \
+    --data_file /usr/src/data/allrecipes.parquet \
+    --opensearch_url http://localhost:9200
+```
+
+---
+
+## 📬 Author
+
+**Guy Vitelson**
+📍 Ramat Gan, Israel
+🔗 [LinkedIn](https://www.linkedin.com/in/guyvitelson/)
+🐙 [GitHub @v1t3ls0n](https://github.com/v1t3ls0n)
+
+---
+
+## ⚖️ License
+
+This project is provided as a technical coding assessment. No explicit license is granted.
+
