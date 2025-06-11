@@ -1012,16 +1012,20 @@ def build_models(
 
     Notes
     -----
-    * A RuleModel is always included for safe fall-back / hard overrides.
+    * RuleModel is only included if the domain includes 'text'.
     * Extend or prune the `text_family` and `image_family` dictionaries
       to fit your own experimentation.
     """
 
-    # --- always include rule-based classifier ---
-    models: Dict[str, BaseEstimator] = {
-        "Rule": RuleModel("keto", RX_KETO, RX_WL_KETO) if task == "keto" else
-                RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN)
-    }
+    models: Dict[str, BaseEstimator] = {}
+
+    # --- add rule-based model only if text features are involved ---
+    if domain in ("text", "both"):
+        models["Rule"] = (
+            RuleModel("keto", RX_KETO, RX_WL_KETO)
+            if task == "keto"
+            else RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN)
+        )
 
     # --- text-oriented classifiers ---
     text_family: Dict[str, BaseEstimator] = {
@@ -1225,6 +1229,8 @@ def run_mode_A(
         # iterate candidate models
         best_f1, best_res = -1.0, None
         for name, base in build_models(task, domain).items():
+            if domain == "image" and name == "Rule":
+                continue
             try:
                 model = clone(base).fit(X_train, y_train)
 
