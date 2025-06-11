@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 from rapidfuzz import process
-
+import pickle
 # --- Third-party: core ---
 import joblib
 import matplotlib.pyplot as plt
@@ -778,7 +778,6 @@ def load_datasets() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         tuple: (silver_dataframe, gold_dataframe, recipes_dataframe)
     """
     import time
-    import psutil
     import requests
     from urllib.parse import urlparse
     import warnings
@@ -2171,7 +2170,7 @@ def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarr
 def optimize_memory_usage(stage_name=""):
     """Optimize memory usage during training with detailed logging."""
     import gc
-    import psutil
+    
 
     # Get memory before cleanup - FIXED: Ensure we get the object properly
     try:
@@ -2248,7 +2247,7 @@ def optimize_memory_usage(stage_name=""):
 def handle_memory_crisis():
     """Emergency memory cleanup when usage is critical."""
     import gc
-    import psutil
+    
 
     log.warning("🚨 MEMORY CRISIS - Applying emergency cleanup")
 
@@ -2356,7 +2355,7 @@ def build_image_embeddings(df: pd.DataFrame,
         numpy array of shape (len(df), 2048) with ResNet-50 features
     """
     import time
-    import psutil
+    
     import os
     from collections import defaultdict, Counter
     from PIL import ImageStat
@@ -4847,7 +4846,7 @@ def run_full_pipeline(mode: str = "both",
         tuple: (vectorizer, silver_data, gold_data, results)
     """
     import time
-    import psutil
+    
     import gc
     from datetime import datetime
     train_pbar = tqdm(total=0, desc="")
@@ -5591,10 +5590,79 @@ def run_full_pipeline(mode: str = "both",
     return vec, silver_txt, gold, results
 
 
-# ----------------------------------------------------------------------
-# MAIN FUNCTION
-# ----------------------------------------------------------------------
+# Global state for simple interface
+global _pipeline_state 
+_pipeline_state = {
+    'vectorizer': None,
+    'models': {},
+    'initialized': False
+}
 
+
+def _ensure_pipeline():
+    """
+    Lazily load vectorizer + models, train once if missing,
+    and always leave the system in a usable state.
+    """
+    if _pipeline_state['initialized']:
+        return
+
+    vec_path    = CFG.data_dir / "vectorizer.pkl"
+    models_path = CFG.data_dir / "models.pkl"
+
+    try:
+        # ──────────────────────────────────────────────
+        # 1️⃣ happy path – artefacts already on disk
+        # ──────────────────────────────────────────────
+        if vec_path.exists() and models_path.exists():
+            with open(vec_path,  'rb') as f:
+                _pipeline_state['vectorizer'] = pickle.load(f)
+            with open(models_path, 'rb') as f:
+                _pipeline_state['models'] = pickle.load(f)
+            log.info("Loaded vectorizer + models from %s", CFG.data_dir)
+
+        # ──────────────────────────────────────────────
+        # 2️⃣ first run – no artefacts, train on the fly
+        # ──────────────────────────────────────────────
+        else:
+            log.info("No saved artefacts found – running full pipeline once")
+            vec, _, _, res = run_full_pipeline(mode="both", sample_frac=0.1)
+
+            # select best-F1 model per task (skipping two-stage TxtImg)
+            best_models = {}
+            for task in ("keto", "vegan"):
+                best = max((r for r in res
+                            if r["task"] == task and "TxtImg" not in r["model"]),
+                           key=lambda r: r["F1"])
+                base_name = best["model"].split('_')[0]  # strip _TEXT/_BOTH
+                best_models[task] = BEST[base_name]
+
+            CFG.data_dir.mkdir(parents=True, exist_ok=True)
+            with open(vec_path, 'wb')     as f: pickle.dump(vec, f)
+            with open(models_path, 'wb')  as f: pickle.dump(best_models, f)
+
+            _pipeline_state['vectorizer'] = vec
+            _pipeline_state['models']     = best_models
+            log.info("Fresh artefacts saved to %s", CFG.data_dir)
+
+    except Exception as e:
+        # ──────────────────────────────────────────────
+        # 3️⃣ safety net – rules only
+        # ──────────────────────────────────────────────
+        log.warning("Model bootstrap failed (%s). Falling back to rules.", e)
+        _pipeline_state['models'] = {
+            "keto":  RuleModel("keto",  RX_KETO,  RX_WL_KETO),
+            "vegan": RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN),
+        }
+
+    _pipeline_state['initialized'] = True
+
+
+
+
+# ============================================================================
+# CLI INTERFACE FOR ASSESSMENT (main function)
+# ============================================================================
 
 def main():
     """Main function with ABSOLUTE prevention of restarts."""
@@ -5747,6 +5815,8 @@ def main():
         import traceback
         log.error(f"Full traceback:\n{traceback.format_exc()}")
         sys.exit(1)
+
+
 
 
 if __name__ == "__main__":
