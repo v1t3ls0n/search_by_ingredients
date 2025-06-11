@@ -3852,6 +3852,7 @@ def run_full_pipeline(mode: str = "both",
     - Data flow visualization
     - Performance monitoring
     - Error resilience
+    - Proper sampling for both text and image data
     
     Args:
         mode: Feature modality - 'text', 'image', or 'both'
@@ -3924,12 +3925,37 @@ def run_full_pipeline(mode: str = "both",
         gold_img = filter_photo_rows(gold)
         load_pbar.update(1)
 
-    # Apply sampling if requested
+    # Apply sampling BEFORE image processing (FIXED!)
     if sample_frac:
-        original_size = len(silver_txt)
+        original_txt_size = len(silver_txt)
+        original_img_size = len(silver_img)
+        
+        # Sample both text and image datasets consistently
+        # Use the same random state to ensure consistent sampling across modalities
         silver_txt = silver_txt.sample(frac=sample_frac, random_state=42).copy()
-        sampled_size = len(silver_txt)
-        log.info(f"   📉 Applied sampling: {original_size:,} → {sampled_size:,} rows ({sample_frac:.1%})")
+        
+        # Sample image data using the same indices if possible, otherwise sample separately
+        if not silver_img.empty:
+            # Get intersection of sampled text indices with available image indices
+            sampled_indices = silver_txt.index
+            available_img_indices = silver_img.index
+            common_indices = sampled_indices.intersection(available_img_indices)
+            
+            if len(common_indices) > 0:
+                # Use common indices for consistent sampling
+                silver_img = silver_img.loc[common_indices].copy()
+                log.info(f"   📉 Consistent sampling: Using {len(common_indices):,} common indices")
+            else:
+                # Fallback: sample image data separately
+                silver_img = silver_img.sample(frac=sample_frac, random_state=42).copy()
+                log.info(f"   📉 Separate sampling: No common indices found")
+        
+        sampled_txt_size = len(silver_txt)
+        sampled_img_size = len(silver_img)
+        
+        log.info(f"   📉 Applied sampling before processing:")
+        log.info(f"   ├─ Text: {original_txt_size:,} → {sampled_txt_size:,} rows ({sample_frac:.1%})")
+        log.info(f"   └─ Images: {original_img_size:,} → {sampled_img_size:,} rows ({sample_frac:.1%})")
 
     # Log dataset statistics
     log.info(f"\n   📊 Dataset Statistics:")
@@ -3997,45 +4023,86 @@ def run_full_pipeline(mode: str = "both",
     img_silver = img_gold = None
 
     # ------------------------------------------------------------------
-    # 3. IMAGE FEATURE PROCESSING
+    # 3. IMAGE FEATURE PROCESSING (FIXED SAMPLING)
     # ------------------------------------------------------------------
     if mode in {"image", "both"}:
         pipeline_progress.set_description("🔬 ML Pipeline: Image Processing")
         stage_start = time.time()
         
         log.info("\n🖼️  STAGE 3: IMAGE FEATURE PROCESSING")
+        log.info(f"   ├─ Processing {len(silver_img):,} sampled silver images")
+        log.info(f"   └─ Processing {len(gold_img):,} gold images")
         
         with tqdm(total=6, desc="   ├─ Image Pipeline", position=1, leave=False,
                  bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as img_pbar:
             
+            # FIXED: Now downloads only sampled images
             img_pbar.set_description("   ├─ Downloading silver images")
-            silver_downloaded = _download_images(silver_img, CFG.image_dir / "silver")
+            if not silver_img.empty:
+                silver_downloaded = _download_images(silver_img, CFG.image_dir / "silver")
+                log.info(f"      ├─ Silver download: {len(silver_downloaded):,}/{len(silver_img):,} successful")
+            else:
+                silver_downloaded = []
+                log.info(f"      ├─ Silver download: No images to download")
             img_pbar.update(1)
             
             img_pbar.set_description("   ├─ Downloading gold images")
-            gold_downloaded = _download_images(gold_img, CFG.image_dir / "gold")
+            if not gold_img.empty:
+                gold_downloaded = _download_images(gold_img, CFG.image_dir / "gold")
+                log.info(f"      ├─ Gold download: {len(gold_downloaded):,}/{len(gold_img):,} successful")
+            else:
+                gold_downloaded = []
+                log.info(f"      ├─ Gold download: No images to download")
             img_pbar.update(1)
             
             img_pbar.set_description("   ├─ Filtering by downloads")
-            img_silver_df = filter_silver_by_downloaded_images(silver_img, CFG.image_dir)
-            img_gold_df = filter_photo_rows(gold_img)
+            if silver_downloaded:
+                img_silver_df = filter_silver_by_downloaded_images(silver_img, CFG.image_dir)
+                log.info(f"      ├─ Silver filtered: {len(img_silver_df):,} with valid images")
+            else:
+                img_silver_df = pd.DataFrame()
+                log.info(f"      ├─ Silver filtered: Empty (no downloads)")
+                
+            img_gold_df = filter_photo_rows(gold_img) if gold_downloaded else pd.DataFrame()
+            log.info(f"      ├─ Gold filtered: {len(img_gold_df):,} with valid images")
             img_pbar.update(1)
             
             img_pbar.set_description("   ├─ Building silver embeddings")
-            img_silver = build_image_embeddings(img_silver_df, "silver", force)
+            if not img_silver_df.empty:
+                img_silver = build_image_embeddings(img_silver_df, "silver", force)
+                log.info(f"      ├─ Silver embeddings: {img_silver.shape}")
+            else:
+                img_silver = np.array([]).reshape(0, 2048)
+                log.info(f"      ├─ Silver embeddings: Empty array (no valid images)")
             img_pbar.update(1)
             
             img_pbar.set_description("   ├─ Building gold embeddings")
-            img_gold = build_image_embeddings(img_gold_df, "gold", force)
+            if not img_gold_df.empty:
+                img_gold = build_image_embeddings(img_gold_df, "gold", force)
+                log.info(f"      ├─ Gold embeddings: {img_gold.shape}")
+            else:
+                img_gold = np.array([]).reshape(0, 2048)
+                log.info(f"      ├─ Gold embeddings: Empty array (no valid images)")
             img_pbar.update(1)
             
             img_pbar.set_description("   ├─ Saving embeddings")
-            joblib.dump(img_gold, "embeddings/img_gold.pkl")
+            if img_gold.size > 0:
+                joblib.dump(img_gold, "embeddings/img_gold.pkl")
+                log.info(f"      ├─ Saved gold embeddings to embeddings/img_gold.pkl")
+            else:
+                log.info(f"      ├─ Skipped saving empty gold embeddings")
             img_pbar.update(1)
 
-        # Convert to sparse matrices for memory efficiency
-        X_img_silver = csr_matrix(img_silver)
-        X_img_gold = csr_matrix(img_gold)
+        # Convert to sparse matrices for memory efficiency (only if not empty)
+        if img_silver.size > 0:
+            X_img_silver = csr_matrix(img_silver)
+        else:
+            X_img_silver = csr_matrix((0, 2048))
+            
+        if img_gold.size > 0:
+            X_img_gold = csr_matrix(img_gold)
+        else:
+            X_img_gold = csr_matrix((0, 2048))
 
         # Log image processing statistics
         log.info(f"   📊 Image Processing Results:")
@@ -4045,7 +4112,15 @@ def run_full_pipeline(mode: str = "both",
         log.info(f"   ├─ Gold images downloaded: {len(gold_downloaded):,}")
         log.info(f"   ├─ Silver embeddings: {img_silver.shape}")
         log.info(f"   ├─ Gold embeddings: {img_gold.shape}")
-        log.info(f"   └─ Embedding size: {img_silver.nbytes // (1024**2)} MB")
+        log.info(f"   └─ Embedding size: {img_silver.nbytes // (1024**2) if img_silver.size > 0 else 0} MB")
+
+        # Early exit if no images available and mode is image-only
+        if mode == "image" and (img_silver.size == 0 or img_gold.size == 0):
+            log.warning(f"   ⚠️  Image-only mode requested but no valid images available!")
+            log.warning(f"   └─ Consider using mode='text' or increasing sample_frac")
+            stage_time = time.time() - stage_start
+            log.info(f"   ❌ Image processing failed in {stage_time:.1f}s")
+            return None, None, None, []
 
         stage_time = time.time() - stage_start
         log.info(f"   ✅ Image processing completed in {stage_time:.1f}s")
@@ -4064,11 +4139,11 @@ def run_full_pipeline(mode: str = "both",
     log.info("\n🤖 STAGE 4: MODEL TRAINING")
     
     training_subtasks = []
-    if mode in {"image", "both"}:
+    if mode in {"image", "both"} and img_silver.size > 0:
         training_subtasks.append("Image Models")
     if mode in {"text", "both"}:
         training_subtasks.append("Text Models")
-    if mode == "both":
+    if mode == "both" and img_silver.size > 0:
         training_subtasks.append("Text+Image Ensemble")
         training_subtasks.append("Final Combined")
 
@@ -4076,7 +4151,7 @@ def run_full_pipeline(mode: str = "both",
              bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}]") as train_pbar:
 
         # IMAGE MODELS
-        if mode in {"image", "both"}:
+        if mode in {"image", "both"} and img_silver.size > 0:
             train_pbar.set_description("   ├─ Training Image Models")
             log.info(f"   🖼️  Training image-based models...")
             
@@ -4110,7 +4185,7 @@ def run_full_pipeline(mode: str = "both",
             train_pbar.update(1)
 
         # TEXT+IMAGE ENSEMBLE
-        if mode == "both" and res_text and res_img:
+        if mode == "both" and res_text and res_img and img_silver.size > 0:
             train_pbar.set_description("   ├─ Text+Image Ensemble")
             log.info(f"   🤝 Creating text+image ensemble...")
             
@@ -4132,6 +4207,10 @@ def run_full_pipeline(mode: str = "both",
                 
                 log.info(f"      ├─ Alignment: {len(s_txt)} text + {len(s_img)} image = {len(common)} common")
                 
+                if len(common) == 0:
+                    log.warning(f"      ⚠️  No common samples for {task} ensemble, skipping")
+                    continue
+                
                 # Average predictions
                 avg = (s_txt.loc[common] + s_img.loc[common]) / 2
 
@@ -4146,41 +4225,52 @@ def run_full_pipeline(mode: str = "both",
                 
                 log.info(f"      ✅ {task} ensemble: F1={ensemble_result['F1']:.3f}")
 
-            table("Ensemble Text+Image", ensemble_results)
-            results.extend(ensemble_results)
+            if ensemble_results:
+                table("Ensemble Text+Image", ensemble_results)
+                results.extend(ensemble_results)
             train_pbar.update(1)
 
         # FINAL COMBINED MODEL TRAINING
-        if mode == "both":
+        if mode == "both" and img_silver.size > 0:
             train_pbar.set_description("   ├─ Final Combined Models")
             log.info(f"   🔄 Training final combined models...")
             
             # Align features by common indices
             common_idx = img_silver_df.index
-            X_text_silver_algn = vec.transform(silver_txt.loc[common_idx].clean)
-            X_silver = combine_features(X_text_silver_algn, img_silver)
-            X_gold = combine_features(X_text_gold, img_gold)
-            silver_eval = silver_txt.loc[common_idx]
-            
-            log.info(f"      ├─ Combined silver features: {X_silver.shape}")
-            log.info(f"      ├─ Combined gold features: {X_gold.shape}")
-            log.info(f"      └─ Aligned samples: {len(silver_eval):,}")
-            
+            if len(common_idx) > 0:
+                X_text_silver_algn = vec.transform(silver_txt.loc[common_idx].clean)
+                X_silver = combine_features(X_text_silver_algn, img_silver)
+                X_gold = combine_features(X_text_gold, img_gold)
+                silver_eval = silver_txt.loc[common_idx]
+                
+                log.info(f"      ├─ Combined silver features: {X_silver.shape}")
+                log.info(f"      ├─ Combined gold features: {X_gold.shape}")
+                log.info(f"      └─ Aligned samples: {len(silver_eval):,}")
+            else:
+                log.warning(f"      ⚠️  No common indices for combined features, skipping")
+                X_silver, X_gold = X_text_silver, X_text_gold
+                silver_eval = silver_txt
+                
         elif mode == "text":
             X_silver, X_gold = X_text_silver, X_text_gold
             silver_eval = silver_txt
-        elif mode == "image":
+        elif mode == "image" and img_silver.size > 0:
             X_silver, X_gold = csr_matrix(img_silver), csr_matrix(img_gold)
             silver_eval = img_silver_df
+        else:
+            # Fallback to text if no images available
+            log.warning(f"   ⚠️  No valid images for image mode, falling back to text")
+            X_silver, X_gold = X_text_silver, X_text_gold
+            silver_eval = silver_txt
 
         # Run final training phase
-        if mode in training_subtasks:
+        if training_subtasks:  # Only if we have valid training tasks
             log.info(f"   🎯 Running final mode-A training...")
             res_final = run_mode_A(X_text_silver, gold.clean, X_text_gold,
                                  silver_txt, gold, domain="text", apply_smote=True)
             results.extend(res_final)
             log.info(f"      ✅ Final models: {len(res_final)} results")
-            if mode == "both":
+            if mode == "both" and img_silver.size > 0:
                 train_pbar.update(1)
 
     stage_time = time.time() - stage_start
@@ -4197,33 +4287,50 @@ def run_full_pipeline(mode: str = "both",
     
     log.info("\n🎭 STAGE 5: ENSEMBLE OPTIMIZATION")
     
-    ensemble_tasks = ["keto", "vegan"]
-    with tqdm(ensemble_tasks, desc="   ├─ Ensemble Tasks", position=1, leave=False,
-             bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}]") as ens_pbar:
-        
-        ensemble_results = []
-        for task in ens_pbar:
-            ens_pbar.set_description(f"   ├─ Optimizing {task} ensemble")
+    if len(results) > 0:
+        ensemble_tasks = ["keto", "vegan"]
+        with tqdm(ensemble_tasks, desc="   ├─ Ensemble Tasks", position=1, leave=False,
+                 bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}]") as ens_pbar:
             
-            log.info(f"   🎯 Optimizing {task} ensemble...")
-            
-            # Count available models for this task
-            task_models = [r for r in results if r["task"] == task and r["model"] != "Rule"]
-            log.info(f"      ├─ Available models: {len(task_models)}")
-            
-            if len(task_models) > 1:
-                best_ens = best_ensemble(task, results, X_silver, gold.clean,
-                                       X_gold, silver_eval, gold)
-                if best_ens:
-                    ensemble_results.append(best_ens)
-                    log.info(f"      ✅ {task} ensemble: {best_ens['model']} (F1={best_ens['F1']:.3f})")
+            ensemble_results = []
+            for task in ens_pbar:
+                ens_pbar.set_description(f"   ├─ Optimizing {task} ensemble")
+                
+                log.info(f"   🎯 Optimizing {task} ensemble...")
+                
+                # Count available models for this task
+                task_models = [r for r in results if r["task"] == task and r["model"] != "Rule"]
+                log.info(f"      ├─ Available models: {len(task_models)}")
+                
+                if len(task_models) > 1:
+                    # Use appropriate feature matrix for ensemble
+                    if mode == "both" and img_silver.size > 0:
+                        ens_X_silver = X_silver
+                        ens_X_gold = X_gold
+                        ens_silver_eval = silver_eval
+                    elif mode == "image" and img_silver.size > 0:
+                        ens_X_silver = csr_matrix(img_silver)
+                        ens_X_gold = csr_matrix(img_gold)
+                        ens_silver_eval = img_silver_df
+                    else:
+                        ens_X_silver = X_text_silver
+                        ens_X_gold = X_text_gold
+                        ens_silver_eval = silver_txt
+                    
+                    best_ens = best_ensemble(task, results, ens_X_silver, gold.clean,
+                                           ens_X_gold, ens_silver_eval, gold)
+                    if best_ens:
+                        ensemble_results.append(best_ens)
+                        log.info(f"      ✅ {task} ensemble: {best_ens['model']} (F1={best_ens['F1']:.3f})")
+                    else:
+                        log.warning(f"      ⚠️  {task} ensemble optimization failed")
                 else:
-                    log.warning(f"      ⚠️  {task} ensemble optimization failed")
-            else:
-                log.info(f"      ⏭️  {task}: Only one model available, skipping ensemble")
+                    log.info(f"      ⏭️  {task}: Only {len(task_models)} model(s) available, skipping ensemble")
 
-        results.extend(ensemble_results)
-        log.info(f"   📊 Ensemble results: {len(ensemble_results)} optimized ensembles")
+            results.extend(ensemble_results)
+            log.info(f"   📊 Ensemble results: {len(ensemble_results)} optimized ensembles")
+    else:
+        log.warning(f"   ⚠️  No models available for ensemble optimization")
 
     stage_time = time.time() - stage_start
     log.info(f"   ✅ Ensemble optimization completed in {stage_time:.1f}s")
@@ -4242,7 +4349,11 @@ def run_full_pipeline(mode: str = "both",
              bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as export_pbar:
         
         export_pbar.set_description("   ├─ Generating plots")
-        export_eval_plots(results, gold)
+        if len(results) > 0:
+            export_eval_plots(results, gold)
+            log.info(f"      ✅ Generated evaluation plots and confusion matrices")
+        else:
+            log.warning(f"      ⚠️  No results to plot")
         export_pbar.update(1)
         
         export_pbar.set_description("   ├─ Saving results")
@@ -4261,7 +4372,11 @@ def run_full_pipeline(mode: str = "both",
             }
             results_summary.append(summary)
         
-        pd.DataFrame(results_summary).to_csv("pipeline_results_summary.csv", index=False)
+        if results_summary:
+            pd.DataFrame(results_summary).to_csv("pipeline_results_summary.csv", index=False)
+            log.info(f"      ✅ Saved results summary with {len(results_summary)} entries")
+        else:
+            log.warning(f"      ⚠️  No results to save")
         export_pbar.update(1)
         
         export_pbar.set_description("   ├─ Cleanup")
@@ -4282,17 +4397,22 @@ def run_full_pipeline(mode: str = "both",
     log.info(f"\n🏁 PIPELINE COMPLETE")
     log.info(f"   ├─ Total runtime: {total_time:.1f}s ({total_time/60:.1f} minutes)")
     log.info(f"   ├─ Mode: {mode}")
+    log.info(f"   ├─ Sample fraction: {sample_frac or 'Full dataset'}")
     log.info(f"   ├─ Total results: {len(results)}")
     log.info(f"   └─ End time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     # Performance summary by task
-    log.info(f"\n   🏆 FINAL PERFORMANCE SUMMARY:")
-    for task in ["keto", "vegan"]:
-        task_results = [r for r in results if r["task"] == task]
-        if task_results:
-            best_result = max(task_results, key=lambda x: x['F1'])
-            log.info(f"   ├─ {task.upper()}: Best F1={best_result['F1']:.3f} "
-                    f"({best_result['model']}) | ACC={best_result['ACC']:.3f}")
+    if results:
+        log.info(f"\n   🏆 FINAL PERFORMANCE SUMMARY:")
+        for task in ["keto", "vegan"]:
+            task_results = [r for r in results if r["task"] == task]
+            if task_results:
+                best_result = max(task_results, key=lambda x: x['F1'])
+                log.info(f"   ├─ {task.upper()}: Best F1={best_result['F1']:.3f} "
+                        f"({best_result['model']}) | ACC={best_result['ACC']:.3f}")
+    else:
+        log.warning(f"\n   ⚠️  NO RESULTS GENERATED")
+        log.warning(f"   └─ Consider checking data availability or adjusting parameters")
 
     # Resource usage summary
     final_memory = psutil.virtual_memory()
@@ -4314,6 +4434,13 @@ def run_full_pipeline(mode: str = "both",
         'system_info': {
             'cpu_count': psutil.cpu_count(),
             'total_memory_gb': psutil.virtual_memory().total // (1024**3)
+        },
+        'data_stats': {
+            'silver_text_size': len(silver_txt),
+            'silver_image_size': len(silver_img),
+            'gold_size': len(gold),
+            'silver_images_downloaded': len(silver_downloaded) if 'silver_downloaded' in locals() else 0,
+            'gold_images_downloaded': len(gold_downloaded) if 'gold_downloaded' in locals() else 0
         }
     }
     
