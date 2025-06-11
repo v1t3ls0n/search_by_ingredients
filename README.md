@@ -163,14 +163,6 @@ docker compose exec web python web/index_data.py \
 
 ---
 
-## 📬 Author
-
-**Guy Vitelson**
-📍 Ramat Gan, Israel
-🔗 [LinkedIn](https://www.linkedin.com/in/guyvitelson/)
-🐙 [GitHub @v1t3ls0n](https://github.com/v1t3ls0n)
-
----
 
 ## ⚖️ License
 
