@@ -4527,8 +4527,6 @@ def run_full_pipeline(mode: str = "both",
     pipeline_progress.update(1)
 
 
-    # Also add this debug check in the IMAGE MODEL training section:
-
     # IMAGE MODELS
     if mode in {"image", "both"} and img_silver.size > 0:
         train_pbar.set_description("   ├─ Training Image Models")
@@ -4565,7 +4563,7 @@ def run_full_pipeline(mode: str = "both",
     # ------------------------------------------------------------------
     pipeline_progress.set_description("🔬 ML Pipeline: Model Training")
     stage_start = time.time()
-    
+    train_pbar = tqdm(total=0, desc="Training")  
     log.info("\n🤖 STAGE 4: MODEL TRAINING")
     
     training_subtasks = []
