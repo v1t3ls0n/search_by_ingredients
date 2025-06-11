@@ -979,91 +979,53 @@ def show_balance(df: pd.DataFrame, title: str) -> None:
 # ============================================================================
 
 
-# ---------------------------------------------------------------------------
-# Modular model factory
-# ---------------------------------------------------------------------------
-def build_models(
-    task: str,
-    domain: str = "text"        # 'text' | 'image' | 'both'
-) -> Dict[str, BaseEstimator]:
-    """
-    Return a dictionary {model_name: estimator} tailored to the feature domain.
+def build_models(task: str) -> Dict[str, BaseEstimator]:
+    """Build all available models for classification."""
+    m = {
+        # Rule-based for fallback / hard override
+        # "Rule": RuleModel("keto", RX_KETO, RX_WL_KETO) if task == "keto" else
+        # RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN),
 
-    Parameters
-    ----------
-    task   : 'keto' or 'vegan'
-        Used only to select the correct rule-based blacklist / whitelist.
-    domain : str
-        'text'  – models that work well on TF-IDF or other text features.
-        'image' – models that work on CNN or other dense image embeddings.
-        'both'  – union of the two sets.
-
-    Notes
-    -----
-    * A RuleModel is always included for safe fall-back / hard overrides.
-    * Extend or prune the `text_family` and `image_family` dictionaries
-      to fit your own experimentation.
-    """
-
-    # --- always include rule-based classifier ---
-    models: Dict[str, BaseEstimator] = {
-        "Rule": RuleModel("keto", RX_KETO, RX_WL_KETO) if task == "keto" else
-                RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN)
-    }
-
-    # --- text-oriented classifiers ---
-    text_family: Dict[str, BaseEstimator] = {
-        "NB":     MultinomialNB(),
+        # Text-suited models
         "Softmax": LogisticRegression(
-            solver="lbfgs",
-            max_iter=1000,
-            class_weight="balanced",
-            random_state=42,
+            solver="lbfgs", max_iter=1000, class_weight="balanced", random_state=42
         ),
-        "Ridge": RidgeClassifier(class_weight="balanced", random_state=42),
-        "PA":    PassiveAggressiveClassifier(
-            max_iter=1000, class_weight="balanced", random_state=42
-        ),
-        "SGD":   SGDClassifier(
-            loss="log_loss", max_iter=1000, tol=1e-3,
-            class_weight="balanced", n_jobs=-1, random_state=42
-        ),
+        # "NB": MultinomialNB(),
+    #     "PA": PassiveAggressiveClassifier(
+    #         max_iter=1000, class_weight="balanced", random_state=42
+    #     ),
+    #     "Ridge": RidgeClassifier(class_weight="balanced", random_state=42),
+    #     "LR": LogisticRegression(
+    #         solver="lbfgs", max_iter=1000, random_state=42
+    #     ),
+    #     "SGD": SGDClassifier(
+    #         loss="log_loss", max_iter=1000, tol=1e-3, class_weight="balanced", n_jobs=-1
+    #     ),
+
+    #     # Image-suited models
+    #     "SVM_RBF": SVC(
+    #         kernel="rbf", probability=True, class_weight="balanced", random_state=42
+    #     ),
+    #     "MLP": MLPClassifier(
+    #         hidden_layer_sizes=(80,), max_iter=300, random_state=42
+    #     ),
     }
 
-    # --- image-oriented classifiers ---
-    image_family: Dict[str, BaseEstimator] = {
-        "SVM_RBF": SVC(
-            kernel="rbf", probability=True,
-            class_weight="balanced", random_state=42
-        ),
-        "MLP": MLPClassifier(
-            hidden_layer_sizes=(80,), max_iter=300, random_state=42
-        ),
-    }
+    # if lgb:
+    #     m["LGBM"] = lgb.LGBMClassifier(
+    #         num_leaves=15,
+    #         learning_rate=0.3,
+    #         n_estimators=50,
+    #         subsample=0.7,
+    #         colsample_bytree=0.7,
+    #         objective="binary",
+    #         n_jobs=-1,
+    #         random_state=42,
+    #         verbose=-1,
+    #         force_col_wise=True,
+    #     )
 
-    # include LightGBM if available
-    if lgb:
-        image_family["LGBM"] = lgb.LGBMClassifier(
-            num_leaves=31, learning_rate=0.15, n_estimators=120,
-            subsample=0.7, colsample_bytree=0.7, objective="binary",
-            random_state=42, n_jobs=-1, verbose=-1, force_col_wise=True
-        )
-
-    # --- assemble by requested domain ---
-    if domain == "text":
-        models.update(text_family)
-    elif domain == "image":
-        models.update(image_family)
-    elif domain == "both":
-        models.update(text_family)
-        models.update(image_family)
-    else:
-        raise ValueError(
-            f"Unknown domain '{domain}'. Expected 'text', 'image', or 'both'."
-        )
-
-    return models
-
+    return m
 
 
 HYPER = {
@@ -1095,44 +1057,46 @@ FAST = True
 CV = 2 if FAST else 3
 N_IT = 2 if FAST else 6
 
-# ---------------------------------------------------------------------------
-# hyper-parameter tuning wrapper (domain-agnostic)
-# ---------------------------------------------------------------------------
-def tune(name: str,
-         base: BaseEstimator,
-         X, y,
-         cv: int = CV) -> BaseEstimator:
-    """
-    Return a fitted estimator (possibly tuned with GridSearchCV).
 
-    * If the model is cached in BEST   → use it.
-    * If no hyper-grid is defined      → return base unchanged.
-    * On any GridSearch failure        → fall back to base.
-    """
-    if name in BEST:                       # cached
+def tune(name, model, X, y):
+    """Tune hyperparameters for models using GridSearchCV where relevant."""
+    if name in BEST:
         return BEST[name]
 
-    grid = HYPER.get(name, {})
-    if not grid:                           # nothing to search
-        BEST[name] = base.fit(X, y)
-        return BEST[name]
+    S, kw = model.__class__, model.get_params()
 
-    try:
-        search = GridSearchCV(
-            estimator=base,
-            param_grid=grid,
-            scoring="f1",
-            n_jobs=-1,
-            cv=cv,
-            verbose=0,
-        )
-        search.fit(X, y)
-        BEST[name] = search.best_estimator_
-    except Exception as e:
-        log.warning(f"GridSearch failed for {name}: {e} – using defaults")
-        BEST[name] = base.fit(X, y)
+    if name in ["NB", "PA", "Ridge", "SVC", "LR", "SGD", "Softmax"]:
+        # Define the grid specific to each model
+        if name == "SGD":
+            grid = {"alpha": [1e-4, 1e-3]}
+        elif name == "LR":
+            grid = {"C": [0.1, 1, 10], "solver": ["liblinear"]}
+        elif name == "Softmax":
+            grid = {"C": [0.1, 1.0, 10.0]}  # regularization strength
+        elif name == "Ridge":
+            grid = {"alpha": [0.1, 1.0, 10.0]}
+        elif name == "SVC":
+            grid = {"C": [0.1, 1, 10], "kernel": ["linear"]}
+        elif name == "PA":
+            grid = {"C": [0.1, 1, 10]}
+        elif name == "NB":
+            grid = {"alpha": [0.5, 1.0, 1.5]}
+
+        try:
+            grid_search = GridSearchCV(
+                S(**kw), grid, scoring="f1", n_jobs=-1, cv=3)
+            grid_search.fit(X, y)
+            BEST[name] = grid_search.best_estimator_
+        except ValueError as e:
+            print(f"[WARN] GridSearch failed for model '{name}' due to: {e}")
+            print("→ Using default model instead.")
+            BEST[name] = model
+    else:
+        # No tuning for rule-based or unsupported models
+        BEST[name] = model
 
     return BEST[name]
+
 # ============================================================================
 # METRICS / TABLE
 # ============================================================================
@@ -1165,95 +1129,64 @@ def table(title, rows):
 # MODE A - TRAIN ON SILVER, EVALUATE ON GOLD
 # ============================================================================
 
-# ========================================================================
-# MODE A – train on silver, evaluate on gold (both tasks)
-# ========================================================================
-# ========================================================================
-# MODE A – train on silver, evaluate on gold
-# ========================================================================
 
-def run_mode_A(
-    X_silver,                 # feature matrix for the *silver* split
-    gold_clean: pd.Series,    # cleaned ingredient strings (gold rows)
-    X_gold,                   # feature matrix for the gold split
-    silver_df: pd.DataFrame,  # must own 'silver_keto' / 'silver_vegan'
-    gold_df:   pd.DataFrame,  # must own 'label_keto'  / 'label_vegan'
-    *,
-    domain: str = "text",     # 'text' | 'image' | 'both'  -> model family
-    apply_smote: bool = True  # imbalance handling (skip for image branch)
-) -> list[dict]:
-    """
-    Train on weak (silver) labels, evaluate on gold labels, for both tasks.
+def run_mode_A(X_vec, gold_clean, X_gold, silver_df, gold_df, apply_smote=True):
+    """Run classification for both tasks (keto, vegan) using given feature matrix."""
+    results = []
 
-    Returns
-    -------
-    list[dict]
-        One result-dict per task (keto / vegan) with metrics & meta.
-    """
-    results: list[dict] = []
+    for task in ["keto", "vegan"]:
+        ys = silver_df[f"silver_{task}"].values
+        yt = gold_df[f"label_{task}"].values
 
-    for task in ("keto", "vegan"):
-        # ------------------------------------------------------------------
-        # labels
-        y_train = silver_df[f"silver_{task}"].values
-        y_true  = gold_df  [f"label_{task}"].values
-
-        # ------------------------------------------------------------------
-        # class-balance – optional
         if apply_smote:
             try:
-                X_train, y_train = apply_smote(X_silver, y_train)
+                X_os, y_os = apply_smote(X_vec, ys)
             except Exception as e:
-                log.warning(f"SMOTE skipped for {task}: {e}")
-                X_train = X_silver
+                log.warning(f"SMOTE failed for task '{task}': {e}. Using raw data.")
+                X_os, y_os = X_vec, ys
         else:
-            X_train = X_silver
+            X_os, y_os = X_vec, ys
 
-        # ------------------------------------------------------------------
-        # iterate candidate models
-        best_f1, best_res = -1.0, None
-        for name, base in build_models(task, domain).items():
+        best_model = None
+        best_f1 = -1
+        best_result = None
+
+        for name, model in build_models(task).items():
             try:
-                model = clone(base).fit(X_train, y_train)
-
+                model.fit(X_os, y_os)
                 prob = model.predict_proba(X_gold)[:, 1]
-                # hard post-verification (regex / token rules)
-                prob = verify_with_rules(task, gold_clean, prob)
                 pred = (prob >= 0.5).astype(int)
 
-                res = dict(
-                    task  = task,
-                    model = name,
-                    ACC   = accuracy_score(y_true, pred),
-                    PREC  = precision_score(y_true, pred, zero_division=0),
-                    REC   = recall_score(y_true, pred, zero_division=0),
-                    F1    = f1_score   (y_true, pred, zero_division=0),
-                    ROC   = roc_auc_score(y_true, prob),
-                    PR    = average_precision_score(y_true, prob),
-                    prob  = prob,
-                    pred  = pred,
-                )
+                acc = accuracy_score(yt, pred)
+                prec = precision_score(yt, pred, zero_division=0)
+                rec = recall_score(yt, pred, zero_division=0)
+                f1 = f1_score(yt, pred, zero_division=0)
 
-                if res["F1"] > best_f1:
-                    best_f1, best_res = res["F1"], res
-                    BEST[task] = model            # keep trained estimator
+                result = {
+                    "task": task,
+                    "model": name,
+                    "accuracy": acc,
+                    "precision": prec,
+                    "recall": rec,
+                    "F1": f1,
+                    "prob": prob,
+                    "pred": pred,
+                }
+
+                if f1 > best_f1:
+                    best_f1 = f1
+                    best_model = model
+                    best_result = result
 
             except Exception as e:
-                log.warning(f"{name} failed on {task}: {e}")
+                log.warning(f"Model '{name}' failed for task '{task}': {e}")
 
-        # fallback to rule-model if *everything* failed
-        if best_res is None:
-            log.warning(f"No trainable model for {task}; using RuleModel.")
-            rule = build_models(task, domain="text")["Rule"]
-            prob = rule.predict_proba(gold_clean)[:, 1]
-            pred = (prob >= 0.5).astype(int)
-            best_res = pack(y_true, prob) | dict(task=task, model="Rule",
-                                                 prob=prob, pred=pred)
-            BEST[task] = rule
+        if best_model:
+            BEST[task] = best_model
+            results.append(best_result)
+        else:
+            log.warning(f"No working model found for task '{task}'")
 
-        results.append(best_res)
-
-    table("MODE A  (silver → gold)", results)
     return results
 
 
@@ -1561,15 +1494,17 @@ def run_full_pipeline(mode: str = "both",
         X_img_silver = csr_matrix(img_silver)
         X_img_gold   = csr_matrix(img_gold)
 
-        res_img = run_mode_A(X_img_silver, img_gold_df.clean, X_img_gold,
-                            img_silver_df, img_gold_df,
-                            domain="image", apply_smote=False)
+        # run image models (בלי SMOTE)
+        res_img = run_mode_A(X_img_silver, img_gold_df.clean,
+                             X_img_gold,   img_silver_df,     img_gold_df,
+                             apply_smote_flag=False)
         results.extend(res_img)
 
     # 4. TEXT MODELS ----------------------------------------------------------
     if mode in {"text", "both"}:
-        res_text = run_mode_A(X_text_silver, gold.clean, X_text_gold,
-                            silver_txt, gold, domain="text", apply_smote=True)
+        res_text = run_mode_A(X_text_silver, gold.clean,
+                              X_text_gold,   silver_txt, gold,
+                              apply_smote_flag=True)
         results.extend(res_text)
 
     # 5. ENSEMBLE -------------------------------------------------------------
@@ -1605,8 +1540,9 @@ def run_full_pipeline(mode: str = "both",
         X_gold   = combine_features(X_text_gold,        img_gold)
         silver_eval = silver_txt.loc[common_idx]
 
-    res_final = run_mode_A(X_text_silver, gold.clean, X_text_gold,
-                      silver_txt, gold, domain="text", apply_smote=True)
+    res_final = run_mode_A(X_silver, gold.clean, X_gold,
+                           silver_eval, gold,
+                           apply_smote_flag=(mode != "image"))
     results.extend(res_final)
 
     # 7. BEST ENSEMBLES -------------------------------------------------------
