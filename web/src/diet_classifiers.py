@@ -1842,6 +1842,7 @@ _UNITS = re.compile(r"\b(?:g|gram|kg|oz|ml|l|cup|cups|tsp|tbsp|teaspoon|"
 
 def tokenize_ingredient(text: str) -> list[str]:
     return re.findall(r"\b\w[\w-]*\b", text.lower())
+
 def normalise(t: str | list | tuple | np.ndarray) -> str:
     """Normalize ingredient text for consistent matching.
 
