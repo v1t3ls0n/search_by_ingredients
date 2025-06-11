@@ -760,23 +760,28 @@ def load_datasets_fixed() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     return silver, ground_truth, recipes
 
 
-def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> None:
-    """Download images using multithreading, with logging and progress bar."""
+def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> list[int]:
+    """Download images using multithreading, with logging and progress bar.
+    Returns a list of successful indices (for filtering text rows later).
+    """
     if not TORCH_AVAILABLE:
-        return
+        return []
 
     img_dir.mkdir(parents=True, exist_ok=True)
 
     if 'photo_url' not in df.columns:
         log.warning("No 'photo_url' column found.")
-        return
+        return []
 
-    # Internal function to download a single image
+    valid_indices = []
+    failed_urls = []
+    stats = {"downloaded": 0, "exists": 0, "invalid": 0, "failed": 0}
+
     def fetch(idx_url):
         idx, url = idx_url
-        f = img_dir / f"{idx}.jpg"
+        img_path = img_dir / f"{idx}.jpg"
 
-        if f.exists():
+        if img_path.exists():
             return "exists", idx, url, None
         if not isinstance(url, str) or not url.strip().startswith("http"):
             return "invalid", idx, url, None
@@ -784,22 +789,20 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
         try:
             resp = requests.get(url, timeout=10)
             resp.raise_for_status()
-            with open(f, 'wb') as fh:
+            with open(img_path, 'wb') as fh:
                 fh.write(resp.content)
             return "downloaded", idx, url, None
         except Exception as e:
             return "failed", idx, url, str(e)
 
-    stats = {"downloaded": 0, "exists": 0, "invalid": 0, "failed": 0}
-    failed_urls = []
-
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(fetch, (idx, url))
-                   for idx, url in df['photo_url'].items()]
+        futures = [executor.submit(fetch, (idx, url)) for idx, url in df['photo_url'].items()]
         for future in tqdm(as_completed(futures), total=len(futures), desc=f"📥 Downloading {img_dir.name} images"):
             result, idx, url, err = future.result()
             stats[result] += 1
-            if result == "failed":
+            if result in {"downloaded", "exists"}:
+                valid_indices.append(idx)
+            elif result == "failed":
                 failed_urls.append((idx, url, err))
 
     log.info(f"[{img_dir.name}] Downloaded: {stats['downloaded']}, Already existed: {stats['exists']}, Invalid URLs: {stats['invalid']}, Failed: {stats['failed']}")
@@ -810,9 +813,9 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
         with open(fail_log_path, "w") as f:
             for idx, url, err in failed_urls:
                 f.write(f"{idx}\t{url}\t{err}\n")
-        log.warning(
-            f"[{img_dir.name}] Logged {len(failed_urls)} failed downloads to {fail_log_path}")
+        log.warning(f"[{img_dir.name}] Logged {len(failed_urls)} failed downloads to {fail_log_path}")
 
+    return valid_indices
 
 def build_image_embeddings(df: pd.DataFrame, mode: str, force: bool = False) -> np.ndarray:
     """Return or compute image embeddings for the given dataframe (skip missing/failed)."""
@@ -948,23 +951,36 @@ def show_balance(df: pd.DataFrame, title: str) -> None:
 # MODEL REGISTRY
 # ============================================================================
 
-
 def build_models(task: str) -> Dict[str, BaseEstimator]:
     """Build all available models for classification."""
     m = {
+        # Rule-based for fallback / hard override
         "Rule": RuleModel("keto", RX_KETO, RX_WL_KETO) if task == "keto" else
-        RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN),
+                RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN),
+
+        # Text-suited models
         "Softmax": LogisticRegression(
-            solver="lbfgs",
-            max_iter=1000,
-            class_weight="balanced",
-            random_state=42
+            solver="lbfgs", max_iter=1000, class_weight="balanced", random_state=42
         ),
         "NB": MultinomialNB(),
-        "PA": PassiveAggressiveClassifier(max_iter=1000, class_weight="balanced", random_state=42),
+        "PA": PassiveAggressiveClassifier(
+            max_iter=1000, class_weight="balanced", random_state=42
+        ),
         "Ridge": RidgeClassifier(class_weight="balanced", random_state=42),
-        "LR": LogisticRegression(solver="lbfgs", max_iter=1000),
-        "SGD": SGDClassifier(loss="log_loss", max_iter=1000, tol=1e-3, class_weight="balanced", n_jobs=-1),
+        "LR": LogisticRegression(
+            solver="lbfgs", max_iter=1000, random_state=42
+        ),
+        "SGD": SGDClassifier(
+            loss="log_loss", max_iter=1000, tol=1e-3, class_weight="balanced", n_jobs=-1
+        ),
+
+        # Image-suited models
+        "SVM_RBF": SVC(
+            kernel="rbf", probability=True, class_weight="balanced", random_state=42
+        ),
+        "MLP": MLPClassifier(
+            hidden_layer_sizes=(80,), max_iter=300, random_state=42
+        ),
     }
 
     if lgb:
@@ -977,8 +993,8 @@ def build_models(task: str) -> Dict[str, BaseEstimator]:
             objective="binary",
             n_jobs=-1,
             random_state=42,
-            verbose=-1,  # Suppress LightGBM info messages
-            force_col_wise=True  # Avoid the overhead warning
+            verbose=-1,
+            force_col_wise=True,
         )
 
     return m
@@ -987,14 +1003,28 @@ def build_models(task: str) -> Dict[str, BaseEstimator]:
 HYPER = {
     "LR": {"C": [0.2, 1, 5], "class_weight": [None, "balanced"]},
     "SGD": {"alpha": [1e-4, 1e-3]},
-    "MLP": {"hidden_layer_sizes": [(40,), (80,), (80, 40)], "alpha": [1e-4, 1e-3]},
-    "LGBM": {"learning_rate": [0.05, 0.1], "num_leaves": [31, 63], "n_estimators": [200, 400]},
+    "MLP": {
+        "hidden_layer_sizes": [(40,), (80,), (80, 40)],
+        "alpha": [1e-4, 1e-3],
+    },
+    "LGBM": {
+        "learning_rate": [0.05, 0.1],
+        "num_leaves": [31, 63],
+        "n_estimators": [200, 400],
+    },
     "PA": {"C": [0.1, 0.5, 1.0]},
     "Ridge": {"alpha": [0.1, 1.0, 10.0]},
     "NB": {"alpha": [0.5, 1.0, 1.5]},
-    "Softmax": {"C": [0.05, 0.2, 1, 5, 10]}
-
+    "Softmax": {"C": [0.05, 0.2, 1, 5, 10]},
+    "SVM_RBF": {
+        "C": [0.5, 1, 5],
+        "gamma": ["scale", 0.01, 0.001],
+    },
 }
+
+
+
+
 
 BEST: Dict[str, BaseEstimator] = {}
 FAST = True
@@ -1328,24 +1358,27 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
     # Load datasets
     silver, gold, recipes = load_datasets_fixed()
 
-    # Filter rows with usable photo URLs
-    silver = filter_photo_rows(silver)
-    gold = filter_photo_rows(gold)
+    # Pseudo-label silver for text tasks
+    silver = pseudo_label(silver)
 
     # Optional subsample
     if sample_frac:
         silver = silver.sample(frac=sample_frac, random_state=42).copy()
 
+    # Prepare silver subset with valid image URLs
+    img_silver_df = filter_photo_rows(silver)
+    img_gold_df = filter_photo_rows(gold)
+
     # Show balance
     show_balance(gold, "Gold")
-    show_balance(silver, "Silver")
+    show_balance(silver, "Silver (Text)")
+    show_balance(img_silver_df, "Silver (Image)")
 
     # --- TEXT FEATURES ---
     vec = TfidfVectorizer(**CFG.vec_kwargs)
     X_text_silver = vec.fit_transform(silver.clean)
     X_text_gold = vec.transform(gold.clean)
 
-    # Save text gold features
     Path("embeddings").mkdir(exist_ok=True)
     joblib.dump(X_text_gold, "embeddings/text_gold.pkl")
 
@@ -1354,15 +1387,10 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
 
     # --- IMAGE FEATURES ---
     if mode in {"image", "both"}:
-        _download_images(silver, CFG.image_dir / "silver")
-        _download_images(gold, CFG.image_dir / "gold")
+        _download_images(img_silver_df, CFG.image_dir / "silver")
+        _download_images(img_gold_df, CFG.image_dir / "gold")
 
-        img_silver_df = filter_silver_by_downloaded_images(
-            silver, CFG.image_dir)
-        img_gold_df = filter_photo_rows(gold)
-
-        img_silver = build_image_embeddings(
-            img_silver_df, "silver", force=force)
+        img_silver = build_image_embeddings(img_silver_df, "silver", force=force)
         img_gold = build_image_embeddings(img_gold_df, "gold", force=force)
 
         joblib.dump(img_gold, "embeddings/img_gold.pkl")
@@ -1382,8 +1410,7 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
 
     # --- TEXT-ONLY PIPELINE ---
     if mode in {"text", "both"}:
-        res_text = run_mode_A(X_text_silver, gold.clean,
-                              X_text_gold, silver, gold)
+        res_text = run_mode_A(X_text_silver, gold.clean, X_text_gold, silver, gold)
         results.extend(res_text)
 
     # --- TEXT+IMAGE ENSEMBLE ---
@@ -1391,13 +1418,15 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
         ensemble_results = []
         for task in ["keto", "vegan"]:
             best_text = max(
-                (r for r in res_text if r["task"] == task), key=lambda r: r["F1"])
+                (r for r in res_text if r["task"] == task), key=lambda r: r["F1"]
+            )
             best_img = max(
-                (r for r in res_img if r["task"] == task), key=lambda r: r["F1"])
+                (r for r in res_img if r["task"] == task), key=lambda r: r["F1"]
+            )
             avg_prob = (best_text["prob"] + best_img["prob"]) / 2
             ensemble_result = pack(gold[f"label_{task}"].values, avg_prob) | {
                 "model": "TxtImg",
-                "task": task
+                "task": task,
             }
             ensemble_results.append(ensemble_result)
         table("Ensemble Text+Image", ensemble_results)
@@ -1417,11 +1446,10 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
 
     res_ens = [
         best_ensemble("keto", res, X_silver, gold.clean, X_gold, silver, gold),
-        best_ensemble("vegan", res, X_silver, gold.clean, X_gold, silver, gold)
+        best_ensemble("vegan", res, X_silver, gold.clean, X_gold, silver, gold),
     ]
     table("MODE A Ensemble (Best)", res_ens)
     results.extend(res_ens)
-
 
     Path("plots").mkdir(exist_ok=True)
     rows = []
@@ -1433,7 +1461,6 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
         pred = r.get("pred")
         true = gold[f"label_{task}"].values
 
-        # inside your loop:
         row = {
             "model": model,
             "task": task,
@@ -1441,10 +1468,9 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
             "precision": None,
             "recall": None,
             "F1": None,
-            "AUC": None
+            "AUC": None,
         }
 
-        # Only compute if predictions are available
         if pred is not None:
             row["accuracy"] = accuracy_score(true, pred)
             row["precision"] = precision_score(true, pred, zero_division=0)
@@ -1458,8 +1484,6 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
             plt.savefig(f"plots/{model}_{task}_confusion.png")
             plt.close()
 
-
-        # Compute AUC + ROC if probs are available
         if prob is not None and hasattr(prob, "__len__"):
             try:
                 auc = roc_auc_score(true, prob)
@@ -1475,15 +1499,12 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
             except Exception as e:
                 print(f"[Warning] Failed ROC/AUC for {model} {task}: {e}")
 
-
         rows.append(row)
 
-    # Export all results to CSV
     df_eval = pd.DataFrame(rows)
     df_eval.to_csv("evaluation_results.csv", index=False)
     log.info("Saved evaluation results to evaluation_results.csv")
 
-    # --- Save Best Model Params ---
     with open("best_params.json", "w") as fp:
         json.dump({k: v.get_params() for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
 
