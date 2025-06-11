@@ -41,6 +41,12 @@ Unlike typical supervised learning tasks, **no ground truth labels** are provide
 
 ### Results Summary
 - **Text-Only Ensemble**: F1 = 0.96-0.97 (keto), F1 = 0.97 (vegan)
+╭─ MODE A Ensemble (Best) ──────────────────────────────────────
+│ model task     ACC    PREC     REC      F1     ROC      PR    │
+├───────────────────────────────────────────────────────────────┤
+│ Ens1    keto     0.97    0.95    0.97    0.96    0.99    0.98 │
+│ Ens3    vegan    0.98    0.97    0.97    0.97    0.99    0.98 │
+╰───────────────────────────────────────────────────────────────╯
 - **Multimodal Ensemble**: F1 = 0.88-0.92 (pending results)
 
 ### Important Evaluation Considerations
