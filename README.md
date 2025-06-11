@@ -219,7 +219,40 @@ def text_image_ensemble(text_probs, image_probs, common_indices):
     return ensemble_probs
 ```
 
----
+
+
+## 🛡️ Robustness, Fallbacks & Recovery
+
+### Multi-Layered Fallback Logic
+
+This pipeline is designed for resilience. If **any critical step fails**, the system gracefully degrades to earlier logic layers:
+
+* **Rule-Based Always Available**: If vectorization, model loading, or image embeddings fail, the pipeline falls back to regex-based rule models — ensuring no classification is skipped.
+* **Safe Ingredient Classification**: Each ingredient goes through whitelist → blacklist → token analysis → ML prediction. If any stage fails, the previous valid stage is used.
+* **Image Pipeline Resilience**: Corrupt, missing, or non-loadable images are replaced with zero vectors, and the pipeline continues without crashing.
+
+### Atomic, Memory-Aware Operations
+
+* **Batch-wise SMOTE and image processing** to prevent memory overflows
+* **Progress bars with resource tracking** for embedding, oversampling, and prediction
+* **Automatic partial recovery** from cache in case of interruptions
+
+### Logging & Error Reporting
+
+Every core operation is instrumented with structured logs:
+
+* **Memory and speed stats** for each stage
+* **Categorized error logs** (e.g. timeouts, 404s, tensor failures)
+* **Download failures** (images, models) are stored in CSV for inspection
+* **False positive/negative logs** per model, auto-saved for debugging
+
+### Backup & Caching System
+
+* **All artifacts (embeddings, models, hyperparameters)** are saved in both primary and backup files
+* **Auto-repair**: If the cache is corrupted or mismatched in shape, the backup is loaded or regenerated
+* **Metadata tracking**: Each model and embedding is saved with versioned config and timestamp
+
+
 
 ## 📊 Evaluation Framework
 
