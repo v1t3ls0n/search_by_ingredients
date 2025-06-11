@@ -1300,6 +1300,80 @@ def load_datasets_fixed() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     return silver, ground_truth, recipes
 
 
+def optimize_memory_usage(stage_name=""):
+    """Optimize memory usage during training with detailed logging."""
+    import gc
+    import psutil
+    
+    # Get memory before cleanup - FIXED: Ensure we get the object properly
+    try:
+        memory_before = psutil.virtual_memory()
+        memory_before_used = memory_before.used  # Extract the actual value
+        memory_before_percent = memory_before.percent
+    except Exception as e:
+        log.error(f"Failed to get initial memory stats: {e}")
+        return "error"
+    
+    # Force garbage collection
+    try:
+        collected = gc.collect()
+    except Exception as e:
+        log.debug(f"Garbage collection failed: {e}")
+        collected = 0
+    
+    # Clear GPU cache if available
+    gpu_freed = 0
+    if torch and torch.cuda.is_available():
+        try:
+            gpu_before = torch.cuda.memory_allocated() / (1024**2)  # MB
+            torch.cuda.empty_cache()
+            gpu_after = torch.cuda.memory_allocated() / (1024**2)  # MB
+            gpu_freed = max(0, gpu_before - gpu_after)  # Ensure non-negative
+        except Exception as e:
+            log.debug(f"GPU memory cleanup failed: {e}")
+            gpu_freed = 0
+    
+    # Get memory after cleanup - FIXED: Proper handling
+    try:
+        memory_after = psutil.virtual_memory()
+        memory_after_used = memory_after.used  # Extract the actual value
+        memory_after_percent = memory_after.percent
+        
+        # FIXED: Calculate memory freed properly
+        memory_freed_bytes = max(0, memory_before_used - memory_after_used)
+        memory_freed_mb = memory_freed_bytes / (1024**2)  # Convert to MB
+        
+    except Exception as e:
+        log.error(f"Failed to get final memory stats: {e}")
+        return "error"
+    
+    # Log results
+    stage_prefix = f"{stage_name}: " if stage_name else ""
+    log.info(f"   🧹 {stage_prefix}Memory cleanup")
+    log.info(f"      ├─ RAM: {memory_after_percent:.1f}% used ({memory_after_used // (1024**2)} MB)")
+    
+    # FIXED: Proper comparison with extracted values
+    if memory_freed_mb > 1.0:  # Only log if significant (> 1 MB)
+        log.info(f"      ├─ RAM freed: {memory_freed_mb:.1f} MB")
+    
+    if collected > 0:
+        log.info(f"      ├─ Objects collected: {collected}")
+    
+    if gpu_freed > 1.0:
+        log.info(f"      ├─ GPU freed: {gpu_freed:.1f} MB")
+    
+    # FIXED: Use extracted percentage values for comparison
+    if memory_after_percent > 85:
+        log.warning(f"      ⚠️  High memory usage: {memory_after_percent:.1f}%")
+        return "high"
+    elif memory_after_percent > 70:
+        log.warning(f"      ⚠️  Moderate memory usage: {memory_after_percent:.1f}%")
+        return "moderate"
+    else:
+        log.info(f"      ✅ Memory usage normal: {memory_after_percent:.1f}%")
+        return "normal"
+
+
 def handle_memory_crisis():
     """Emergency memory cleanup when usage is critical."""
     import gc
@@ -1307,123 +1381,69 @@ def handle_memory_crisis():
     
     log.warning("🚨 MEMORY CRISIS - Applying emergency cleanup")
     
-    initial_memory = psutil.virtual_memory()
-    log.info(f"   ├─ Initial memory: {initial_memory.percent:.1f}%")
-    
-    # Step 1: Multiple aggressive garbage collection passes
-    total_collected = 0
-    for i in range(5):  # More aggressive - 5 passes
-        collected = gc.collect()
-        total_collected += collected
-        if collected > 0:
-            log.info(f"   ├─ GC pass {i+1}: {collected} objects collected")
-    
-    # Step 2: Clear all GPU memory
-    if torch and torch.cuda.is_available():
-        try:
-            gpu_before = torch.cuda.memory_allocated() / (1024**2)
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-            torch.cuda.ipc_collect()  # Inter-process cleanup
-            gpu_after = torch.cuda.memory_allocated() / (1024**2)
-            gpu_freed = gpu_before - gpu_after
-            log.info(f"   ├─ GPU memory freed: {gpu_freed:.1f} MB")
-        except Exception as e:
-            log.debug(f"   ├─ GPU cleanup failed: {e}")
-    
-    # Step 3: Clear Python internal caches
     try:
-        # Clear function caches
-        import functools
-        if hasattr(functools, '_lru_cache_wrapper'):
-            # This is a bit hacky but can help
+        initial_memory = psutil.virtual_memory()
+        initial_percent = initial_memory.percent
+        log.info(f"   ├─ Initial memory: {initial_percent:.1f}%")
+        
+        # Step 1: Multiple aggressive garbage collection passes
+        total_collected = 0
+        for i in range(5):  # More aggressive - 5 passes
+            try:
+                collected = gc.collect()
+                total_collected += collected
+                if collected > 0:
+                    log.info(f"   ├─ GC pass {i+1}: {collected} objects collected")
+            except Exception as e:
+                log.debug(f"GC pass {i+1} failed: {e}")
+        
+        # Step 2: Clear all GPU memory
+        gpu_freed = 0
+        if torch and torch.cuda.is_available():
+            try:
+                gpu_before = torch.cuda.memory_allocated() / (1024**2)
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+                # torch.cuda.ipc_collect()  # This might not exist in all versions
+                gpu_after = torch.cuda.memory_allocated() / (1024**2)
+                gpu_freed = max(0, gpu_before - gpu_after)
+                log.info(f"   ├─ GPU memory freed: {gpu_freed:.1f} MB")
+            except Exception as e:
+                log.debug(f"   ├─ GPU cleanup failed: {e}")
+        
+        # Step 3: Clear Python internal caches
+        try:
+            import importlib
+            if hasattr(importlib, 'invalidate_caches'):
+                importlib.invalidate_caches()
+        except Exception as e:
+            log.debug(f"   ├─ Cache cleanup failed: {e}")
+        
+        # Step 4: Force memory compaction
+        try:
+            gc.set_debug(0)  # Disable debugging to save memory
+            gc.collect()
+        except Exception:
             pass
         
-        # Clear import caches (Python 3.3+)
-        import importlib
-        if hasattr(importlib, 'invalidate_caches'):
-            importlib.invalidate_caches()
-            
-    except Exception as e:
-        log.debug(f"   ├─ Cache cleanup failed: {e}")
-    
-    # Step 4: Force memory compaction
-    try:
-        gc.set_debug(0)  # Disable debugging to save memory
-        gc.collect()
-    except Exception:
-        pass
-    
-    # Step 5: Check final memory
-    final_memory = psutil.virtual_memory()
-    memory_freed = (initial_memory.used - final_memory.used) / (1024**2)
-    
-    log.info(f"   ├─ Objects collected: {total_collected}")
-    log.info(f"   ├─ Memory freed: {memory_freed:.1f} MB")
-    log.info(f"   └─ Final memory usage: {final_memory.percent:.1f}%")
-    
-    return final_memory.percent
-
-def optimize_memory_usage(stage_name=""):
-    """Optimize memory usage during training with crisis handling."""
-    import gc
-    import psutil
-    
-    # Get memory before cleanup
-    memory_before = psutil.virtual_memory()
-    
-    # Force garbage collection
-    collected = gc.collect()
-    
-    # Clear GPU cache if available
-    gpu_freed = 0
-    if torch and torch.cuda.is_available():
-        try:
-            gpu_before = torch.cuda.memory_allocated() / (1024**2)
-            torch.cuda.empty_cache()
-            gpu_after = torch.cuda.memory_allocated() / (1024**2)
-            gpu_freed = gpu_before - gpu_after
-        except Exception as e:
-            log.debug(f"GPU memory cleanup failed: {e}")
-    
-    # Get memory after cleanup
-    memory_after = psutil.virtual_memory()
-    memory_freed = (memory_before.used - memory_after.used) / (1024**2)
-    
-    # Log results
-    stage_prefix = f"{stage_name}: " if stage_name else ""
-    log.info(f"   🧹 {stage_prefix}Memory cleanup")
-    log.info(f"      ├─ RAM: {memory_after.percent:.1f}% used")
-    
-    if memory_freed > 1:
-        log.info(f"      ├─ RAM freed: {memory_freed:.1f} MB")
-    
-    # CRISIS HANDLING - ADD THIS SECTION
-    if memory_after.percent > 90:  # Crisis threshold
-        log.warning("🚨 MEMORY CRISIS DETECTED - Applying emergency cleanup")
-        final_percent = handle_memory_crisis()
+        # Step 5: Check final memory
+        final_memory = psutil.virtual_memory()
+        final_percent = final_memory.percent
+        memory_freed_mb = (initial_memory.used - final_memory.used) / (1024**2)
         
-        if final_percent > 85:
-            log.error("❌ Memory crisis not resolved!")
-            log.error("   Recommendations:")
-            log.error("   ├─ Reduce --sample_frac (try 0.05 or 0.1)")
-            log.error("   ├─ Use --mode text (skip image processing)")
-            log.error("   └─ Close other applications")
-            return "crisis"
-        else:
-            log.info(f"✅ Crisis resolved: {final_percent:.1f}% memory used")
-    
-    # Normal warnings
-    elif memory_after.percent > 80:
-        log.warning(f"      ⚠️  High memory usage: {memory_after.percent:.1f}%")
-        return "high"
-    elif memory_after.percent > 70:
-        log.warning(f"      ⚠️  Moderate memory usage: {memory_after.percent:.1f}%")
-        return "moderate"
-    else:
-        log.info(f"      ✅ Memory usage normal: {memory_after.percent:.1f}%")
-        return "normal"
-
+        log.info(f"   ├─ Objects collected: {total_collected}")
+        log.info(f"   ├─ Memory freed: {memory_freed_mb:.1f} MB")
+        log.info(f"   └─ Final memory usage: {final_percent:.1f}%")
+        
+        return final_percent
+        
+    except Exception as e:
+        log.error(f"Memory crisis handling failed: {e}")
+        # Fallback: return a safe high value
+        try:
+            return psutil.virtual_memory().percent
+        except:
+            return 90.0  # Assume high usage if we can't measure
 
 def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> list[int]:
     """
