@@ -4327,8 +4327,8 @@ def run_full_pipeline(mode: str = "both",
     log_memory_usage("Data Loading")
     pipeline_progress.update(1)
     optimize_memory_usage("Data Loading")
-    if psutil.virtual_memory() > 70:
-        log.warning(f"High memory usage after data loading: {psutil.virtual_memory():.1f}%")
+    if psutil.virtual_memory().percent > 70:
+        log.warning(f"High memory usage after data loading: {psutil.virtual_memory().percent:.1f}%")
 
     # ------------------------------------------------------------------
     # 2. TEXT FEATURE PROCESSING
