@@ -1310,6 +1310,17 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
         log.warning("   ⚠️  PyTorch not available - skipping image downloads")
         return []
 
+    # Backup-based early exit
+    backup_emb = img_dir / "embeddings.npy"
+    if backup_emb.exists():
+        try:
+            num_jpgs = len(list(img_dir.glob("*.jpg")))
+            if num_jpgs >= len(df):
+                log.info(f"   📦 Backup detected: {num_jpgs} images + existing embeddings → skipping downloads")
+                return sorted(df.index.tolist())  # Return all indices as valid
+        except Exception as e:
+            log.warning(f"   ⚠️ Could not verify backup completeness: {e}")
+
     # Create directory structure
     img_dir.mkdir(parents=True, exist_ok=True)
     log.info(f"   ✅ Directory created/verified: {img_dir}")
@@ -1736,6 +1747,8 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
         log.debug(f"   🧹 Memory cleanup completed")
 
     return valid_indices
+
+
 
 def build_image_embeddings(df: pd.DataFrame,
                            mode: str,
