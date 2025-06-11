@@ -761,10 +761,10 @@ def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarr
 # DATA I/O
 # ============================================================================
 
-def filter_low_quality_images(img_dir: Path, embeddings: np.ndarray, indices: list) -> tuple:
-    """Filter out low-quality images that hurt model performance."""
+def filter_low_quality_images(img_dir: Path, embeddings: np.ndarray, original_indices: list) -> tuple:
+    """Filter out low-quality images and return both embeddings AND indices."""
     if embeddings.shape[0] == 0:
-        return embeddings, indices
+        return embeddings, original_indices
     
     # Calculate embedding statistics
     variances = np.var(embeddings, axis=1)
@@ -780,13 +780,16 @@ def filter_low_quality_images(img_dir: Path, embeddings: np.ndarray, indices: li
     
     if quality_mask.sum() > embeddings.shape[0] * 0.5:  # Keep at least 50%
         filtered_embeddings = embeddings[quality_mask]
-        filtered_indices = [idx for i, idx in enumerate(indices) if quality_mask[i]]
+        # CRITICAL FIX: Return the filtered indices too!
+        filtered_indices = [original_indices[i] for i in range(len(original_indices)) if quality_mask[i]]
         
-        log.info(f"      ├─ Quality filtering: {len(filtered_indices)}/{len(indices)} images kept")
+        log.info(f"      ├─ Quality filtering: {len(filtered_indices)}/{len(original_indices)} images kept")
         return filtered_embeddings, filtered_indices
     else:
         log.info(f"      ├─ Quality filtering: Keeping all images (filter too aggressive)")
-        return embeddings, indices
+        return embeddings, original_indices
+
+
 
 def load_datasets_fixed() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
@@ -2416,6 +2419,7 @@ def build_image_embeddings(df: pd.DataFrame,
     # ------------------------------------------------------------------
     # Final Summary
     # ------------------------------------------------------------------
+    
     log.info(f"\n   🏁 EMBEDDING EXTRACTION COMPLETE:")
     log.info(f"   ├─ Output shape: {arr.shape}")
     log.info(f"   ├─ Success rate: {processing_stats['success']/len(df)*100:.1f}%")
@@ -2424,11 +2428,15 @@ def build_image_embeddings(df: pd.DataFrame,
     log.info(f"   └─ Files saved: Primary + Backup + Metadata")
 
     # Apply quality filtering
+    original_indices = list(df.index)
     if arr.shape[0] > 10:  # Only filter if we have enough images
-        arr, valid_indices = filter_low_quality_images(img_dir, arr, list(df.index))
-        if len(valid_indices) != len(df):
-            log.info(f"   📊 Quality filtering reduced images from {len(df)} to {len(valid_indices)}")
-    return arr
+        arr, valid_indices = filter_low_quality_images(img_dir, arr, original_indices)
+        if len(valid_indices) != len(original_indices):
+            log.info(f"   📊 Quality filtering reduced images from {len(original_indices)} to {len(valid_indices)}")
+    else:
+        valid_indices = original_indices
+
+    return arr, valid_indices
 
 
 def combine_features(X_text, X_image) -> csr_matrix:
@@ -2447,8 +2455,7 @@ def filter_photo_rows(df: pd.DataFrame) -> pd.DataFrame:
     return df.loc[mask].copy()
 
 def apply_smote(X, y, max_dense_size: int = int(5e7)):
-    """Apply SMOTE when classes are imbalanced (<40% minority).
-    FIXED: Proper sparse matrix and boolean handling."""
+    """Apply SMOTE when classes are imbalanced (<40% minority) - FIXED VERSION."""
     try:
         counts = np.bincount(y)
         if len(counts) < 2:
@@ -2456,7 +2463,8 @@ def apply_smote(X, y, max_dense_size: int = int(5e7)):
             
         ratio = counts.min() / counts.sum()
         if ratio < 0.4:
-            if hasattr(X, "toarray"):  # Check if sparse
+            # FIXED: Check if X is sparse, then properly convert
+            if hasattr(X, "toarray"):  # X is sparse
                 elements = X.shape[0] * X.shape[1]
                 if elements > max_dense_size:
                     ros = RandomOverSampler(random_state=42)
@@ -2466,14 +2474,13 @@ def apply_smote(X, y, max_dense_size: int = int(5e7)):
                     smote = SMOTE(sampling_strategy=0.3, random_state=42)
                     return smote.fit_resample(X_dense, y)
             else:
+                # X is already dense
                 smote = SMOTE(sampling_strategy=0.3, random_state=42)
                 return smote.fit_resample(X, y)
         return X, y
     except Exception as e:
         log.warning(f"SMOTE failed: {e}. Using original data.")
         return X, y
-
-
 
 # ============================================================================
 # SILVER LABELS GENERATION
@@ -4377,8 +4384,9 @@ def run_full_pipeline(mode: str = "both",
     results, res_text, res_img = [], [], []
     img_silver = img_gold = None
 
+
     # ------------------------------------------------------------------
-    # 3. IMAGE FEATURE PROCESSING (FIXED SAMPLING)
+    # 3. IMAGE FEATURE PROCESSING (FIXED FOR DIMENSION ALIGNMENT)
     # ------------------------------------------------------------------
     if mode in {"image", "both"}:
         pipeline_progress.set_description("🔬 ML Pipeline: Image Processing")
@@ -4389,9 +4397,9 @@ def run_full_pipeline(mode: str = "both",
         log.info(f"   └─ Processing {len(gold_img):,} gold images")
         
         with tqdm(total=6, desc="   ├─ Image Pipeline", position=1, leave=False,
-                 bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as img_pbar:
+                bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as img_pbar:
             
-            # FIXED: Now downloads only sampled images
+            # Download images
             img_pbar.set_description("   ├─ Downloading silver images")
             if not silver_img.empty:
                 silver_downloaded = _download_images(silver_img, CFG.image_dir / "silver")
@@ -4422,21 +4430,39 @@ def run_full_pipeline(mode: str = "both",
             log.info(f"      ├─ Gold filtered: {len(img_gold_df):,} with valid images")
             img_pbar.update(1)
             
+            # CRITICAL FIX: Get both embeddings AND valid indices
             img_pbar.set_description("   ├─ Building silver embeddings")
             if not img_silver_df.empty:
-                img_silver = build_image_embeddings(img_silver_df, "silver", force)
+                img_silver, silver_valid_indices = build_image_embeddings(img_silver_df, "silver", force)
+                
+                # FILTER DataFrame to match embeddings
+                if len(silver_valid_indices) != len(img_silver_df):
+                    img_silver_df = img_silver_df.loc[silver_valid_indices].copy()
+                    log.info(f"      ├─ Silver DF filtered: {len(img_silver_df):,} rows match embeddings")
+                
                 log.info(f"      ├─ Silver embeddings: {img_silver.shape}")
+                log.info(f"      ├─ Silver DataFrame: {len(img_silver_df):,} rows")
             else:
                 img_silver = np.array([]).reshape(0, 2048)
+                silver_valid_indices = []
                 log.info(f"      ├─ Silver embeddings: Empty array (no valid images)")
             img_pbar.update(1)
             
+            # CRITICAL FIX: Get both embeddings AND valid indices
             img_pbar.set_description("   ├─ Building gold embeddings")
             if not img_gold_df.empty:
-                img_gold = build_image_embeddings(img_gold_df, "gold", force)
+                img_gold, gold_valid_indices = build_image_embeddings(img_gold_df, "gold", force)
+                
+                # FILTER DataFrame to match embeddings
+                if len(gold_valid_indices) != len(img_gold_df):
+                    img_gold_df = img_gold_df.loc[gold_valid_indices].copy()
+                    log.info(f"      ├─ Gold DF filtered: {len(img_gold_df):,} rows match embeddings")
+                    
                 log.info(f"      ├─ Gold embeddings: {img_gold.shape}")
+                log.info(f"      ├─ Gold DataFrame: {len(img_gold_df):,} rows")
             else:
                 img_gold = np.array([]).reshape(0, 2048)
+                gold_valid_indices = []
                 log.info(f"      ├─ Gold embeddings: Empty array (no valid images)")
             img_pbar.update(1)
             
@@ -4447,6 +4473,19 @@ def run_full_pipeline(mode: str = "both",
             else:
                 log.info(f"      ├─ Skipped saving empty gold embeddings")
             img_pbar.update(1)
+
+        # CRITICAL: Verify dimensions match
+        if img_silver.size > 0:
+            log.info(f"   🔍 DIMENSION VERIFICATION:")
+            log.info(f"   ├─ Silver embeddings: {img_silver.shape}")
+            log.info(f"   ├─ Silver DataFrame: {len(img_silver_df):,} rows")
+            log.info(f"   ├─ Gold embeddings: {img_gold.shape}")
+            log.info(f"   └─ Gold DataFrame: {len(img_gold_df):,} rows")
+            
+            # Ensure dimensions match
+            assert img_silver.shape[0] == len(img_silver_df), f"Silver dimension mismatch: {img_silver.shape[0]} != {len(img_silver_df)}"
+            assert img_gold.shape[0] == len(img_gold_df), f"Gold dimension mismatch: {img_gold.shape[0]} != {len(img_gold_df)}"
+            log.info(f"   ✅ All dimensions verified!")
 
         # Convert to sparse matrices for memory efficiency (only if not empty)
         if img_silver.size > 0:
@@ -4481,12 +4520,45 @@ def run_full_pipeline(mode: str = "both",
         log.info(f"   ✅ Image processing completed in {stage_time:.1f}s")
         log_memory_usage("Image Processing")
         optimize_memory_usage("Image Processing")
-        pipeline_progress.update(1)
-
+        
     else:
         log.info("\n⏭️  STAGE 3: SKIPPED (Image processing not requested)")
-    
+        
     pipeline_progress.update(1)
+
+
+    # Also add this debug check in the IMAGE MODEL training section:
+
+    # IMAGE MODELS
+    if mode in {"image", "both"} and img_silver.size > 0:
+        train_pbar.set_description("   ├─ Training Image Models")
+        log.info(f"   🖼️  Training image-based models...")
+        
+        # DEBUG: Verify dimensions before training
+        log.info(f"   🔍 PRE-TRAINING DIMENSION CHECK:")
+        log.info(f"   ├─ X_img_silver: {X_img_silver.shape}")
+        log.info(f"   ├─ img_silver_df: {len(img_silver_df):,} rows")
+        log.info(f"   ├─ X_img_gold: {X_img_gold.shape}")
+        log.info(f"   └─ img_gold_df: {len(img_gold_df):,} rows")
+        
+        res_img = run_mode_A(
+            X_img_silver,
+            img_gold_df.clean,
+            X_img_gold,
+            img_silver_df,
+            img_gold_df,
+            domain="image",
+            apply_smote=False
+        )
+        
+        results.extend(res_img)
+        log.info(f"      ✅ Image models: {len(res_img)} results")
+        optimize_memory_usage("Image Models")
+        train_pbar.update(1)
+
+
+
+
 
     # ------------------------------------------------------------------
     # 4. MODEL TRAINING
