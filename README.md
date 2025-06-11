@@ -118,19 +118,31 @@ This system was built with **clarity and resilience** in mind. Every decision wa
 ## 🛠️ File Structure (Dockerized)
 
 ```bash
-.
+
+├── nb/
+│ ├── src/
+│ │ ├── diet_classifiers.py
+│ │ ├── hybrid_classifier.py
+│ │ └── task.ipynb
+│ ├── Dockerfile
+│ └── requirements.txt
+│
 ├── web/
-│   ├── diet_classifiers.py         # Main pipeline script
-│   ├── app.py                      # CLI & API handler
-│   ├── index_data.py               # Indexing helpers
-│   └── utils/                      # Shared tools
-├── data/
-│   ├── gold.csv                    # Gold-labeled recipes
-│   ├── usda_cache.json             # Cached nutritional info
-│   └── vectorizer.pkl / models.pkl# Saved ML pipeline
-├── Dockerfile
+│ ├── src/
+│ │ ├── templates/
+│ │ │ └── index.html
+│ │ ├── app.py
+│ │ ├── diet_classifiers.py # Main pipeline script
+│ │ ├── index_data.py
+│ │ └── init.sh
+│ ├── Dockerfile
+│ └── requirements.txt
+│
+├── .gitignore
 ├── docker-compose.yml
-├── run_pipeline.sh                # One-click execution
+├── README.md
+└── run_pipeline.sh # One-click execution
+
 ```
 
 ---
