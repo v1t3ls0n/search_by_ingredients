@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   os:
     image: opensearchproject/opensearch:latest
@@ -35,7 +33,6 @@ services:
     build:
       context: web
       dockerfile: Dockerfile
-    working_dir: /app                           # same as Dockerfile WORKDIR
     environment:
       - FLASK_APP=app.py
       - FLASK_ENV=development
@@ -44,33 +41,23 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      # project source  (hot-reload while developing; comment-out in CI)
-      - ./web:/app                              # gives the container your updated code
-      # shared datasets  (parquet + ground-truth)
-      - ./data:/usr/src/data:ro                 # read-only → avoids accidental overwrite
+      - ./web/src:/app/web
     networks:
       - argmax
     depends_on:
       os:
         condition: service_healthy
-    command: >
-      sh -c "
-      dos2unix web/init.sh && chmod +x web/init.sh &&
-      ./web/init.sh
-      "
 
   nb:
     build:
       context: nb
       dockerfile: Dockerfile
-    working_dir: /usr/src/app
     environment:
       - OPENSEARCH_URL=http://os:9200
     ports:
       - "8888:8888"
     volumes:
       - ./nb/src:/usr/src/app
-      - ./data:/usr/src/data:ro
     networks:
       - argmax
     depends_on:
