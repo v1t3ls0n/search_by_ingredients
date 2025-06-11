@@ -6,10 +6,10 @@ services:
     environment:
       - discovery.type=single-node
       - bootstrap.memory_lock=true
-      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
       - DISABLE_SECURITY_PLUGIN=true
       - DISABLE_INSTALL_DEMO_CONFIG=true
-      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=Argmax123!
+      - "OPENSEARCH_INITIAL_ADMIN_PASSWORD=Argmax123!"
     ulimits:
       memlock:
         soft: -1
@@ -35,7 +35,7 @@ services:
     build:
       context: web
       dockerfile: Dockerfile
-    working_dir: /app
+    working_dir: /app                           # same as Dockerfile WORKDIR
     environment:
       - FLASK_APP=app.py
       - FLASK_ENV=development
@@ -44,8 +44,10 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./web:/app               # 🔧 Mounts your Python source (fix)
-      - ./data:/usr/src/data     # Keeps your dataset mount
+      # project source  (hot-reload while developing; comment-out in CI)
+      - ./web:/app                              # gives the container your updated code
+      # shared datasets  (parquet + ground-truth)
+      - ./data:/usr/src/data:ro                 # read-only → avoids accidental overwrite
     networks:
       - argmax
     depends_on:
@@ -68,7 +70,7 @@ services:
       - "8888:8888"
     volumes:
       - ./nb/src:/usr/src/app
-      - ./data:/usr/src/data
+      - ./data:/usr/src/data:ro
     networks:
       - argmax
     depends_on:
