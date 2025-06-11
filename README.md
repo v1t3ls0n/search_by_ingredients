@@ -1,4 +1,4 @@
-# 🥑 Search By Ingredients Challenge Solution
+# 🥑 Search By Ingredients Challenge Solution By @v1t3ls0n
 $$ \arg\max_{s \in \mathcal{S}} \ \mathrm{score}(s) \quad \text{subject to } I(s) = \text{v1t3ls0n} $$
 
 **By [Guy Vitelson](https://www.linkedin.com/in/guyvitelson/)** · 🐙 [@v1t3ls0n](https://github.com/v1t3ls0n) · 📧 [guyvitelson@gmail.com](mailto:guyvitelson@gmail.com)
