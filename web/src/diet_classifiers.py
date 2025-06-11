@@ -68,22 +68,43 @@ try:
     from sklearn.svm import SVC, LinearSVC
     SKLEARN_AVAILABLE = True
 except ImportError as e:  # pragma: no cover
-    warnings.warn(f"scikit-learn not installed ({e}). ML features will be disabled.", stacklevel=2)
+    warnings.warn(
+        f"scikit-learn not installed ({e}). ML features will be disabled.", stacklevel=2)
     SKLEARN_AVAILABLE = False
 
     # Fallbacks
-    class BaseEstimator: pass
-    class ClassifierMixin: pass
+    class BaseEstimator:
+        pass
+
+    class ClassifierMixin:
+        pass
+
     def clone(obj): return obj
-    def make_pipeline(*args, **kwargs): raise ImportError("scikit-learn is required")
-    def precision_recall_curve(*args, **kwargs): raise ImportError("scikit-learn is required")
-    class RBFSampler: pass
-    class SVC: pass
-    class CalibratedClassifierCV: pass
-    class VotingClassifier: pass
+
+    def make_pipeline(
+        *args, **kwargs): raise ImportError("scikit-learn is required")
+
+    def precision_recall_curve(
+        *args, **kwargs): raise ImportError("scikit-learn is required")
+
+    class RBFSampler:
+        pass
+
+    class SVC:
+        pass
+
+    class CalibratedClassifierCV:
+        pass
+
+    class VotingClassifier:
+        pass
+
     class TfidfVectorizer:
-        def __init__(self, **kwargs): raise ImportError("scikit-learn is required")
-    class LogisticRegression: pass
+        def __init__(
+            self, **kwargs): raise ImportError("scikit-learn is required")
+
+    class LogisticRegression:
+        pass
     LinearSVC = MLPClassifier = GridSearchCV = RandomizedSearchCV = None
     accuracy_score = average_precision_score = confusion_matrix = f1_score = precision_score = recall_score = roc_auc_score = None
     SGDClassifier = MultinomialNB = PassiveAggressiveClassifier = RidgeClassifier = None
@@ -104,7 +125,8 @@ try:  # pragma: no cover
     from torchvision import models, transforms
     TORCH_AVAILABLE = True
 except Exception as e:  # pragma: no cover
-    warnings.warn(f"PyTorch/torchvision not installed ({e}). Image features disabled.", stacklevel=2)
+    warnings.warn(
+        f"PyTorch/torchvision not installed ({e}). Image features disabled.", stacklevel=2)
     Image = None
     requests = None
     torch = None
@@ -114,7 +136,6 @@ except Exception as e:  # pragma: no cover
 
 # --- Imbalanced learning ---
 from imblearn.over_sampling import SMOTE, RandomOverSampler
-
 
 
 # ============================================================================
@@ -796,7 +817,8 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
             return "failed", idx, url, str(e)
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(fetch, (idx, url)) for idx, url in df['photo_url'].items()]
+        futures = [executor.submit(fetch, (idx, url))
+                   for idx, url in df['photo_url'].items()]
         for future in tqdm(as_completed(futures), total=len(futures), desc=f"📥 Downloading {img_dir.name} images"):
             result, idx, url, err = future.result()
             stats[result] += 1
@@ -813,9 +835,11 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
         with open(fail_log_path, "w") as f:
             for idx, url, err in failed_urls:
                 f.write(f"{idx}\t{url}\t{err}\n")
-        log.warning(f"[{img_dir.name}] Logged {len(failed_urls)} failed downloads to {fail_log_path}")
+        log.warning(
+            f"[{img_dir.name}] Logged {len(failed_urls)} failed downloads to {fail_log_path}")
 
     return valid_indices
+
 
 def build_image_embeddings(df: pd.DataFrame, mode: str, force: bool = False) -> np.ndarray:
     """Return or compute image embeddings for the given dataframe (skip missing/failed)."""
@@ -951,12 +975,13 @@ def show_balance(df: pd.DataFrame, title: str) -> None:
 # MODEL REGISTRY
 # ============================================================================
 
+
 def build_models(task: str) -> Dict[str, BaseEstimator]:
     """Build all available models for classification."""
     m = {
         # Rule-based for fallback / hard override
         "Rule": RuleModel("keto", RX_KETO, RX_WL_KETO) if task == "keto" else
-                RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN),
+        RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN),
 
         # Text-suited models
         "Softmax": LogisticRegression(
@@ -1021,9 +1046,6 @@ HYPER = {
         "gamma": ["scale", 0.01, 0.001],
     },
 }
-
-
-
 
 
 BEST: Dict[str, BaseEstimator] = {}
@@ -1390,7 +1412,8 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
         _download_images(img_silver_df, CFG.image_dir / "silver")
         _download_images(img_gold_df, CFG.image_dir / "gold")
 
-        img_silver = build_image_embeddings(img_silver_df, "silver", force=force)
+        img_silver = build_image_embeddings(
+            img_silver_df, "silver", force=force)
         img_gold = build_image_embeddings(img_gold_df, "gold", force=force)
 
         joblib.dump(img_gold, "embeddings/img_gold.pkl")
@@ -1410,7 +1433,8 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
 
     # --- TEXT-ONLY PIPELINE ---
     if mode in {"text", "both"}:
-        res_text = run_mode_A(X_text_silver, gold.clean, X_text_gold, silver, gold)
+        res_text = run_mode_A(X_text_silver, gold.clean,
+                              X_text_gold, silver, gold)
         results.extend(res_text)
 
     # --- TEXT+IMAGE ENSEMBLE ---
@@ -1446,7 +1470,8 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
 
     res_ens = [
         best_ensemble("keto", res, X_silver, gold.clean, X_gold, silver, gold),
-        best_ensemble("vegan", res, X_silver, gold.clean, X_gold, silver, gold),
+        best_ensemble("vegan", res, X_silver,
+                      gold.clean, X_gold, silver, gold),
     ]
     table("MODE A Ensemble (Best)", res_ens)
     results.extend(res_ens)
@@ -1506,9 +1531,11 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
     log.info("Saved evaluation results to evaluation_results.csv")
 
     with open("best_params.json", "w") as fp:
-        json.dump({k: v.get_params() for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
+        json.dump({k: v.get_params()
+                  for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
 
     return vec, silver, gold, results
+
 
 # ============================================================================
 # SIMPLE INTERFACE FOR ASSESSMENT (Required functions)
@@ -1736,7 +1763,8 @@ def main():
                         default='both', help='Feature mode for training')
     parser.add_argument('--force', action='store_true',
                         help='Recompute image embeddings')
-    parser.add_argument('--sample_frac', type=float, default=None, help="Fraction of silver set to sample.")
+    parser.add_argument('--sample_frac', type=float,
+                        default=None, help="Fraction of silver set to sample.")
 
     args = parser.parse_args()
 
