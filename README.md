@@ -211,15 +211,29 @@ docker compose exec web \
 ## 📁 Directory Layout
 
 ```
-.
-├─ docker-compose.yml   (web / nb / os)
-├─ Dockerfile           (copies USDA CSVs)
-├─ run_pipeline.sh      (CI helper)
-├─ diet_classifiers.py  (core code 2 000+ LOC)
-├─ data/
-│   ├─ usda/*.csv       (FoodData Central snapshots)
-│   └─ ground_truth_sample.csv
-└─ README.md            (this file)
+├── nb/
+│   ├── src/
+│   │   ├── diet_classifiers.py
+│   │   ├── hybrid_classifier.py
+│   │   └── task.ipynb
+│   ├── Dockerfile
+│   └── requirements.txt
+│
+├── web/
+│   ├── src/
+│   │   ├── templates/
+│   │   │   └── index.html
+│   │   ├── app.py
+│   │   ├── diet_classifiers.py
+│   │   ├── index_data.py
+│   │   └── init.sh
+│   ├── Dockerfile
+│   └── requirements.txt
+│
+├── .gitignore
+├── docker-compose.yml
+├── README.md
+└── run_pipeline.sh
 ```
 
 ---
