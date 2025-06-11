@@ -11,7 +11,7 @@ docker compose run --rm web bash -c '
     pip install -r requirements.txt --quiet || true
 
     echo "🧠 Training & testing on both image and text classifiers (sample 10%)..."
-    python web/diet_classifiers.py --train --mode both --sample_frac 0.1
+    python web/diet_classifiers.py --train --mode both
 
     echo "🧪 Evaluating on provided gold set..."
     python web/diet_classifiers.py --ground_truth /app/data/ground_truth_sample.csv
