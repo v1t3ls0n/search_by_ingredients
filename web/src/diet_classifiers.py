@@ -5455,5 +5455,3 @@ if __name__ == "__main__":
         if 'PIPELINE_RESTART_COUNT' in os.environ:
             del os.environ['PIPELINE_RESTART_COUNT']
 
-if __name__ == "__main__":
-    main()
