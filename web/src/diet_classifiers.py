@@ -1332,6 +1332,29 @@ def load_datasets() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
     return silver, ground_truth, recipes, carb_df
 
+# ────────────────────────────────────────────────────────────────
+# DATASET CACHE (shared across the whole process)
+# ────────────────────────────────────────────────────────────────
+_DATASETS: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame] | None = None
+
+def get_datasets(sample_frac: float | None = None):
+    """
+    Return (silver, ground_truth, recipes, carb_df) loaded once per process.
+    Any subsequent call just returns the cached tuple.
+    """
+    global _DATASETS
+    if _DATASETS is None:
+        _DATASETS = load_datasets()          # call your expensive loader
+        if sample_frac:
+            # optional down-sampling logic so every caller sees the same slice
+            silver, gt, recipes, carb = _DATASETS
+            silver = silver.sample(frac=sample_frac, random_state=42)
+            recipes = recipes.loc[silver.index]           # keep alignment
+            _DATASETS = (silver, gt, recipes, carb)
+    return _DATASETS
+
+
+
 # ===================================================================
 # HARD-CODED LISTS/REGEX FOR DOMAIN-SPECIFIC CATEGORIZATION
 # ===================================================================
@@ -4852,7 +4875,7 @@ def run_full_pipeline(mode: str = "both",
               bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as load_pbar:
 
         load_pbar.set_description("   ├─ Loading datasets")
-        silver_all, gold, recipes = load_datasets()
+        silver_all, gold, recipes = get_datasets(sample_frac)
         load_pbar.update(1)
 
         load_pbar.set_description("   ├─ Creating index keys")
