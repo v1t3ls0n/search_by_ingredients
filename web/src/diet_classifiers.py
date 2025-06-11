@@ -149,6 +149,7 @@ except Exception as e:  # pragma: no cover
 # --- Imbalanced learning ---
 from imblearn.over_sampling import SMOTE, RandomOverSampler
 
+
 # ============================================================================
 # LOGGING
 # ============================================================================
@@ -1332,25 +1333,36 @@ def load_datasets() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
     return silver, ground_truth, recipes, carb_df
 
-# ────────────────────────────────────────────────────────────────
-# DATASET CACHE (shared across the whole process)
-# ────────────────────────────────────────────────────────────────
-_DATASETS: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame] | None = None
+# ─────────────────────────────────────────────────────────────
+# GLOBAL ONE-SHOT DATASET CACHE
+# ─────────────────────────────────────────────────────────────
+_DATASETS: tuple[pd.DataFrame, pd.DataFrame,
+                 pd.DataFrame, pd.DataFrame] | None = None
 
-def get_datasets(sample_frac: float | None = None):
+
+def get_datasets(sample_frac: float | None = None
+                 ) -> tuple[pd.DataFrame, pd.DataFrame,
+                            pd.DataFrame, pd.DataFrame]:
     """
-    Return (silver, ground_truth, recipes, carb_df) loaded once per process.
-    Any subsequent call just returns the cached tuple.
+    Lazy-load & cache the four DataFrames returned by `load_datasets()`.
+
+    Returns
+    -------
+    (silver_all, gold, recipes, carb_df)
     """
     global _DATASETS
+
     if _DATASETS is None:
-        _DATASETS = load_datasets()          # call your expensive loader
+        # Actually load everything once
+        silver_all, gold, recipes, carb_df = load_datasets()
+
+        # Optional row-sampling of the *silver* set
         if sample_frac:
-            # optional down-sampling logic so every caller sees the same slice
-            silver, gt, recipes, carb = _DATASETS
-            silver = silver.sample(frac=sample_frac, random_state=42)
-            recipes = recipes.loc[silver.index]           # keep alignment
-            _DATASETS = (silver, gt, recipes)
+            silver_all = silver_all.sample(frac=sample_frac,
+                                           random_state=42).copy()
+
+        _DATASETS = (silver_all, gold, recipes, carb_df)
+
     return _DATASETS
 
 
@@ -2099,11 +2111,6 @@ def filter_silver_by_downloaded_images(silver_df: pd.DataFrame, image_dir: Path)
     downloaded_ids = [int(p.stem)
                       for p in (image_dir / "silver").glob("*.jpg")]
     return silver_df.loc[silver_df.index.intersection(downloaded_ids)].copy()
-
-
-def tokenize_ingredient(text: str) -> list[str]:
-    return re.findall(r"\b\w[\w-]*\b", text.lower())
-
 
 def is_keto_ingredient_list(tokens: list[str]) -> bool:
     for ingredient in NON_KETO:
@@ -4877,7 +4884,7 @@ def run_full_pipeline(mode: str = "both",
               bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as load_pbar:
 
         load_pbar.set_description("   ├─ Loading datasets")
-        silver_all, gold, recipes = get_datasets(sample_frac)
+        silver_all, gold, _ , _ = get_datasets(sample_frac)
         load_pbar.update(1)
 
         load_pbar.set_description("   ├─ Creating index keys")
