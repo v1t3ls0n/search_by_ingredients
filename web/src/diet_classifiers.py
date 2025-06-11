@@ -68,7 +68,15 @@ try:
     from sklearn.neural_network import MLPClassifier
     from sklearn.pipeline import make_pipeline
     from sklearn.svm import SVC, LinearSVC
+    from sklearn.ensemble import RandomForestClassifier
+    try:
+        import lightgbm as lgb
+    except ImportError:
+        lgb = None  # LightGBM optional
+
+
     SKLEARN_AVAILABLE = True
+
 except ImportError as e:  # pragma: no cover
     warnings.warn(
         f"scikit-learn not installed ({e}). ML features will be disabled.", stacklevel=2)
@@ -138,7 +146,6 @@ except Exception as e:  # pragma: no cover
 
 # --- Imbalanced learning ---
 from imblearn.over_sampling import SMOTE, RandomOverSampler
-
 
 # ============================================================================
 # DOMAIN HARDCODED LISTS (HEURISTICS) - Complete from original
@@ -604,8 +611,6 @@ log = logging.getLogger("PIPE")
 # ============================================================================
 # CONFIG
 # ============================================================================
-
-
 @dataclass(frozen=True)
 class Config:
     data_dir: Path = Path("dataset/arg_max")
@@ -619,17 +624,14 @@ class Config:
         min_df=2, ngram_range=(1, 3), max_features=50000, sublinear_tf=True))
     image_dir: Path = Path("dataset/arg_max/images")
 
-
 CFG = Config()
 
 # ============================================================================
 # REGEX HELPERS
 # ============================================================================
 
-
 def compile_any(words: Iterable[str]) -> re.Pattern[str]:
     return re.compile(r"\b(?:%s)\b" % "|".join(map(re.escape, words)), re.I)
-
 
 RX_KETO = compile_any(NON_KETO)
 RX_VEGAN = compile_any(NON_VEGAN)
@@ -643,7 +645,6 @@ RX_WL_VEGAN = re.compile("|".join(VEGAN_WHITELIST), re.I)
 _LEMM = WordNetLemmatizer() if wnl else None
 _UNITS = re.compile(r"\b(?:g|gram|kg|oz|ml|l|cup|cups|tsp|tbsp|teaspoon|"
                     r"tablespoon|pound|lb|slice|slices|small|large|medium)\b")
-
 
 def normalise(t: str | list | tuple | np.ndarray) -> str:
     """Normalize ingredient text for consistent matching.
@@ -671,7 +672,6 @@ def normalise(t: str | list | tuple | np.ndarray) -> str:
 # ============================================================================
 # RULE MODEL
 # ============================================================================
-
 
 class RuleModel(BaseEstimator, ClassifierMixin):
     def __init__(self, task: str, rx_black, rx_white=None,
@@ -761,697 +761,11 @@ def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarr
 # DATA I/O
 # ============================================================================
 
-def filter_low_quality_images(img_dir: Path, embeddings: np.ndarray, original_indices: list) -> tuple:
-    """Filter out low-quality images and return both embeddings AND indices."""
-    if embeddings.shape[0] == 0:
-        return embeddings, original_indices
-    
-    # Calculate embedding statistics
-    variances = np.var(embeddings, axis=1)
-    means = np.mean(embeddings, axis=1)
-    
-    # Remove embeddings with very low variance (likely blank/corrupted images)
-    variance_threshold = np.percentile(variances, 10)  # Bottom 10%
-    
-    # Remove embeddings that are too similar to the mean (likely generic/placeholder images)
-    mean_threshold = np.percentile(means, 90)  # Top 10% of means
-    
-    quality_mask = (variances > variance_threshold) & (means < mean_threshold)
-    
-    if quality_mask.sum() > embeddings.shape[0] * 0.5:  # Keep at least 50%
-        filtered_embeddings = embeddings[quality_mask]
-        # CRITICAL FIX: Return the filtered indices too!
-        filtered_indices = [original_indices[i] for i in range(len(original_indices)) if quality_mask[i]]
-        
-        log.info(f"      ├─ Quality filtering: {len(filtered_indices)}/{len(original_indices)} images kept")
-        return filtered_embeddings, filtered_indices
-    else:
-        log.info(f"      ├─ Quality filtering: Keeping all images (filter too aggressive)")
-        return embeddings, original_indices
-
-
-
-def load_datasets_fixed() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """
-    Load datasets into memory with comprehensive logging and progress tracking.
-    
-    Enhanced with:
-    - Multi-stage progress bars for each loading phase
-    - Data validation and integrity checks
-    - Memory usage monitoring
-    - Schema validation and type checking
-    - Missing data analysis
-    - Performance metrics and timing
-    - Network error handling and retries
-    - Data quality assessment
-    
-    Returns:
-        tuple: (silver_dataframe, gold_dataframe, recipes_dataframe)
-    """
-    import time
-    import psutil
-    import requests
-    from urllib.parse import urlparse
-    import warnings
-    from collections import Counter
-    
-    load_start = time.time()
-    
-    # ------------------------------------------------------------------
-    # Initialization and Configuration
-    # ------------------------------------------------------------------
-    log.info("\n📂 DATASET LOADING PIPELINE")
-    log.info(f"   Configuration: {len(CFG.url_map)} data sources")
-    log.info(f"   Data directory: {CFG.data_dir}")
-    
-    # Log data source information
-    log.info(f"   📊 Data Sources:")
-    for name, url in CFG.url_map.items():
-        source_type = "URL" if url.startswith(('http://', 'https://')) else "Local"
-        log.info(f"   ├─ {name}: {source_type}")
-        if source_type == "URL":
-            log.info(f"   │  └─ {url}")
-        else:
-            log.info(f"   │  └─ {Path(url).resolve()}")
-
-    def log_memory_usage(stage: str):
-        """Helper to log current memory usage"""
-        memory = psutil.virtual_memory()
-        log.info(f"      💾 {stage}: {memory.percent:.1f}% memory used "
-                f"({memory.used // (1024**2)} MB / {memory.total // (1024**2)} MB)")
-
-    # Track loading stages
-    loading_stages = ["Recipes", "Ground Truth", "Silver Labels", "Data Validation"]
-    
-    # Main pipeline progress
-    pipeline_progress = tqdm(loading_stages, desc="   ├─ Loading Pipeline", 
-                           position=0, leave=False,
-                           bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}]")
-
-    # ------------------------------------------------------------------
-    # STAGE 1: Load Recipes Dataset
-    # ------------------------------------------------------------------
-    pipeline_progress.set_description("   ├─ Loading Recipes")
-    stage_start = time.time()
-    
-    log.info(f"\n   🍳 STAGE 1: LOADING RECIPES DATASET")
-    
-    recipes_url = CFG.url_map["allrecipes.parquet"]
-    log.info(f"   ├─ Source: {recipes_url}")
-    
-    with tqdm(total=4, desc="      ├─ Recipe Loading", position=1, leave=False,
-             bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as recipe_pbar:
-        
-        recipe_pbar.set_description("      ├─ Validating source")
-        
-        # Validate URL/path
-        if recipes_url.startswith(('http://', 'https://')):
-            try:
-                # Quick HEAD request to check if URL is accessible
-                response = requests.head(recipes_url, timeout=10)
-                response.raise_for_status()
-                log.info(f"      ├─ URL accessible: {response.status_code}")
-                
-                # Get content length if available
-                content_length = response.headers.get('content-length')
-                if content_length:
-                    size_mb = int(content_length) / (1024 * 1024)
-                    log.info(f"      ├─ Expected download size: {size_mb:.1f} MB")
-                    
-            except requests.RequestException as e:
-                log.error(f"      ❌ URL validation failed: {e}")
-                raise RuntimeError(f"Cannot access recipes URL: {recipes_url}")
-        else:
-            # Local file validation
-            recipes_path = Path(recipes_url)
-            if not recipes_path.exists():
-                raise FileNotFoundError(f"Recipes file not found: {recipes_url}")
-            
-            size_mb = recipes_path.stat().st_size / (1024 * 1024)
-            log.info(f"      ├─ Local file size: {size_mb:.1f} MB")
-        
-        recipe_pbar.update(1)
-        
-        recipe_pbar.set_description("      ├─ Reading parquet")
-        recipes_load_start = time.time()
-        
-        try:
-            # Load with progress indication for large files
-            recipes = pd.read_parquet(recipes_url)
-            
-        except Exception as e:
-            log.error(f"      ❌ Failed to load recipes: {str(e)[:100]}...")
-            
-            # Try alternative approaches
-            if recipes_url.startswith(('http://', 'https://')):
-                log.info(f"      🔄 Attempting manual download...")
-                try:
-                    response = requests.get(recipes_url, stream=True, timeout=30)
-                    response.raise_for_status()
-                    
-                    # Save temporarily and load
-                    temp_path = Path("temp_recipes.parquet")
-                    with open(temp_path, 'wb') as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            f.write(chunk)
-                    
-                    recipes = pd.read_parquet(temp_path)
-                    temp_path.unlink()  # Clean up
-                    
-                except Exception as e2:
-                    log.error(f"      ❌ Manual download also failed: {e2}")
-                    raise RuntimeError(f"Failed to load recipes after retry: {e2}")
-            else:
-                raise
-        
-        recipes_load_time = time.time() - recipes_load_start
-        recipe_pbar.update(1)
-        
-        recipe_pbar.set_description("      ├─ Validating schema")
-        
-        # Validate recipes schema
-        expected_columns = ['ingredients', 'title', 'description', 'instructions']
-        missing_columns = [col for col in expected_columns if col not in recipes.columns]
-        
-        if missing_columns:
-            log.warning(f"      ⚠️  Missing expected columns: {missing_columns}")
-        
-        log.info(f"      📊 Recipes Dataset:")
-        log.info(f"      ├─ Shape: {recipes.shape}")
-        log.info(f"      ├─ Columns: {list(recipes.columns)}")
-        log.info(f"      ├─ Memory usage: {recipes.memory_usage(deep=True).sum() / (1024**2):.1f} MB")
-        log.info(f"      └─ Load time: {recipes_load_time:.1f}s")
-        
-        recipe_pbar.update(1)
-        
-        recipe_pbar.set_description("      ├─ Data quality check")
-        
-        # Quick data quality assessment
-        quality_stats = {
-            'total_rows': len(recipes),
-            'null_ingredients': recipes['ingredients'].isnull().sum(),
-            'empty_ingredients': (
-                    recipes['ingredients']           # keep the original Series
-                        .astype(str)              # lists/None → string form
-                        .str.strip()              # remove surrounding whitespace
-                        .eq('')                   # test for genuine empties
-                        .sum()                    # count them
-                ) if 'ingredients' in recipes.columns else 0,
-            'null_titles': recipes['title'].isnull().sum() if 'title' in recipes.columns else 0,
-            'has_photo_url': 'photo_url' in recipes.columns,
-            'photo_url_count': (~recipes['photo_url'].isnull()).sum() if 'photo_url' in recipes.columns else 0
-        }
-        
-        log.info(f"      📈 Data Quality:")
-        log.info(f"      ├─ Total recipes: {quality_stats['total_rows']:,}")
-        log.info(f"      ├─ Null ingredients: {quality_stats['null_ingredients']:,}")
-        log.info(f"      ├─ Empty ingredients: {quality_stats['empty_ingredients']:,}")
-        
-        if quality_stats['has_photo_url']:
-            photo_pct = quality_stats['photo_url_count'] / quality_stats['total_rows'] * 100
-            log.info(f"      └─ With photos: {quality_stats['photo_url_count']:,} ({photo_pct:.1f}%)")
-        
-        recipe_pbar.update(1)
-
-    stage_time = time.time() - stage_start
-    log.info(f"   ✅ Recipes loaded successfully in {stage_time:.1f}s")
-    log_memory_usage("Recipes loaded")
-    pipeline_progress.update(1)
-
-    # ------------------------------------------------------------------
-    # STAGE 2: Load Ground Truth Dataset
-    # ------------------------------------------------------------------
-    pipeline_progress.set_description("   ├─ Loading Ground Truth")
-    stage_start = time.time()
-    
-    log.info(f"\n   🎯 STAGE 2: LOADING GROUND TRUTH DATASET")
-    
-    gt_url_or_path = CFG.url_map["ground_truth_sample.csv"]
-    log.info(f"   ├─ Source: {gt_url_or_path}")
-    
-    with tqdm(total=4, desc="      ├─ Ground Truth Loading", position=1, leave=False,
-             bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as gt_pbar:
-        
-        gt_pbar.set_description("      ├─ Path validation")
-        
-        # Validate path - check for directory mistake
-        if Path(gt_url_or_path).is_dir():
-            log.error(f"      ❌ Expected CSV file but found directory: {gt_url_or_path}")
-            raise RuntimeError(f"Expected a CSV file but found a directory: {gt_url_or_path}")
-        
-        # Check accessibility
-        if gt_url_or_path.startswith(('http://', 'https://')):
-            try:
-                response = requests.head(gt_url_or_path, timeout=10)
-                response.raise_for_status()
-                log.info(f"      ├─ URL accessible: {response.status_code}")
-            except requests.RequestException as e:
-                log.error(f"      ❌ Ground truth URL validation failed: {e}")
-                raise RuntimeError(f"Cannot access ground truth URL: {gt_url_or_path}")
-        else:
-            gt_path = Path(gt_url_or_path)
-            if not gt_path.exists():
-                raise FileNotFoundError(f"Ground truth file not found: {gt_url_or_path}")
-            
-            size_kb = gt_path.stat().st_size / 1024
-            log.info(f"      ├─ File size: {size_kb:.1f} KB")
-        
-        gt_pbar.update(1)
-        
-        gt_pbar.set_description("      ├─ Reading CSV")
-        gt_load_start = time.time()
-        
-        try:
-            # Load with error handling for encoding issues
-            try:
-                ground_truth = pd.read_csv(gt_url_or_path)
-            except UnicodeDecodeError:
-                log.warning(f"      ⚠️  UTF-8 decode failed, trying latin-1...")
-                ground_truth = pd.read_csv(gt_url_or_path, encoding='latin-1')
-            except pd.errors.EmptyDataError:
-                log.error(f"      ❌ Ground truth file is empty")
-                raise RuntimeError("Ground truth CSV file is empty")
-                
-        except Exception as e:
-            log.error(f"      ❌ Failed to load ground truth: {str(e)[:100]}...")
-            raise RuntimeError(f"Failed to load ground truth: {e}")
-        
-        gt_load_time = time.time() - gt_load_start
-        gt_pbar.update(1)
-        
-        gt_pbar.set_description("      ├─ Schema validation")
-        
-        # Validate ground truth schema
-        required_gt_columns = ['ingredients']
-        missing_gt_columns = [col for col in required_gt_columns if col not in ground_truth.columns]
-        
-        if missing_gt_columns:
-            log.error(f"      ❌ Missing required columns: {missing_gt_columns}")
-            raise ValueError(f"Ground truth missing required columns: {missing_gt_columns}")
-        
-        # Look for label columns
-        keto_columns = [col for col in ground_truth.columns if 'keto' in col.lower()]
-        vegan_columns = [col for col in ground_truth.columns if 'vegan' in col.lower()]
-        
-        log.info(f"      📊 Ground Truth Dataset:")
-        log.info(f"      ├─ Shape: {ground_truth.shape}")
-        log.info(f"      ├─ Columns: {list(ground_truth.columns)}")
-        log.info(f"      ├─ Keto columns found: {keto_columns}")
-        log.info(f"      ├─ Vegan columns found: {vegan_columns}")
-        log.info(f"      └─ Load time: {gt_load_time:.2f}s")
-        
-        gt_pbar.update(1)
-        
-        gt_pbar.set_description("      ├─ Label processing")
-        
-        # Process labels with error handling
-        try:
-            # Extract keto labels
-            if keto_columns:
-                ground_truth["label_keto"] = ground_truth.filter(regex="keto").iloc[:, 0].astype(int)
-                keto_positive = ground_truth["label_keto"].sum()
-                keto_rate = keto_positive / len(ground_truth) * 100
-                log.info(f"      ├─ Keto labels: {keto_positive}/{len(ground_truth)} ({keto_rate:.1f}% positive)")
-            else:
-                log.warning(f"      ⚠️  No keto columns found - creating dummy labels")
-                ground_truth["label_keto"] = 0
-            
-            # Extract vegan labels
-            if vegan_columns:
-                ground_truth["label_vegan"] = ground_truth.filter(regex="vegan").iloc[:, 0].astype(int)
-                vegan_positive = ground_truth["label_vegan"].sum()
-                vegan_rate = vegan_positive / len(ground_truth) * 100
-                log.info(f"      ├─ Vegan labels: {vegan_positive}/{len(ground_truth)} ({vegan_rate:.1f}% positive)")
-            else:
-                log.warning(f"      ⚠️  No vegan columns found - creating dummy labels")
-                ground_truth["label_vegan"] = 0
-                
-        except Exception as e:
-            log.error(f"      ❌ Label processing failed: {e}")
-            raise ValueError(f"Failed to process labels: {e}")
-        
-        # Add photo_url if available
-        ground_truth["photo_url"] = ground_truth.get("photo_url")
-        
-        # Clean ingredients text
-        with tqdm(total=1, desc="         ├─ Normalizing text", position=2, leave=False,
-                 bar_format="         ├─ {desc}: {percentage:3.0f}%|{bar}| [{elapsed}]") as norm_pbar:
-            ground_truth["clean"] = ground_truth.ingredients.fillna("").map(normalise)
-            norm_pbar.update(1)
-        
-        gt_pbar.update(1)
-
-    stage_time = time.time() - stage_start
-    log.info(f"   ✅ Ground truth loaded successfully in {stage_time:.1f}s")
-    log_memory_usage("Ground truth loaded")
-    pipeline_progress.update(1)
-
-    # ------------------------------------------------------------------
-    # STAGE 3: Generate Silver Labels
-    # ------------------------------------------------------------------
-    pipeline_progress.set_description("   ├─ Generating Silver Labels")
-    stage_start = time.time()
-    
-    log.info(f"\n   🥈 STAGE 3: GENERATING SILVER LABELS")
-    
-    with tqdm(total=3, desc="      ├─ Silver Generation", position=1, leave=False,
-             bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as silver_pbar:
-        
-        silver_pbar.set_description("      ├─ Building silver labels")
-        silver_start = time.time()
-        
-        # Generate silver labels using heuristics
-        silver = build_silver(recipes)
-        
-        silver_build_time = time.time() - silver_start
-        silver_pbar.update(1)
-        
-        silver_pbar.set_description("      ├─ Adding photo URLs")
-        
-        # Add photo URLs from recipes
-        silver["photo_url"] = recipes.get("photo_url")
-        
-        # Calculate silver label statistics
-        silver_stats = {
-            'total': len(silver),
-            'keto_positive': silver['silver_keto'].sum() if 'silver_keto' in silver.columns else 0,
-            'vegan_positive': silver['silver_vegan'].sum() if 'silver_vegan' in silver.columns else 0,
-            'has_photos': (~silver['photo_url'].isnull()).sum() if 'photo_url' in silver.columns else 0
-        }
-        
-        silver_pbar.update(1)
-        
-        silver_pbar.set_description("      ├─ Quality assessment")
-        
-        log.info(f"      📊 Silver Labels Generated:")
-        log.info(f"      ├─ Total recipes: {silver_stats['total']:,}")
-        log.info(f"      ├─ Keto positive: {silver_stats['keto_positive']:,} ({silver_stats['keto_positive']/silver_stats['total']*100:.1f}%)")
-        log.info(f"      ├─ Vegan positive: {silver_stats['vegan_positive']:,} ({silver_stats['vegan_positive']/silver_stats['total']*100:.1f}%)")
-        log.info(f"      ├─ With photos: {silver_stats['has_photos']:,} ({silver_stats['has_photos']/silver_stats['total']*100:.1f}%)")
-        log.info(f"      └─ Generation time: {silver_build_time:.1f}s")
-        
-        silver_pbar.update(1)
-
-    stage_time = time.time() - stage_start
-    log.info(f"   ✅ Silver labels generated successfully in {stage_time:.1f}s")
-    log_memory_usage("Silver labels generated")
-    pipeline_progress.update(1)
-
-    # ------------------------------------------------------------------
-    # STAGE 4: Data Validation and Cross-Checks
-    # ------------------------------------------------------------------
-    pipeline_progress.set_description("   ├─ Data Validation")
-    stage_start = time.time()
-    
-    log.info(f"\n   ✅ STAGE 4: DATA VALIDATION AND CROSS-CHECKS")
-    
-    with tqdm(total=5, desc="      ├─ Validation Checks", position=1, leave=False,
-             bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as val_pbar:
-        
-        val_pbar.set_description("      ├─ Index alignment")
-        
-        # Check index alignment between datasets
-        recipes_indices = set(recipes.index)
-        silver_indices = set(silver.index)
-        gt_indices = set(ground_truth.index)
-        
-        if recipes_indices != silver_indices:
-            log.warning(f"      ⚠️  Index mismatch between recipes and silver")
-            log.info(f"         ├─ Recipes: {len(recipes_indices)} indices")
-            log.info(f"         └─ Silver: {len(silver_indices)} indices")
-        
-        val_pbar.update(1)
-        
-        val_pbar.set_description("      ├─ Data consistency")
-        
-        # Check data consistency
-        consistency_issues = []
-        
-        # Check for null ingredients in critical datasets
-        null_ingredients_recipes = recipes['ingredients'].isnull().sum()
-        null_ingredients_gt = ground_truth['ingredients'].isnull().sum()
-        
-        if null_ingredients_recipes > 0:
-            consistency_issues.append(f"Recipes has {null_ingredients_recipes} null ingredients")
-        
-        if null_ingredients_gt > 0:
-            consistency_issues.append(f"Ground truth has {null_ingredients_gt} null ingredients")
-        
-        val_pbar.update(1)
-        
-        val_pbar.set_description("      ├─ Memory optimization")
-        
-        # Memory usage analysis
-        datasets_memory = {
-            'recipes': recipes.memory_usage(deep=True).sum() / (1024**2),
-            'silver': silver.memory_usage(deep=True).sum() / (1024**2),
-            'ground_truth': ground_truth.memory_usage(deep=True).sum() / (1024**2)
-        }
-        
-        total_memory = sum(datasets_memory.values())
-        
-        log.info(f"      💾 Memory Usage by Dataset:")
-        for dataset, memory_mb in datasets_memory.items():
-            log.info(f"      ├─ {dataset.capitalize()}: {memory_mb:.1f} MB")
-        log.info(f"      └─ Total: {total_memory:.1f} MB")
-        
-        val_pbar.update(1)
-        
-        val_pbar.set_description("      ├─ Label distribution")
-        
-        # Compare label distributions
-        if len(ground_truth) > 0:
-            gt_keto_rate = ground_truth['label_keto'].mean() * 100
-            gt_vegan_rate = ground_truth['label_vegan'].mean() * 100
-            silver_keto_rate = silver['silver_keto'].mean() * 100
-            silver_vegan_rate = silver['silver_vegan'].mean() * 100
-            
-            log.info(f"      📊 Label Distribution Comparison:")
-            log.info(f"      ├─ Keto: Gold={gt_keto_rate:.1f}%, Silver={silver_keto_rate:.1f}%")
-            log.info(f"      └─ Vegan: Gold={gt_vegan_rate:.1f}%, Silver={silver_vegan_rate:.1f}%")
-            
-            # Flag significant differences
-            keto_diff = abs(gt_keto_rate - silver_keto_rate)
-            vegan_diff = abs(gt_vegan_rate - silver_vegan_rate)
-            
-            if keto_diff > 20:
-                log.warning(f"      ⚠️  Large keto distribution difference: {keto_diff:.1f}%")
-            if vegan_diff > 20:
-                log.warning(f"      ⚠️  Large vegan distribution difference: {vegan_diff:.1f}%")
-        
-        val_pbar.update(1)
-        
-        val_pbar.set_description("      ├─ Final validation")
-        
-        # Final validation summary
-        validation_summary = {
-            'recipes_loaded': len(recipes) > 0,
-            'ground_truth_loaded': len(ground_truth) > 0,
-            'silver_generated': len(silver) > 0,
-            'required_columns_present': all(col in recipes.columns for col in ['ingredients']),
-            'labels_processed': 'label_keto' in ground_truth.columns and 'label_vegan' in ground_truth.columns,
-            'consistency_issues': len(consistency_issues)
-        }
-        
-        all_valid = all(validation_summary[key] for key in ['recipes_loaded', 'ground_truth_loaded', 'silver_generated', 'required_columns_present', 'labels_processed'])
-        
-        log.info(f"      ✅ Validation Summary:")
-        for check, status in validation_summary.items():
-            if isinstance(status, bool):
-                status_icon = "✅" if status else "❌"
-                log.info(f"      ├─ {check.replace('_', ' ').title()}: {status_icon}")
-            else:
-                log.info(f"      ├─ {check.replace('_', ' ').title()}: {status}")
-        
-        if consistency_issues:
-            log.warning(f"      ⚠️  Consistency Issues Found:")
-            for issue in consistency_issues:
-                log.warning(f"      │  └─ {issue}")
-        
-        if not all_valid:
-            raise RuntimeError("Dataset validation failed - see logs for details")
-        
-        val_pbar.update(1)
-
-    stage_time = time.time() - stage_start
-    log.info(f"   ✅ Data validation completed in {stage_time:.1f}s")
-    log_memory_usage("Validation complete")
-    pipeline_progress.update(1)
-
-    # ------------------------------------------------------------------
-    # Pipeline Completion Summary
-    # ------------------------------------------------------------------
-    total_time = time.time() - load_start
-    
-    log.info(f"\n🏁 DATASET LOADING COMPLETE")
-    log.info(f"   ├─ Total loading time: {total_time:.1f}s")
-    log.info(f"   ├─ Datasets loaded: 3 (recipes, ground_truth, silver)")
-    log.info(f"   ├─ Total memory usage: {total_memory:.1f} MB")
-    log.info(f"   └─ All validations passed: ✅")
-
-    # Final dataset summary
-    log.info(f"\n   📋 Final Dataset Summary:")
-    log.info(f"   ├─ Recipes: {len(recipes):,} rows × {len(recipes.columns)} columns")
-    log.info(f"   ├─ Ground Truth: {len(ground_truth):,} rows × {len(ground_truth.columns)} columns")
-    log.info(f"   ├─ Silver Labels: {len(silver):,} rows × {len(silver.columns)} columns")
-    log.info(f"   └─ Ready for ML pipeline: ✅")
-
-    # Garbage collection for memory optimization
-    import gc
-    gc.collect()
-    
-    return silver, ground_truth, recipes
-
-
-def optimize_memory_usage(stage_name=""):
-    """Optimize memory usage during training with detailed logging."""
-    import gc
-    import psutil
-    
-    # Get memory before cleanup - FIXED: Ensure we get the object properly
-    try:
-        memory_before = psutil.virtual_memory()
-        memory_before_used = memory_before.used  # Extract the actual value
-        memory_before_percent = memory_before.percent
-    except Exception as e:
-        log.error(f"Failed to get initial memory stats: {e}")
-        return "error"
-    
-    # Force garbage collection
-    try:
-        collected = gc.collect()
-    except Exception as e:
-        log.debug(f"Garbage collection failed: {e}")
-        collected = 0
-    
-    # Clear GPU cache if available
-    gpu_freed = 0
-    if torch and torch.cuda.is_available():
-        try:
-            gpu_before = torch.cuda.memory_allocated() / (1024**2)  # MB
-            torch.cuda.empty_cache()
-            gpu_after = torch.cuda.memory_allocated() / (1024**2)  # MB
-            gpu_freed = max(0, gpu_before - gpu_after)  # Ensure non-negative
-        except Exception as e:
-            log.debug(f"GPU memory cleanup failed: {e}")
-            gpu_freed = 0
-    
-    # Get memory after cleanup - FIXED: Proper handling
-    try:
-        memory_after = psutil.virtual_memory()
-        memory_after_used = memory_after.used  # Extract the actual value
-        memory_after_percent = memory_after.percent
-        
-        # FIXED: Calculate memory freed properly
-        memory_freed_bytes = max(0, memory_before_used - memory_after_used)
-        memory_freed_mb = memory_freed_bytes / (1024**2)  # Convert to MB
-        
-    except Exception as e:
-        log.error(f"Failed to get final memory stats: {e}")
-        return "error"
-    
-    # Log results
-    stage_prefix = f"{stage_name}: " if stage_name else ""
-    log.info(f"   🧹 {stage_prefix}Memory cleanup")
-    log.info(f"      ├─ RAM: {memory_after_percent:.1f}% used ({memory_after_used // (1024**2)} MB)")
-    
-    # FIXED: Proper comparison with extracted values
-    if memory_freed_mb > 1.0:  # Only log if significant (> 1 MB)
-        log.info(f"      ├─ RAM freed: {memory_freed_mb:.1f} MB")
-    
-    if collected > 0:
-        log.info(f"      ├─ Objects collected: {collected}")
-    
-    if gpu_freed > 1.0:
-        log.info(f"      ├─ GPU freed: {gpu_freed:.1f} MB")
-    
-    # FIXED: Use extracted percentage values for comparison
-    if memory_after_percent > 85:
-        log.warning(f"      ⚠️  High memory usage: {memory_after_percent:.1f}%")
-        return "high"
-    elif memory_after_percent > 70:
-        log.warning(f"      ⚠️  Moderate memory usage: {memory_after_percent:.1f}%")
-        return "moderate"
-    else:
-        log.info(f"      ✅ Memory usage normal: {memory_after_percent:.1f}%")
-        return "normal"
-
-
-def handle_memory_crisis():
-    """Emergency memory cleanup when usage is critical."""
-    import gc
-    import psutil
-    
-    log.warning("🚨 MEMORY CRISIS - Applying emergency cleanup")
-    
-    try:
-        initial_memory = psutil.virtual_memory()
-        initial_percent = initial_memory.percent
-        log.info(f"   ├─ Initial memory: {initial_percent:.1f}%")
-        
-        # Step 1: Multiple aggressive garbage collection passes
-        total_collected = 0
-        for i in range(5):  # More aggressive - 5 passes
-            try:
-                collected = gc.collect()
-                total_collected += collected
-                if collected > 0:
-                    log.info(f"   ├─ GC pass {i+1}: {collected} objects collected")
-            except Exception as e:
-                log.debug(f"GC pass {i+1} failed: {e}")
-        
-        # Step 2: Clear all GPU memory
-        gpu_freed = 0
-        if torch and torch.cuda.is_available():
-            try:
-                gpu_before = torch.cuda.memory_allocated() / (1024**2)
-                torch.cuda.empty_cache()
-                torch.cuda.synchronize()
-                # torch.cuda.ipc_collect()  # This might not exist in all versions
-                gpu_after = torch.cuda.memory_allocated() / (1024**2)
-                gpu_freed = max(0, gpu_before - gpu_after)
-                log.info(f"   ├─ GPU memory freed: {gpu_freed:.1f} MB")
-            except Exception as e:
-                log.debug(f"   ├─ GPU cleanup failed: {e}")
-        
-        # Step 3: Clear Python internal caches
-        try:
-            import importlib
-            if hasattr(importlib, 'invalidate_caches'):
-                importlib.invalidate_caches()
-        except Exception as e:
-            log.debug(f"   ├─ Cache cleanup failed: {e}")
-        
-        # Step 4: Force memory compaction
-        try:
-            gc.set_debug(0)  # Disable debugging to save memory
-            gc.collect()
-        except Exception:
-            pass
-        
-        # Step 5: Check final memory
-        final_memory = psutil.virtual_memory()
-        final_percent = final_memory.percent
-        memory_freed_mb = (initial_memory.used - final_memory.used) / (1024**2)
-        
-        log.info(f"   ├─ Objects collected: {total_collected}")
-        log.info(f"   ├─ Memory freed: {memory_freed_mb:.1f} MB")
-        log.info(f"   └─ Final memory usage: {final_percent:.1f}%")
-        
-        return final_percent
-        
-    except Exception as e:
-        log.error(f"Memory crisis handling failed: {e}")
-        # Fallback: return a safe high value
-        try:
-            return psutil.virtual_memory().percent
-        except:
-            return 90.0  # Assume high usage if we can't measure
 
 def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> list[int]:
     """
     Download images using multithreading with comprehensive logging and progress tracking.
-    
+
     Enhanced with:
     - Real-time download statistics
     - URL validation and preprocessing
@@ -1460,12 +774,12 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
     - Retry mechanisms for failed downloads
     - File integrity verification
     - Memory-efficient processing
-    
+
     Args:
         df: DataFrame containing photo_url column
         img_dir: Directory to save downloaded images
         max_workers: Maximum number of concurrent download threads
-        
+
     Returns:
         List of successful indices for filtering downstream processing
     """
@@ -1475,9 +789,9 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
     from collections import defaultdict, Counter
     from urllib.parse import urlparse
     import threading
-    
+
     download_start = time.time()
-    
+
     # ------------------------------------------------------------------
     # Initialization and Validation
     # ------------------------------------------------------------------
@@ -1485,7 +799,7 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
     log.info(f"   Target directory: {img_dir}")
     log.info(f"   Max workers: {max_workers}")
     log.info(f"   Total URLs to process: {len(df):,}")
-    
+
     # Check if PyTorch/PIL available for image processing
     if not TORCH_AVAILABLE:
         log.warning("   ⚠️  PyTorch not available - skipping image downloads")
@@ -1497,7 +811,8 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
         try:
             num_jpgs = len(list(img_dir.glob("*.jpg")))
             if num_jpgs >= len(df):
-                log.info(f"   📦 Backup detected: {num_jpgs} images + existing embeddings → skipping downloads")
+                log.info(
+                    f"   📦 Backup detected: {num_jpgs} images + existing embeddings → skipping downloads")
                 return sorted(df.index.tolist())  # Return all indices as valid
         except Exception as e:
             log.warning(f"   ⚠️ Could not verify backup completeness: {e}")
@@ -1515,12 +830,12 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
     # URL Analysis and Preprocessing
     # ------------------------------------------------------------------
     log.info(f"\n   🔍 URL Analysis:")
-    
+
     with tqdm(total=3, desc="      ├─ Analyzing URLs", position=1, leave=False,
-             bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as analysis_pbar:
-        
+              bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as analysis_pbar:
+
         analysis_pbar.set_description("      ├─ Filtering valid URLs")
-        
+
         # Analyze URL patterns and validity
         url_analysis = {
             'total': len(df),
@@ -1531,39 +846,39 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
             'domains': Counter(),
             'extensions': Counter()
         }
-        
+
         valid_downloads = []
         skipped_existing = []
-        
+
         for idx, url in df['photo_url'].items():
             img_path = img_dir / f"{idx}.jpg"
-            
+
             # Check if already exists
             if img_path.exists():
                 url_analysis['already_exists'] += 1
                 skipped_existing.append(idx)
                 continue
-                
+
             # Validate URL format
             if not isinstance(url, str) or not url.strip():
                 url_analysis['empty_null'] += 1
                 continue
-                
+
             url = url.strip()
             if not url.startswith(('http://', 'https://')):
                 url_analysis['invalid_format'] += 1
                 continue
-                
+
             # URL is valid for download
             url_analysis['valid_http'] += 1
             valid_downloads.append((idx, url))
-            
+
             # Analyze domain and extension
             try:
                 parsed = urlparse(url)
                 domain = parsed.netloc.lower()
                 url_analysis['domains'][domain] += 1
-                
+
                 # Extract file extension from path
                 path_parts = parsed.path.lower().split('.')
                 if len(path_parts) > 1:
@@ -1571,69 +886,74 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
                     url_analysis['extensions'][ext] += 1
             except Exception:
                 pass
-        
+
         analysis_pbar.update(1)
-        
+
         analysis_pbar.set_description("      ├─ Generating statistics")
-        
+
         # Log URL analysis results
         log.info(f"      📊 URL Statistics:")
         log.info(f"      ├─ Total URLs: {url_analysis['total']:,}")
-        log.info(f"      ├─ Valid HTTP(S): {url_analysis['valid_http']:,} ({url_analysis['valid_http']/url_analysis['total']*100:.1f}%)")
+        log.info(
+            f"      ├─ Valid HTTP(S): {url_analysis['valid_http']:,} ({url_analysis['valid_http']/url_analysis['total']*100:.1f}%)")
         log.info(f"      ├─ Already exist: {url_analysis['already_exists']:,}")
-        log.info(f"      ├─ Invalid format: {url_analysis['invalid_format']:,}")
+        log.info(
+            f"      ├─ Invalid format: {url_analysis['invalid_format']:,}")
         log.info(f"      └─ Empty/null: {url_analysis['empty_null']:,}")
-        
+
         analysis_pbar.update(1)
-        
+
         # Show top domains
         if url_analysis['domains']:
             top_domains = url_analysis['domains'].most_common(5)
             log.info(f"      📊 Top Domains:")
             for domain, count in top_domains:
-                log.info(f"      ├─ {domain}: {count:,} images ({count/url_analysis['valid_http']*100:.1f}%)")
-        
+                log.info(
+                    f"      ├─ {domain}: {count:,} images ({count/url_analysis['valid_http']*100:.1f}%)")
+
         # Show file extensions
         if url_analysis['extensions']:
             top_extensions = url_analysis['extensions'].most_common(3)
             log.info(f"      📊 File Extensions:")
             for ext, count in top_extensions:
                 log.info(f"      ├─ .{ext}: {count:,}")
-        
+
         analysis_pbar.update(1)
 
     # Early exit if no downloads needed
     if not valid_downloads:
-        log.info(f"   ✅ No new downloads needed (all {url_analysis['already_exists']} images exist)")
+        log.info(
+            f"   ✅ No new downloads needed (all {url_analysis['already_exists']} images exist)")
         return skipped_existing
 
-    log.info(f"   🎯 Download Plan: {len(valid_downloads):,} new images to download")
+    log.info(
+        f"   🎯 Download Plan: {len(valid_downloads):,} new images to download")
 
     # ------------------------------------------------------------------
     # Download Execution with Enhanced Tracking
     # ------------------------------------------------------------------
     log.info(f"\n   🚀 Starting parallel downloads...")
-    
+
     # Shared statistics with thread safety
     stats_lock = threading.Lock()
     download_stats = {
         "downloaded": 0,
-        "exists": 0, 
+        "exists": 0,
         "invalid": 0,
         "failed": 0,
         "bytes_downloaded": 0,
         "retry_success": 0
     }
-    
+
     valid_indices = list(skipped_existing)  # Include pre-existing
     failed_urls = []
     download_times = []
-    
+
     def fetch_with_retry(idx_url, max_retries=2):
         """Enhanced fetch function with retry logic and detailed error handling"""
         idx, url = idx_url
         img_path = img_dir / f"{idx}.jpg"
-        
+
         # Double-check existence (race condition safety)
         if img_path.exists():
             with stats_lock:
@@ -1641,7 +961,7 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
                 download_stats["exists"] += 1
                 if stats_check > 0:
                     return "exists", idx, url, None, stats_check
-            
+
         # Validate URL format (redundant check for thread safety)
         if not isinstance(url, str) or not url.strip().startswith("http"):
             with stats_lock:
@@ -1652,7 +972,7 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
         last_error = None
         for attempt in range(max_retries + 1):
             fetch_start = time.time()
-            
+
             try:
                 # Configure request with better error handling
                 headers = {
@@ -1661,42 +981,42 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
                     'Accept-Encoding': 'gzip, deflate',
                     'Connection': 'keep-alive'
                 }
-                
+
                 resp = requests.get(
-                    url, 
+                    url,
                     timeout=15,  # Increased timeout
                     headers=headers,
                     allow_redirects=True,
                     stream=True  # For large images
                 )
                 resp.raise_for_status()
-                
+
                 # Check content type
                 content_type = resp.headers.get('content-type', '').lower()
                 if not any(img_type in content_type for img_type in ['image/', 'jpeg', 'jpg', 'png', 'gif']):
                     raise ValueError(f"Invalid content type: {content_type}")
-                
+
                 # Download with size validation
                 content = resp.content
                 if len(content) < 100:  # Minimum viable image size
                     raise ValueError(f"Image too small: {len(content)} bytes")
-                
+
                 if len(content) > 50 * 1024 * 1024:  # 50MB limit
                     raise ValueError(f"Image too large: {len(content)} bytes")
-                
+
                 # Write file atomically
                 temp_path = img_path.with_suffix('.tmp')
                 with open(temp_path, 'wb') as fh:
                     fh.write(content)
-                
+
                 # Verify file integrity
                 if os.path.getsize(temp_path) != len(content):
                     os.remove(temp_path)
                     raise ValueError("File size mismatch after write")
-                
+
                 # Atomic move to final location
                 temp_path.rename(img_path)
-                
+
                 # Update statistics
                 fetch_time = time.time() - fetch_start
                 with stats_lock:
@@ -1704,9 +1024,9 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
                         download_stats["retry_success"] += 1
                     download_stats["downloaded"] += 1
                     download_stats["bytes_downloaded"] += len(content)
-                
+
                 return "downloaded", idx, url, None, len(content), fetch_time
-                
+
             except requests.exceptions.Timeout:
                 last_error = f"Timeout after 15s (attempt {attempt+1})"
             except requests.exceptions.ConnectionError:
@@ -1720,15 +1040,15 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
                 break  # Don't retry validation errors
             except Exception as e:
                 last_error = f"Unexpected error: {str(e)[:50]} (attempt {attempt+1})"
-            
+
             # Brief pause before retry
             if attempt < max_retries:
                 time.sleep(0.5 * (attempt + 1))  # Exponential backoff
-        
+
         # All attempts failed
         with stats_lock:
             download_stats["failed"] += 1
-        
+
         return "failed", idx, url, last_error, 0
 
     # ------------------------------------------------------------------
@@ -1736,62 +1056,63 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
     # ------------------------------------------------------------------
     bandwidth_samples = []
     start_time = time.time()
-    
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submit all download tasks
-        futures = [executor.submit(fetch_with_retry, idx_url) 
-                  for idx_url in valid_downloads]
-        
+        futures = [executor.submit(fetch_with_retry, idx_url)
+                   for idx_url in valid_downloads]
+
         # Progress bar with real-time statistics
         progress_bar = tqdm(
-            as_completed(futures), 
+            as_completed(futures),
             total=len(futures),
             desc=f"      ├─ Downloading {img_dir.name}",
             position=1, leave=False,
             bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}] {rate_fmt}"
         )
-        
+
         completed = 0
         for future in progress_bar:
             completed += 1
             result = future.result()
-            
+
             # Unpack result (handle variable return length)
             if len(result) >= 5:
                 status, idx, url, error, size = result[:5]
                 fetch_time = result[5] if len(result) > 5 else 0
             else:
-                status, idx, url, error, size = result + (0,) * (5 - len(result))
+                status, idx, url, error, size = result + \
+                    (0,) * (5 - len(result))
                 fetch_time = 0
-            
+
             # Track successful downloads
             if status in {"downloaded", "exists"}:
                 valid_indices.append(idx)
-                
+
                 # Calculate bandwidth for downloaded files
                 if status == "downloaded" and fetch_time > 0 and size > 0:
                     bandwidth_mbps = (size / (1024 * 1024)) / fetch_time
                     bandwidth_samples.append(bandwidth_mbps)
                     download_times.append(fetch_time)
-            
+
             elif status == "failed":
                 failed_urls.append((idx, url, error))
-            
+
             # Update progress bar with live statistics
             current_time = time.time()
             elapsed = current_time - start_time
-            
+
             if elapsed > 0:
                 downloads_per_sec = completed / elapsed
-                
+
                 # Calculate current stats safely
                 with stats_lock:
                     current_stats = download_stats.copy()
-                
+
                 # Estimate completion
                 remaining = len(futures) - completed
                 eta_seconds = remaining / downloads_per_sec if downloads_per_sec > 0 else 0
-                
+
                 # Update progress description with live stats
                 progress_bar.set_postfix({
                     'Success': f"{current_stats['downloaded'] + current_stats['exists']}",
@@ -1804,10 +1125,11 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
     # Download Results Analysis
     # ------------------------------------------------------------------
     total_time = time.time() - download_start
-    
+
     log.info(f"\n   📊 DOWNLOAD RESULTS:")
     log.info(f"   ├─ Total processing time: {total_time:.1f}s")
-    log.info(f"   ├─ Successfully downloaded: {download_stats['downloaded']:,}")
+    log.info(
+        f"   ├─ Successfully downloaded: {download_stats['downloaded']:,}")
     log.info(f"   ├─ Already existed: {download_stats['exists']:,}")
     log.info(f"   ├─ Failed downloads: {download_stats['failed']:,}")
     log.info(f"   ├─ Invalid URLs: {download_stats['invalid']:,}")
@@ -1817,20 +1139,23 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
     total_attempted = download_stats['downloaded'] + download_stats['failed']
     if total_attempted > 0:
         success_rate = download_stats['downloaded'] / total_attempted * 100
-        log.info(f"   📈 Success rate: {success_rate:.1f}% ({download_stats['downloaded']}/{total_attempted})")
+        log.info(
+            f"   📈 Success rate: {success_rate:.1f}% ({download_stats['downloaded']}/{total_attempted})")
 
     # Performance metrics
     if download_stats['downloaded'] > 0:
         log.info(f"\n   ⚡ Performance Metrics:")
-        log.info(f"   ├─ Download speed: {download_stats['downloaded']/total_time:.1f} images/second")
-        log.info(f"   ├─ Data downloaded: {download_stats['bytes_downloaded']/(1024*1024):.1f} MB")
-        
+        log.info(
+            f"   ├─ Download speed: {download_stats['downloaded']/total_time:.1f} images/second")
+        log.info(
+            f"   ├─ Data downloaded: {download_stats['bytes_downloaded']/(1024*1024):.1f} MB")
+
         if bandwidth_samples:
             avg_bandwidth = sum(bandwidth_samples) / len(bandwidth_samples)
             max_bandwidth = max(bandwidth_samples)
             log.info(f"   ├─ Average bandwidth: {avg_bandwidth:.1f} MB/s")
             log.info(f"   └─ Peak bandwidth: {max_bandwidth:.1f} MB/s")
-        
+
         if download_times:
             avg_time = sum(download_times) / len(download_times)
             log.info(f"   └─ Average download time: {avg_time:.2f}s per image")
@@ -1840,11 +1165,11 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
     # ------------------------------------------------------------------
     if failed_urls:
         log.info(f"\n   ⚠️  Error Analysis ({len(failed_urls)} failures):")
-        
+
         # Categorize errors
         error_categories = defaultdict(int)
         error_examples = defaultdict(list)
-        
+
         for idx, url, error in failed_urls:
             # Categorize error types
             if not error:
@@ -1861,20 +1186,23 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
                 category = "Invalid Content"
             else:
                 category = "Other"
-            
+
             error_categories[category] += 1
-            if len(error_examples[category]) < 3:  # Keep max 3 examples per category
-                error_examples[category].append((idx, url[:50] + "..." if len(url) > 50 else url, error))
-        
+            # Keep max 3 examples per category
+            if len(error_examples[category]) < 3:
+                error_examples[category].append(
+                    (idx, url[:50] + "..." if len(url) > 50 else url, error))
+
         # Log error summary
         for category, count in sorted(error_categories.items(), key=lambda x: x[1], reverse=True):
             percentage = count / len(failed_urls) * 100
             log.info(f"   ├─ {category}: {count} ({percentage:.1f}%)")
-            
+
             # Show examples for major error categories
             if count >= 5 and error_examples[category]:
                 for idx, url_short, error in error_examples[category][:2]:
-                    log.info(f"   │  └─ Example: {url_short} - {error[:60]}...")
+                    log.info(
+                        f"   │  └─ Example: {url_short} - {error[:60]}...")
 
         # Save detailed error log
         fail_log_path = img_dir / "failed_downloads.txt"
@@ -1884,9 +1212,9 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
                 for idx, url, error in failed_urls:
                     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
                     f.write(f"{idx}\t{url}\t{error}\t{timestamp}\n")
-            
+
             log.info(f"   💾 Detailed error log saved to: {fail_log_path}")
-            
+
         except Exception as e:
             log.warning(f"   ⚠️  Failed to save error log: {e}")
 
@@ -1901,13 +1229,14 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
             if img_file.is_file():
                 total_size += img_file.stat().st_size
                 image_count += 1
-        
+
         if image_count > 0:
             log.info(f"\n   💾 Storage Summary:")
             log.info(f"   ├─ Images stored: {image_count:,}")
             log.info(f"   ├─ Total size: {total_size/(1024*1024):.1f} MB")
-            log.info(f"   └─ Average size: {total_size/(1024*1024)/image_count:.2f} MB per image")
-            
+            log.info(
+                f"   └─ Average size: {total_size/(1024*1024)/image_count:.2f} MB per image")
+
     except Exception as e:
         log.warning(f"   ⚠️  Storage analysis failed: {e}")
 
@@ -1916,7 +1245,8 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
     # ------------------------------------------------------------------
     total_valid = len(valid_indices)
     log.info(f"\n   🏁 DOWNLOAD COMPLETE:")
-    log.info(f"   ├─ Total valid images: {total_valid:,}/{len(df):,} ({total_valid/len(df)*100:.1f}%)")
+    log.info(
+        f"   ├─ Total valid images: {total_valid:,}/{len(df):,} ({total_valid/len(df)*100:.1f}%)")
     log.info(f"   ├─ Processing rate: {len(df)/total_time:.1f} URLs/second")
     log.info(f"   ├─ Thread efficiency: {max_workers} workers")
     log.info(f"   └─ Directory: {img_dir}")
@@ -1930,13 +1260,759 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
     return valid_indices
 
 
+def filter_low_quality_images(img_dir: Path, embeddings: np.ndarray, original_indices: list) -> tuple:
+    """Filter out low-quality images and return both embeddings AND indices."""
+    if embeddings.shape[0] == 0:
+        return embeddings, original_indices
+
+    # Calculate embedding statistics
+    variances = np.var(embeddings, axis=1)
+    means = np.mean(embeddings, axis=1)
+
+    # Remove embeddings with very low variance (likely blank/corrupted images)
+    variance_threshold = np.percentile(variances, 10)  # Bottom 10%
+
+    # Remove embeddings that are too similar to the mean (likely generic/placeholder images)
+    mean_threshold = np.percentile(means, 90)  # Top 10% of means
+
+    quality_mask = (variances > variance_threshold) & (means < mean_threshold)
+
+    if quality_mask.sum() > embeddings.shape[0] * 0.5:  # Keep at least 50%
+        filtered_embeddings = embeddings[quality_mask]
+        # CRITICAL FIX: Return the filtered indices too!
+        filtered_indices = [original_indices[i]
+                            for i in range(len(original_indices)) if quality_mask[i]]
+
+        log.info(
+            f"      ├─ Quality filtering: {len(filtered_indices)}/{len(original_indices)} images kept")
+        return filtered_embeddings, filtered_indices
+    else:
+        log.info(
+            f"      ├─ Quality filtering: Keeping all images (filter too aggressive)")
+        return embeddings, original_indices
+
+
+def load_datasets() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Load datasets into memory with comprehensive logging and progress tracking.
+
+    Enhanced with:
+    - Multi-stage progress bars for each loading phase
+    - Data validation and integrity checks
+    - Memory usage monitoring
+    - Schema validation and type checking
+    - Missing data analysis
+    - Performance metrics and timing
+    - Network error handling and retries
+    - Data quality assessment
+
+    Returns:
+        tuple: (silver_dataframe, gold_dataframe, recipes_dataframe)
+    """
+    import time
+    import psutil
+    import requests
+    from urllib.parse import urlparse
+    import warnings
+    from collections import Counter
+
+    load_start = time.time()
+
+    # ------------------------------------------------------------------
+    # Initialization and Configuration
+    # ------------------------------------------------------------------
+    log.info("\n📂 DATASET LOADING PIPELINE")
+    log.info(f"   Configuration: {len(CFG.url_map)} data sources")
+    log.info(f"   Data directory: {CFG.data_dir}")
+
+    # Log data source information
+    log.info(f"   📊 Data Sources:")
+    for name, url in CFG.url_map.items():
+        source_type = "URL" if url.startswith(
+            ('http://', 'https://')) else "Local"
+        log.info(f"   ├─ {name}: {source_type}")
+        if source_type == "URL":
+            log.info(f"   │  └─ {url}")
+        else:
+            log.info(f"   │  └─ {Path(url).resolve()}")
+
+    def log_memory_usage(stage: str):
+        """Helper to log current memory usage"""
+        memory = psutil.virtual_memory()
+        log.info(f"      💾 {stage}: {memory.percent:.1f}% memory used "
+                 f"({memory.used // (1024**2)} MB / {memory.total // (1024**2)} MB)")
+
+    # Track loading stages
+    loading_stages = ["Recipes", "Ground Truth",
+                      "Silver Labels", "Data Validation"]
+
+    # Main pipeline progress
+    pipeline_progress = tqdm(loading_stages, desc="   ├─ Loading Pipeline",
+                             position=0, leave=False,
+                             bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}]")
+
+    # ------------------------------------------------------------------
+    # STAGE 1: Load Recipes Dataset
+    # ------------------------------------------------------------------
+    pipeline_progress.set_description("   ├─ Loading Recipes")
+    stage_start = time.time()
+
+    log.info(f"\n   🍳 STAGE 1: LOADING RECIPES DATASET")
+
+    recipes_url = CFG.url_map["allrecipes.parquet"]
+    log.info(f"   ├─ Source: {recipes_url}")
+
+    with tqdm(total=4, desc="      ├─ Recipe Loading", position=1, leave=False,
+              bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as recipe_pbar:
+
+        recipe_pbar.set_description("      ├─ Validating source")
+
+        # Validate URL/path
+        if recipes_url.startswith(('http://', 'https://')):
+            try:
+                # Quick HEAD request to check if URL is accessible
+                response = requests.head(recipes_url, timeout=10)
+                response.raise_for_status()
+                log.info(f"      ├─ URL accessible: {response.status_code}")
+
+                # Get content length if available
+                content_length = response.headers.get('content-length')
+                if content_length:
+                    size_mb = int(content_length) / (1024 * 1024)
+                    log.info(
+                        f"      ├─ Expected download size: {size_mb:.1f} MB")
+
+            except requests.RequestException as e:
+                log.error(f"      ❌ URL validation failed: {e}")
+                raise RuntimeError(f"Cannot access recipes URL: {recipes_url}")
+        else:
+            # Local file validation
+            recipes_path = Path(recipes_url)
+            if not recipes_path.exists():
+                raise FileNotFoundError(
+                    f"Recipes file not found: {recipes_url}")
+
+            size_mb = recipes_path.stat().st_size / (1024 * 1024)
+            log.info(f"      ├─ Local file size: {size_mb:.1f} MB")
+
+        recipe_pbar.update(1)
+
+        recipe_pbar.set_description("      ├─ Reading parquet")
+        recipes_load_start = time.time()
+
+        try:
+            # Load with progress indication for large files
+            recipes = pd.read_parquet(recipes_url)
+
+        except Exception as e:
+            log.error(f"      ❌ Failed to load recipes: {str(e)[:100]}...")
+
+            # Try alternative approaches
+            if recipes_url.startswith(('http://', 'https://')):
+                log.info(f"      🔄 Attempting manual download...")
+                try:
+                    response = requests.get(
+                        recipes_url, stream=True, timeout=30)
+                    response.raise_for_status()
+
+                    # Save temporarily and load
+                    temp_path = Path("temp_recipes.parquet")
+                    with open(temp_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            f.write(chunk)
+
+                    recipes = pd.read_parquet(temp_path)
+                    temp_path.unlink()  # Clean up
+
+                except Exception as e2:
+                    log.error(f"      ❌ Manual download also failed: {e2}")
+                    raise RuntimeError(
+                        f"Failed to load recipes after retry: {e2}")
+            else:
+                raise
+
+        recipes_load_time = time.time() - recipes_load_start
+        recipe_pbar.update(1)
+
+        recipe_pbar.set_description("      ├─ Validating schema")
+
+        # Validate recipes schema
+        expected_columns = ['ingredients',
+                            'title', 'description', 'instructions']
+        missing_columns = [
+            col for col in expected_columns if col not in recipes.columns]
+
+        if missing_columns:
+            log.warning(
+                f"      ⚠️  Missing expected columns: {missing_columns}")
+
+        log.info(f"      📊 Recipes Dataset:")
+        log.info(f"      ├─ Shape: {recipes.shape}")
+        log.info(f"      ├─ Columns: {list(recipes.columns)}")
+        log.info(
+            f"      ├─ Memory usage: {recipes.memory_usage(deep=True).sum() / (1024**2):.1f} MB")
+        log.info(f"      └─ Load time: {recipes_load_time:.1f}s")
+
+        recipe_pbar.update(1)
+
+        recipe_pbar.set_description("      ├─ Data quality check")
+
+        # Quick data quality assessment
+        quality_stats = {
+            'total_rows': len(recipes),
+            'null_ingredients': recipes['ingredients'].isnull().sum(),
+            'empty_ingredients': (
+                recipes['ingredients']           # keep the original Series
+                .astype(str)              # lists/None → string form
+                .str.strip()              # remove surrounding whitespace
+                .eq('')                   # test for genuine empties
+                .sum()                    # count them
+            ) if 'ingredients' in recipes.columns else 0,
+            'null_titles': recipes['title'].isnull().sum() if 'title' in recipes.columns else 0,
+            'has_photo_url': 'photo_url' in recipes.columns,
+            'photo_url_count': (~recipes['photo_url'].isnull()).sum() if 'photo_url' in recipes.columns else 0
+        }
+
+        log.info(f"      📈 Data Quality:")
+        log.info(f"      ├─ Total recipes: {quality_stats['total_rows']:,}")
+        log.info(
+            f"      ├─ Null ingredients: {quality_stats['null_ingredients']:,}")
+        log.info(
+            f"      ├─ Empty ingredients: {quality_stats['empty_ingredients']:,}")
+
+        if quality_stats['has_photo_url']:
+            photo_pct = quality_stats['photo_url_count'] / \
+                quality_stats['total_rows'] * 100
+            log.info(
+                f"      └─ With photos: {quality_stats['photo_url_count']:,} ({photo_pct:.1f}%)")
+
+        recipe_pbar.update(1)
+
+    stage_time = time.time() - stage_start
+    log.info(f"   ✅ Recipes loaded successfully in {stage_time:.1f}s")
+    log_memory_usage("Recipes loaded")
+    pipeline_progress.update(1)
+
+    # ------------------------------------------------------------------
+    # STAGE 2: Load Ground Truth Dataset
+    # ------------------------------------------------------------------
+    pipeline_progress.set_description("   ├─ Loading Ground Truth")
+    stage_start = time.time()
+
+    log.info(f"\n   🎯 STAGE 2: LOADING GROUND TRUTH DATASET")
+
+    gt_url_or_path = CFG.url_map["ground_truth_sample.csv"]
+    log.info(f"   ├─ Source: {gt_url_or_path}")
+
+    with tqdm(total=4, desc="      ├─ Ground Truth Loading", position=1, leave=False,
+              bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as gt_pbar:
+
+        gt_pbar.set_description("      ├─ Path validation")
+
+        # Validate path - check for directory mistake
+        if Path(gt_url_or_path).is_dir():
+            log.error(
+                f"      ❌ Expected CSV file but found directory: {gt_url_or_path}")
+            raise RuntimeError(
+                f"Expected a CSV file but found a directory: {gt_url_or_path}")
+
+        # Check accessibility
+        if gt_url_or_path.startswith(('http://', 'https://')):
+            try:
+                response = requests.head(gt_url_or_path, timeout=10)
+                response.raise_for_status()
+                log.info(f"      ├─ URL accessible: {response.status_code}")
+            except requests.RequestException as e:
+                log.error(f"      ❌ Ground truth URL validation failed: {e}")
+                raise RuntimeError(
+                    f"Cannot access ground truth URL: {gt_url_or_path}")
+        else:
+            gt_path = Path(gt_url_or_path)
+            if not gt_path.exists():
+                raise FileNotFoundError(
+                    f"Ground truth file not found: {gt_url_or_path}")
+
+            size_kb = gt_path.stat().st_size / 1024
+            log.info(f"      ├─ File size: {size_kb:.1f} KB")
+
+        gt_pbar.update(1)
+
+        gt_pbar.set_description("      ├─ Reading CSV")
+        gt_load_start = time.time()
+
+        try:
+            # Load with error handling for encoding issues
+            try:
+                ground_truth = pd.read_csv(gt_url_or_path)
+            except UnicodeDecodeError:
+                log.warning(
+                    f"      ⚠️  UTF-8 decode failed, trying latin-1...")
+                ground_truth = pd.read_csv(gt_url_or_path, encoding='latin-1')
+            except pd.errors.EmptyDataError:
+                log.error(f"      ❌ Ground truth file is empty")
+                raise RuntimeError("Ground truth CSV file is empty")
+
+        except Exception as e:
+            log.error(
+                f"      ❌ Failed to load ground truth: {str(e)[:100]}...")
+            raise RuntimeError(f"Failed to load ground truth: {e}")
+
+        gt_load_time = time.time() - gt_load_start
+        gt_pbar.update(1)
+
+        gt_pbar.set_description("      ├─ Schema validation")
+
+        # Validate ground truth schema
+        required_gt_columns = ['ingredients']
+        missing_gt_columns = [
+            col for col in required_gt_columns if col not in ground_truth.columns]
+
+        if missing_gt_columns:
+            log.error(
+                f"      ❌ Missing required columns: {missing_gt_columns}")
+            raise ValueError(
+                f"Ground truth missing required columns: {missing_gt_columns}")
+
+        # Look for label columns
+        keto_columns = [
+            col for col in ground_truth.columns if 'keto' in col.lower()]
+        vegan_columns = [
+            col for col in ground_truth.columns if 'vegan' in col.lower()]
+
+        log.info(f"      📊 Ground Truth Dataset:")
+        log.info(f"      ├─ Shape: {ground_truth.shape}")
+        log.info(f"      ├─ Columns: {list(ground_truth.columns)}")
+        log.info(f"      ├─ Keto columns found: {keto_columns}")
+        log.info(f"      ├─ Vegan columns found: {vegan_columns}")
+        log.info(f"      └─ Load time: {gt_load_time:.2f}s")
+
+        gt_pbar.update(1)
+
+        gt_pbar.set_description("      ├─ Label processing")
+
+        # Process labels with error handling
+        try:
+            # Extract keto labels
+            if keto_columns:
+                ground_truth["label_keto"] = ground_truth.filter(
+                    regex="keto").iloc[:, 0].astype(int)
+                keto_positive = ground_truth["label_keto"].sum()
+                keto_rate = keto_positive / len(ground_truth) * 100
+                log.info(
+                    f"      ├─ Keto labels: {keto_positive}/{len(ground_truth)} ({keto_rate:.1f}% positive)")
+            else:
+                log.warning(
+                    f"      ⚠️  No keto columns found - creating dummy labels")
+                ground_truth["label_keto"] = 0
+
+            # Extract vegan labels
+            if vegan_columns:
+                ground_truth["label_vegan"] = ground_truth.filter(
+                    regex="vegan").iloc[:, 0].astype(int)
+                vegan_positive = ground_truth["label_vegan"].sum()
+                vegan_rate = vegan_positive / len(ground_truth) * 100
+                log.info(
+                    f"      ├─ Vegan labels: {vegan_positive}/{len(ground_truth)} ({vegan_rate:.1f}% positive)")
+            else:
+                log.warning(
+                    f"      ⚠️  No vegan columns found - creating dummy labels")
+                ground_truth["label_vegan"] = 0
+
+        except Exception as e:
+            log.error(f"      ❌ Label processing failed: {e}")
+            raise ValueError(f"Failed to process labels: {e}")
+
+        # Add photo_url if available
+        ground_truth["photo_url"] = ground_truth.get("photo_url")
+
+        # Clean ingredients text
+        with tqdm(total=1, desc="         ├─ Normalizing text", position=2, leave=False,
+                  bar_format="         ├─ {desc}: {percentage:3.0f}%|{bar}| [{elapsed}]") as norm_pbar:
+            ground_truth["clean"] = ground_truth.ingredients.fillna(
+                "").map(normalise)
+            norm_pbar.update(1)
+
+        gt_pbar.update(1)
+
+    stage_time = time.time() - stage_start
+    log.info(f"   ✅ Ground truth loaded successfully in {stage_time:.1f}s")
+    log_memory_usage("Ground truth loaded")
+    pipeline_progress.update(1)
+
+    # ------------------------------------------------------------------
+    # STAGE 3: Generate Silver Labels
+    # ------------------------------------------------------------------
+    pipeline_progress.set_description("   ├─ Generating Silver Labels")
+    stage_start = time.time()
+
+    log.info(f"\n   🥈 STAGE 3: GENERATING SILVER LABELS")
+
+    with tqdm(total=3, desc="      ├─ Silver Generation", position=1, leave=False,
+              bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as silver_pbar:
+
+        silver_pbar.set_description("      ├─ Building silver labels")
+        silver_start = time.time()
+
+        # Generate silver labels using heuristics
+        silver = build_silver(recipes)
+
+        silver_build_time = time.time() - silver_start
+        silver_pbar.update(1)
+
+        silver_pbar.set_description("      ├─ Adding photo URLs")
+
+        # Add photo URLs from recipes
+        silver["photo_url"] = recipes.get("photo_url")
+
+        # Calculate silver label statistics
+        silver_stats = {
+            'total': len(silver),
+            'keto_positive': silver['silver_keto'].sum() if 'silver_keto' in silver.columns else 0,
+            'vegan_positive': silver['silver_vegan'].sum() if 'silver_vegan' in silver.columns else 0,
+            'has_photos': (~silver['photo_url'].isnull()).sum() if 'photo_url' in silver.columns else 0
+        }
+
+        silver_pbar.update(1)
+
+        silver_pbar.set_description("      ├─ Quality assessment")
+
+        log.info(f"      📊 Silver Labels Generated:")
+        log.info(f"      ├─ Total recipes: {silver_stats['total']:,}")
+        log.info(
+            f"      ├─ Keto positive: {silver_stats['keto_positive']:,} ({silver_stats['keto_positive']/silver_stats['total']*100:.1f}%)")
+        log.info(
+            f"      ├─ Vegan positive: {silver_stats['vegan_positive']:,} ({silver_stats['vegan_positive']/silver_stats['total']*100:.1f}%)")
+        log.info(
+            f"      ├─ With photos: {silver_stats['has_photos']:,} ({silver_stats['has_photos']/silver_stats['total']*100:.1f}%)")
+        log.info(f"      └─ Generation time: {silver_build_time:.1f}s")
+
+        silver_pbar.update(1)
+
+    stage_time = time.time() - stage_start
+    log.info(f"   ✅ Silver labels generated successfully in {stage_time:.1f}s")
+    log_memory_usage("Silver labels generated")
+    pipeline_progress.update(1)
+
+    # ------------------------------------------------------------------
+    # STAGE 4: Data Validation and Cross-Checks
+    # ------------------------------------------------------------------
+    pipeline_progress.set_description("   ├─ Data Validation")
+    stage_start = time.time()
+
+    log.info(f"\n   ✅ STAGE 4: DATA VALIDATION AND CROSS-CHECKS")
+
+    with tqdm(total=5, desc="      ├─ Validation Checks", position=1, leave=False,
+              bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as val_pbar:
+
+        val_pbar.set_description("      ├─ Index alignment")
+
+        # Check index alignment between datasets
+        recipes_indices = set(recipes.index)
+        silver_indices = set(silver.index)
+        gt_indices = set(ground_truth.index)
+
+        if recipes_indices != silver_indices:
+            log.warning(f"      ⚠️  Index mismatch between recipes and silver")
+            log.info(f"         ├─ Recipes: {len(recipes_indices)} indices")
+            log.info(f"         └─ Silver: {len(silver_indices)} indices")
+
+        val_pbar.update(1)
+
+        val_pbar.set_description("      ├─ Data consistency")
+
+        # Check data consistency
+        consistency_issues = []
+
+        # Check for null ingredients in critical datasets
+        null_ingredients_recipes = recipes['ingredients'].isnull().sum()
+        null_ingredients_gt = ground_truth['ingredients'].isnull().sum()
+
+        if null_ingredients_recipes > 0:
+            consistency_issues.append(
+                f"Recipes has {null_ingredients_recipes} null ingredients")
+
+        if null_ingredients_gt > 0:
+            consistency_issues.append(
+                f"Ground truth has {null_ingredients_gt} null ingredients")
+
+        val_pbar.update(1)
+
+        val_pbar.set_description("      ├─ Memory optimization")
+
+        # Memory usage analysis
+        datasets_memory = {
+            'recipes': recipes.memory_usage(deep=True).sum() / (1024**2),
+            'silver': silver.memory_usage(deep=True).sum() / (1024**2),
+            'ground_truth': ground_truth.memory_usage(deep=True).sum() / (1024**2)
+        }
+
+        total_memory = sum(datasets_memory.values())
+
+        log.info(f"      💾 Memory Usage by Dataset:")
+        for dataset, memory_mb in datasets_memory.items():
+            log.info(f"      ├─ {dataset.capitalize()}: {memory_mb:.1f} MB")
+        log.info(f"      └─ Total: {total_memory:.1f} MB")
+
+        val_pbar.update(1)
+
+        val_pbar.set_description("      ├─ Label distribution")
+
+        # Compare label distributions
+        if len(ground_truth) > 0:
+            gt_keto_rate = ground_truth['label_keto'].mean() * 100
+            gt_vegan_rate = ground_truth['label_vegan'].mean() * 100
+            silver_keto_rate = silver['silver_keto'].mean() * 100
+            silver_vegan_rate = silver['silver_vegan'].mean() * 100
+
+            log.info(f"      📊 Label Distribution Comparison:")
+            log.info(
+                f"      ├─ Keto: Gold={gt_keto_rate:.1f}%, Silver={silver_keto_rate:.1f}%")
+            log.info(
+                f"      └─ Vegan: Gold={gt_vegan_rate:.1f}%, Silver={silver_vegan_rate:.1f}%")
+
+            # Flag significant differences
+            keto_diff = abs(gt_keto_rate - silver_keto_rate)
+            vegan_diff = abs(gt_vegan_rate - silver_vegan_rate)
+
+            if keto_diff > 20:
+                log.warning(
+                    f"      ⚠️  Large keto distribution difference: {keto_diff:.1f}%")
+            if vegan_diff > 20:
+                log.warning(
+                    f"      ⚠️  Large vegan distribution difference: {vegan_diff:.1f}%")
+
+        val_pbar.update(1)
+
+        val_pbar.set_description("      ├─ Final validation")
+
+        # Final validation summary
+        validation_summary = {
+            'recipes_loaded': len(recipes) > 0,
+            'ground_truth_loaded': len(ground_truth) > 0,
+            'silver_generated': len(silver) > 0,
+            'required_columns_present': all(col in recipes.columns for col in ['ingredients']),
+            'labels_processed': 'label_keto' in ground_truth.columns and 'label_vegan' in ground_truth.columns,
+            'consistency_issues': len(consistency_issues)
+        }
+
+        all_valid = all(validation_summary[key] for key in [
+                        'recipes_loaded', 'ground_truth_loaded', 'silver_generated', 'required_columns_present', 'labels_processed'])
+
+        log.info(f"      ✅ Validation Summary:")
+        for check, status in validation_summary.items():
+            if isinstance(status, bool):
+                status_icon = "✅" if status else "❌"
+                log.info(
+                    f"      ├─ {check.replace('_', ' ').title()}: {status_icon}")
+            else:
+                log.info(
+                    f"      ├─ {check.replace('_', ' ').title()}: {status}")
+
+        if consistency_issues:
+            log.warning(f"      ⚠️  Consistency Issues Found:")
+            for issue in consistency_issues:
+                log.warning(f"      │  └─ {issue}")
+
+        if not all_valid:
+            raise RuntimeError(
+                "Dataset validation failed - see logs for details")
+
+        val_pbar.update(1)
+
+    stage_time = time.time() - stage_start
+    log.info(f"   ✅ Data validation completed in {stage_time:.1f}s")
+    log_memory_usage("Validation complete")
+    pipeline_progress.update(1)
+
+    # ------------------------------------------------------------------
+    # Pipeline Completion Summary
+    # ------------------------------------------------------------------
+    total_time = time.time() - load_start
+
+    log.info(f"\n🏁 DATASET LOADING COMPLETE")
+    log.info(f"   ├─ Total loading time: {total_time:.1f}s")
+    log.info(f"   ├─ Datasets loaded: 3 (recipes, ground_truth, silver)")
+    log.info(f"   ├─ Total memory usage: {total_memory:.1f} MB")
+    log.info(f"   └─ All validations passed: ✅")
+
+    # Final dataset summary
+    log.info(f"\n   📋 Final Dataset Summary:")
+    log.info(
+        f"   ├─ Recipes: {len(recipes):,} rows × {len(recipes.columns)} columns")
+    log.info(
+        f"   ├─ Ground Truth: {len(ground_truth):,} rows × {len(ground_truth.columns)} columns")
+    log.info(
+        f"   ├─ Silver Labels: {len(silver):,} rows × {len(silver.columns)} columns")
+    log.info(f"   └─ Ready for ML pipeline: ✅")
+
+    # Garbage collection for memory optimization
+    import gc
+    gc.collect()
+
+    return silver, ground_truth, recipes
+
+
+
+# ============================================================================
+# MEMORY OPTIMIZATION
+# ============================================================================
+
+def optimize_memory_usage(stage_name=""):
+    """Optimize memory usage during training with detailed logging."""
+    import gc
+    import psutil
+
+    # Get memory before cleanup - FIXED: Ensure we get the object properly
+    try:
+        memory_before = psutil.virtual_memory()
+        memory_before_used = memory_before.used  # Extract the actual value
+        memory_before_percent = memory_before.percent
+    except Exception as e:
+        log.error(f"Failed to get initial memory stats: {e}")
+        return "error"
+
+    # Force garbage collection
+    try:
+        collected = gc.collect()
+    except Exception as e:
+        log.debug(f"Garbage collection failed: {e}")
+        collected = 0
+
+    # Clear GPU cache if available
+    gpu_freed = 0
+    if torch and torch.cuda.is_available():
+        try:
+            gpu_before = torch.cuda.memory_allocated() / (1024**2)  # MB
+            torch.cuda.empty_cache()
+            gpu_after = torch.cuda.memory_allocated() / (1024**2)  # MB
+            gpu_freed = max(0, gpu_before - gpu_after)  # Ensure non-negative
+        except Exception as e:
+            log.debug(f"GPU memory cleanup failed: {e}")
+            gpu_freed = 0
+
+    # Get memory after cleanup - FIXED: Proper handling
+    try:
+        memory_after = psutil.virtual_memory()
+        memory_after_used = memory_after.used  # Extract the actual value
+        memory_after_percent = memory_after.percent
+
+        # FIXED: Calculate memory freed properly
+        memory_freed_bytes = max(0, memory_before_used - memory_after_used)
+        memory_freed_mb = memory_freed_bytes / (1024**2)  # Convert to MB
+
+    except Exception as e:
+        log.error(f"Failed to get final memory stats: {e}")
+        return "error"
+
+    # Log results
+    stage_prefix = f"{stage_name}: " if stage_name else ""
+    log.info(f"   🧹 {stage_prefix}Memory cleanup")
+    log.info(
+        f"      ├─ RAM: {memory_after_percent:.1f}% used ({memory_after_used // (1024**2)} MB)")
+
+    # FIXED: Proper comparison with extracted values
+    if memory_freed_mb > 1.0:  # Only log if significant (> 1 MB)
+        log.info(f"      ├─ RAM freed: {memory_freed_mb:.1f} MB")
+
+    if collected > 0:
+        log.info(f"      ├─ Objects collected: {collected}")
+
+    if gpu_freed > 1.0:
+        log.info(f"      ├─ GPU freed: {gpu_freed:.1f} MB")
+
+    # FIXED: Use extracted percentage values for comparison
+    if memory_after_percent > 85:
+        log.warning(
+            f"      ⚠️  High memory usage: {memory_after_percent:.1f}%")
+        return "high"
+    elif memory_after_percent > 70:
+        log.warning(
+            f"      ⚠️  Moderate memory usage: {memory_after_percent:.1f}%")
+        return "moderate"
+    else:
+        log.info(f"      ✅ Memory usage normal: {memory_after_percent:.1f}%")
+        return "normal"
+
+
+def handle_memory_crisis():
+    """Emergency memory cleanup when usage is critical."""
+    import gc
+    import psutil
+
+    log.warning("🚨 MEMORY CRISIS - Applying emergency cleanup")
+
+    try:
+        initial_memory = psutil.virtual_memory()
+        initial_percent = initial_memory.percent
+        log.info(f"   ├─ Initial memory: {initial_percent:.1f}%")
+
+        # Step 1: Multiple aggressive garbage collection passes
+        total_collected = 0
+        for i in range(5):  # More aggressive - 5 passes
+            try:
+                collected = gc.collect()
+                total_collected += collected
+                if collected > 0:
+                    log.info(
+                        f"   ├─ GC pass {i+1}: {collected} objects collected")
+            except Exception as e:
+                log.debug(f"GC pass {i+1} failed: {e}")
+
+        # Step 2: Clear all GPU memory
+        gpu_freed = 0
+        if torch and torch.cuda.is_available():
+            try:
+                gpu_before = torch.cuda.memory_allocated() / (1024**2)
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+                # torch.cuda.ipc_collect()  # This might not exist in all versions
+                gpu_after = torch.cuda.memory_allocated() / (1024**2)
+                gpu_freed = max(0, gpu_before - gpu_after)
+                log.info(f"   ├─ GPU memory freed: {gpu_freed:.1f} MB")
+            except Exception as e:
+                log.debug(f"   ├─ GPU cleanup failed: {e}")
+
+        # Step 3: Clear Python internal caches
+        try:
+            import importlib
+            if hasattr(importlib, 'invalidate_caches'):
+                importlib.invalidate_caches()
+        except Exception as e:
+            log.debug(f"   ├─ Cache cleanup failed: {e}")
+
+        # Step 4: Force memory compaction
+        try:
+            gc.set_debug(0)  # Disable debugging to save memory
+            gc.collect()
+        except Exception:
+            pass
+
+        # Step 5: Check final memory
+        final_memory = psutil.virtual_memory()
+        final_percent = final_memory.percent
+        memory_freed_mb = (initial_memory.used - final_memory.used) / (1024**2)
+
+        log.info(f"   ├─ Objects collected: {total_collected}")
+        log.info(f"   ├─ Memory freed: {memory_freed_mb:.1f} MB")
+        log.info(f"   └─ Final memory usage: {final_percent:.1f}%")
+
+        return final_percent
+
+    except Exception as e:
+        log.error(f"Memory crisis handling failed: {e}")
+        # Fallback: return a safe high value
+        try:
+            return psutil.virtual_memory().percent
+        except:
+            return 90.0  # Assume high usage if we can't measure
+
 
 def build_image_embeddings(df: pd.DataFrame,
                            mode: str,
-                           force: bool = False) -> Tuple[np.ndarray, List[int]]:    
+                           force: bool = False) -> Tuple[np.ndarray, List[int]]:
     """
     Extract ResNet-50 embeddings for images with comprehensive logging and progress tracking.
-    
+
     Enhanced with:
     - Multi-stage progress bars for cache loading, model setup, and embedding extraction
     - Detailed model performance monitoring (GPU/CPU usage, throughput)
@@ -1946,12 +2022,12 @@ def build_image_embeddings(df: pd.DataFrame,
     - Comprehensive error categorization
     - Backup and recovery mechanisms
     - Image quality analysis
-    
+
     Args:
         df: DataFrame with image indices
         mode: Mode identifier ('silver', 'gold', etc.)
         force: Force recomputation even if cache exists
-        
+
     Returns:
         numpy array of shape (len(df), 2048) with ResNet-50 features
     """
@@ -1961,9 +2037,9 @@ def build_image_embeddings(df: pd.DataFrame,
     from collections import defaultdict, Counter
     from PIL import ImageStat
     import gc
-    
+
     embedding_start = time.time()
-    
+
     # ------------------------------------------------------------------
     # Initialization and System Check
     # ------------------------------------------------------------------
@@ -1971,12 +2047,12 @@ def build_image_embeddings(df: pd.DataFrame,
     log.info(f"   Target images: {len(df):,}")
     log.info(f"   Mode: {mode}")
     log.info(f"   Force recomputation: {force}")
-    
+
     # Check PyTorch availability
     if not TORCH_AVAILABLE:
         log.warning("   ❌ PyTorch not available - returning zero vectors")
         log.info(f"   └─ Zero vector shape: ({len(df)}, 2048)")
-        return np.zeros((len(df), 2048), dtype=np.float32), list(df.index)  
+        return np.zeros((len(df), 2048), dtype=np.float32), list(df.index)
 
     # Check GPU availability and setup
     device_info = {
@@ -1985,7 +2061,7 @@ def build_image_embeddings(df: pd.DataFrame,
         'device_count': torch.cuda.device_count() if torch.cuda.is_available() else 0,
         'device_name': torch.cuda.get_device_name() if torch.cuda.is_available() else 'CPU'
     }
-    
+
     log.info(f"   🔧 Device Configuration:")
     log.info(f"   ├─ Device: {device_info['device']}")
     log.info(f"   ├─ CUDA available: {device_info['cuda_available']}")
@@ -2011,54 +2087,62 @@ def build_image_embeddings(df: pd.DataFrame,
     # ------------------------------------------------------------------
     if not force:
         log.info(f"\n   🔍 Cache Validation:")
-        
+
         cache_options = [
             ("Primary cache", embed_path),
             ("Backup cache", backup_path)
         ]
-        
+
         with tqdm(cache_options, desc="      ├─ Checking caches", position=1, leave=False,
-                 bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as cache_pbar:
-            
+                  bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as cache_pbar:
+
             for cache_name, cache_path in cache_pbar:
-                cache_pbar.set_description(f"      ├─ Checking {cache_name.lower()}")
-                
+                cache_pbar.set_description(
+                    f"      ├─ Checking {cache_name.lower()}")
+
                 if cache_path.exists():
                     try:
                         cache_start = time.time()
                         emb = np.load(cache_path)
                         load_time = time.time() - cache_start
-                        
-                        log.info(f"      ├─ {cache_name}: Found ({emb.shape}) - loaded in {load_time:.2f}s")
-                        
+
+                        log.info(
+                            f"      ├─ {cache_name}: Found ({emb.shape}) - loaded in {load_time:.2f}s")
+
                         if emb.shape[0] == len(df):
-                            log.info(f"      ✅ {cache_name} matches target size - using cached embeddings")
-                            
+                            log.info(
+                                f"      ✅ {cache_name} matches target size - using cached embeddings")
+
                             # Load metadata if available
                             if metadata_path.exists():
                                 try:
                                     with open(metadata_path, 'r') as f:
                                         metadata = json.load(f)
-                                    log.info(f"      ├─ Cache metadata: {metadata.get('creation_time', 'Unknown time')}")
+                                    log.info(
+                                        f"      ├─ Cache metadata: {metadata.get('creation_time', 'Unknown time')}")
                                     log.info(f"      └─ Original stats: {metadata.get('success', '?')} success, "
-                                            f"{metadata.get('failed', '?')} failed")
+                                             f"{metadata.get('failed', '?')} failed")
                                 except Exception as e:
-                                    log.debug(f"      └─ Metadata load failed: {e}")
-                            
-                            return emb, list(df.index)   
-                            
+                                    log.debug(
+                                        f"      └─ Metadata load failed: {e}")
+
+                            return emb, list(df.index)
+
                         else:
-                            log.warning(f"      ⚠️  {cache_name} size mismatch: {emb.shape[0]} != {len(df)}")
-                            
+                            log.warning(
+                                f"      ⚠️  {cache_name} size mismatch: {emb.shape[0]} != {len(df)}")
+
                             # ──────────────────────────────────────────────────────────────
                             # 4️⃣  Primary / backup-cache: truncate oversize cache
                             # ──────────────────────────────────────────────────────────────
                             if emb.shape[0] > len(df):
-                                log.info(f"      ├─ Truncating cache from {emb.shape[0]} to {len(df)}")
-                                return emb[:len(df)], list(df.index)               
-                                
+                                log.info(
+                                    f"      ├─ Truncating cache from {emb.shape[0]} to {len(df)}")
+                                return emb[:len(df)], list(df.index)
+
                     except Exception as e:
-                        log.error(f"      ❌ {cache_name} load failed: {str(e)[:60]}...")
+                        log.error(
+                            f"      ❌ {cache_name} load failed: {str(e)[:60]}...")
                 else:
                     log.info(f"      ├─ {cache_name}: Not found")
 
@@ -2071,17 +2155,17 @@ def build_image_embeddings(df: pd.DataFrame,
     # Pre-processing Analysis
     # ------------------------------------------------------------------
     log.info(f"\n   📊 Pre-processing Analysis:")
-    
+
     with tqdm(total=3, desc="      ├─ Analyzing images", position=1, leave=False,
-             bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as analysis_pbar:
-        
+              bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as analysis_pbar:
+
         analysis_pbar.set_description("      ├─ Scanning directory")
-        
+
         # Check which images exist
         existing_images = []
         missing_images = []
         corrupted_images = []
-        
+
         for idx in df.index:
             img_file = img_dir / f"{idx}.jpg"
             if img_file.exists():
@@ -2094,89 +2178,101 @@ def build_image_embeddings(df: pd.DataFrame,
                     corrupted_images.append(idx)
             else:
                 missing_images.append(idx)
-        
+
         analysis_pbar.update(1)
-        
+
         analysis_pbar.set_description("      ├─ Computing statistics")
-        
+
         # Calculate statistics
         total_images = len(df)
         existing_count = len(existing_images)
         missing_count = len(missing_images)
         corrupted_count = len(corrupted_images)
-        
+
         log.info(f"      📈 Image Availability:")
         log.info(f"      ├─ Total expected: {total_images:,}")
-        log.info(f"      ├─ Available: {existing_count:,} ({existing_count/total_images*100:.1f}%)")
-        log.info(f"      ├─ Missing: {missing_count:,} ({missing_count/total_images*100:.1f}%)")
-        log.info(f"      └─ Corrupted: {corrupted_count:,} ({corrupted_count/total_images*100:.1f}%)")
-        
+        log.info(
+            f"      ├─ Available: {existing_count:,} ({existing_count/total_images*100:.1f}%)")
+        log.info(
+            f"      ├─ Missing: {missing_count:,} ({missing_count/total_images*100:.1f}%)")
+        log.info(
+            f"      └─ Corrupted: {corrupted_count:,} ({corrupted_count/total_images*100:.1f}%)")
+
         analysis_pbar.update(1)
-        
+
         # Sample image analysis
         analysis_pbar.set_description("      ├─ Sampling quality")
-        
+
         if existing_images:
             sample_size = min(100, len(existing_images))
-            sample_indices = np.random.choice(existing_images, sample_size, replace=False)
-            
+            sample_indices = np.random.choice(
+                existing_images, sample_size, replace=False)
+
             image_stats = {
                 'sizes': [],
                 'modes': Counter(),
                 'formats': Counter(),
                 'file_sizes': []
             }
-            
-            for idx in sample_indices[:10]:  # Analyze first 10 for detailed stats
+
+            # Analyze first 10 for detailed stats
+            for idx in sample_indices[:10]:
                 img_file = img_dir / f"{idx}.jpg"
                 try:
                     with Image.open(img_file) as img:
                         image_stats['sizes'].append(img.size)
                         image_stats['modes'][img.mode] += 1
                         image_stats['formats'][img.format] += 1
-                        image_stats['file_sizes'].append(img_file.stat().st_size)
+                        image_stats['file_sizes'].append(
+                            img_file.stat().st_size)
                 except Exception:
                     pass
-            
+
             if image_stats['sizes']:
-                avg_width = sum(s[0] for s in image_stats['sizes']) / len(image_stats['sizes'])
-                avg_height = sum(s[1] for s in image_stats['sizes']) / len(image_stats['sizes'])
-                avg_file_size = sum(image_stats['file_sizes']) / len(image_stats['file_sizes'])
-                
-                log.info(f"      📊 Sample Analysis ({len(image_stats['sizes'])} images):")
-                log.info(f"      ├─ Average size: {avg_width:.0f}×{avg_height:.0f} pixels")
-                log.info(f"      ├─ Average file size: {avg_file_size/1024:.1f} KB")
+                avg_width = sum(s[0] for s in image_stats['sizes']
+                                ) / len(image_stats['sizes'])
+                avg_height = sum(
+                    s[1] for s in image_stats['sizes']) / len(image_stats['sizes'])
+                avg_file_size = sum(
+                    image_stats['file_sizes']) / len(image_stats['file_sizes'])
+
+                log.info(
+                    f"      📊 Sample Analysis ({len(image_stats['sizes'])} images):")
+                log.info(
+                    f"      ├─ Average size: {avg_width:.0f}×{avg_height:.0f} pixels")
+                log.info(
+                    f"      ├─ Average file size: {avg_file_size/1024:.1f} KB")
                 log.info(f"      ├─ Color modes: {dict(image_stats['modes'])}")
                 log.info(f"      └─ Formats: {dict(image_stats['formats'])}")
-        
+
         analysis_pbar.update(1)
 
     # ------------------------------------------------------------------
     # Model Setup and Initialization
     # ------------------------------------------------------------------
     log.info(f"\n   🤖 Model Setup:")
-    
+
     with tqdm(total=4, desc="      ├─ Loading model", position=1, leave=False,
-             bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as model_pbar:
-        
+              bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as model_pbar:
+
         model_pbar.set_description("      ├─ Loading ResNet-50")
         model_start = time.time()
-        
+
         # Load pre-trained ResNet-50
         model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
         model_pbar.update(1)
-        
+
         model_pbar.set_description("      ├─ Modifying architecture")
         # Remove classification head for feature extraction
         model.fc = torch.nn.Identity()
         model.eval()
         model_pbar.update(1)
-        
+
         model_pbar.set_description("      ├─ Moving to device")
         model.to(device_info['device'])
         model_time = time.time() - model_start
         model_pbar.update(1)
-        
+
         model_pbar.set_description("      ├─ Setting up preprocessing")
         # Standard ImageNet preprocessing
         preprocess = transforms.Compose([
@@ -2184,7 +2280,7 @@ def build_image_embeddings(df: pd.DataFrame,
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                               std=[0.229, 0.224, 0.225]),
+                                 std=[0.229, 0.224, 0.225]),
         ])
         model_pbar.update(1)
 
@@ -2192,7 +2288,8 @@ def build_image_embeddings(df: pd.DataFrame,
     log.info(f"      ├─ Architecture: ResNet-50 (feature extractor)")
     log.info(f"      ├─ Output dimension: 2048")
     log.info(f"      ├─ Device: {device_info['device']}")
-    log.info(f"      └─ Parameters: {sum(p.numel() for p in model.parameters()):,}")
+    log.info(
+        f"      └─ Parameters: {sum(p.numel() for p in model.parameters()):,}")
 
     # Memory usage after model loading
     if device_info['cuda_available']:
@@ -2203,41 +2300,44 @@ def build_image_embeddings(df: pd.DataFrame,
     # Embedding Extraction with Detailed Progress
     # ------------------------------------------------------------------
     log.info(f"\n   ⚡ Feature Extraction:")
-    
+
     vectors = []
     processing_stats = {
         'success': 0,
-        'missing': 0, 
+        'missing': 0,
         'failed': 0,
         'processing_times': [],
         'error_types': Counter(),
         'batch_times': []
     }
-    
+
     failed_details = []
-    
+
     # Determine batch size based on available memory
     if device_info['cuda_available']:
         # Estimate batch size based on GPU memory
-        gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-        batch_size = max(1, min(32, int(gpu_memory_gb * 2)))  # Conservative estimate
+        gpu_memory_gb = torch.cuda.get_device_properties(
+            0).total_memory / (1024**3)
+        batch_size = max(1, min(32, int(gpu_memory_gb * 2))
+                         )  # Conservative estimate
     else:
         batch_size = 8  # Conservative CPU batch size
-    
+
     log.info(f"      🔧 Processing Configuration:")
     log.info(f"      ├─ Batch size: {batch_size}")
-    log.info(f"      ├─ Total batches: {(len(df) + batch_size - 1) // batch_size}")
+    log.info(
+        f"      ├─ Total batches: {(len(df) + batch_size - 1) // batch_size}")
     log.info(f"      └─ Expected output shape: ({len(df)}, 2048)")
 
     # Main processing loop with progress tracking
-    with tqdm(df.index, desc=f"      ├─ Extracting {mode} embeddings", 
-             position=1, leave=False,
-             bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}] {rate_fmt}") as extract_pbar:
-        
+    with tqdm(df.index, desc=f"      ├─ Extracting {mode} embeddings",
+              position=1, leave=False,
+              bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}] {rate_fmt}") as extract_pbar:
+
         for i, idx in enumerate(extract_pbar):
             process_start = time.time()
             img_file = img_dir / f"{idx}.jpg"
-            
+
             # Update progress bar description periodically
             if i % 100 == 0:
                 success_rate = processing_stats['success'] / max(1, i) * 100
@@ -2247,56 +2347,62 @@ def build_image_embeddings(df: pd.DataFrame,
                     'Missing': f"{processing_stats['missing']}",
                     'Rate': f"{success_rate:.1f}%"
                 })
-            
+
             # Check if image exists
             if not img_file.exists():
                 processing_stats['missing'] += 1
                 vectors.append(np.zeros(2048, dtype=np.float32))
                 continue
-                
+
             try:
                 # Load and preprocess image
                 img = Image.open(img_file).convert('RGB')
-                
+
                 # Optional: Log image properties for first few images
                 if processing_stats['success'] < 5:
-                    log.debug(f"         ├─ Processing {img_file.name}: {img.size} {img.mode}")
-                
+                    log.debug(
+                        f"         ├─ Processing {img_file.name}: {img.size} {img.mode}")
+
                 with torch.no_grad():
                     # Preprocess and add batch dimension
-                    tensor = preprocess(img).unsqueeze(0).to(device_info['device'])
-                    
+                    tensor = preprocess(img).unsqueeze(
+                        0).to(device_info['device'])
+
                     # Extract features
                     features = model(tensor).squeeze().cpu().numpy()
-                    
+
                     # Validate output shape
                     if features.shape != (2048,):
-                        raise ValueError(f"Unexpected feature shape: {features.shape}")
-                
+                        raise ValueError(
+                            f"Unexpected feature shape: {features.shape}")
+
                 vectors.append(features)
                 processing_stats['success'] += 1
-                
+
                 # Track processing time
                 process_time = time.time() - process_start
                 processing_stats['processing_times'].append(process_time)
-                
+
             except Exception as e:
                 processing_stats['failed'] += 1
-                
+
                 # Categorize error type
                 error_type = type(e).__name__
                 processing_stats['error_types'][error_type] += 1
-                
+
                 # Log detailed error info
-                error_msg = str(e)[:100] + "..." if len(str(e)) > 100 else str(e)
+                error_msg = str(e)[:100] + \
+                    "..." if len(str(e)) > 100 else str(e)
                 failed_details.append((idx, img_file, error_type, error_msg))
-                
-                if processing_stats['failed'] <= 5:  # Log first few errors in detail
-                    log.warning(f"         ❌ Failed {img_file.name}: {error_type} - {error_msg}")
-                
+
+                # Log first few errors in detail
+                if processing_stats['failed'] <= 5:
+                    log.warning(
+                        f"         ❌ Failed {img_file.name}: {error_type} - {error_msg}")
+
                 # Add zero vector for failed processing
                 vectors.append(np.zeros(2048, dtype=np.float32))
-            
+
             # Periodic memory cleanup
             if i % 1000 == 0 and i > 0:
                 gc.collect()
@@ -2308,19 +2414,21 @@ def build_image_embeddings(df: pd.DataFrame,
     # Post-processing and Results Analysis
     # ------------------------------------------------------------------
     extraction_time = time.time() - embedding_start
-    
+
     log.info(f"\n   📊 Extraction Results:")
     log.info(f"   ├─ Total processing time: {extraction_time:.1f}s")
     log.info(f"   ├─ Successfully processed: {processing_stats['success']:,}")
     log.info(f"   ├─ Missing images: {processing_stats['missing']:,}")
     log.info(f"   ├─ Failed processing: {processing_stats['failed']:,}")
-    log.info(f"   └─ Overall success rate: {processing_stats['success']/len(df)*100:.1f}%")
+    log.info(
+        f"   └─ Overall success rate: {processing_stats['success']/len(df)*100:.1f}%")
 
     # Performance metrics
     if processing_stats['processing_times']:
-        avg_time = sum(processing_stats['processing_times']) / len(processing_stats['processing_times'])
+        avg_time = sum(processing_stats['processing_times']) / \
+            len(processing_stats['processing_times'])
         throughput = processing_stats['success'] / extraction_time
-        
+
         log.info(f"   ⚡ Performance Metrics:")
         log.info(f"   ├─ Average processing time: {avg_time:.3f}s per image")
         log.info(f"   ├─ Throughput: {throughput:.1f} images/second")
@@ -2330,11 +2438,11 @@ def build_image_embeddings(df: pd.DataFrame,
     if processing_stats['failed'] > 0:
         log.info(f"   ⚠️  Error Analysis:")
         total_errors = sum(processing_stats['error_types'].values())
-        
+
         for error_type, count in processing_stats['error_types'].most_common():
             percentage = count / total_errors * 100
             log.info(f"   ├─ {error_type}: {count} ({percentage:.1f}%)")
-        
+
         # Save detailed error log
         if failed_details:
             error_log_path = img_dir / "embedding_errors.txt"
@@ -2342,7 +2450,8 @@ def build_image_embeddings(df: pd.DataFrame,
                 with open(error_log_path, "w") as f:
                     f.write("Index\tFile\tErrorType\tErrorMessage\n")
                     for idx, img_file, error_type, error_msg in failed_details:
-                        f.write(f"{idx}\t{img_file.name}\t{error_type}\t{error_msg}\n")
+                        f.write(
+                            f"{idx}\t{img_file.name}\t{error_type}\t{error_msg}\n")
                 log.info(f"   💾 Error details saved to: {error_log_path}")
             except Exception as e:
                 log.warning(f"   ⚠️  Failed to save error log: {e}")
@@ -2351,25 +2460,25 @@ def build_image_embeddings(df: pd.DataFrame,
     # Save Results and Metadata
     # ------------------------------------------------------------------
     log.info(f"\n   💾 Saving Results:")
-    
+
     with tqdm(total=4, desc="      ├─ Saving files", position=1, leave=False,
-             bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as save_pbar:
-        
+              bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as save_pbar:
+
         save_pbar.set_description("      ├─ Stacking vectors")
         # Convert list to numpy array
         arr = np.vstack(vectors)
         save_pbar.update(1)
-        
+
         save_pbar.set_description("      ├─ Creating directories")
         # Ensure directory exists
         embed_path.parent.mkdir(parents=True, exist_ok=True)
         save_pbar.update(1)
-        
+
         save_pbar.set_description("      ├─ Saving primary cache")
         # Save primary cache
         np.save(embed_path, arr)
         save_pbar.update(1)
-        
+
         save_pbar.set_description("      ├─ Saving backup")
         # Save backup
         np.save(backup_path, arr)
@@ -2390,7 +2499,7 @@ def build_image_embeddings(df: pd.DataFrame,
         'avg_processing_time': sum(processing_stats['processing_times']) / len(processing_stats['processing_times']) if processing_stats['processing_times'] else 0,
         'throughput_images_per_second': processing_stats['success'] / extraction_time if extraction_time > 0 else 0
     }
-    
+
     try:
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
@@ -2402,12 +2511,12 @@ def build_image_embeddings(df: pd.DataFrame,
     try:
         primary_size = embed_path.stat().st_size / (1024**2)
         backup_size = backup_path.stat().st_size / (1024**2)
-        
+
         log.info(f"   📊 File Information:")
         log.info(f"   ├─ Primary cache: {primary_size:.1f} MB ({embed_path})")
         log.info(f"   ├─ Backup cache: {backup_size:.1f} MB ({backup_path})")
         log.info(f"   └─ Array shape: {arr.shape}")
-        
+
     except Exception as e:
         log.warning(f"   ⚠️  File size analysis failed: {e}")
 
@@ -2422,20 +2531,24 @@ def build_image_embeddings(df: pd.DataFrame,
     # ------------------------------------------------------------------
     # Final Summary
     # ------------------------------------------------------------------
-    
+
     log.info(f"\n   🏁 EMBEDDING EXTRACTION COMPLETE:")
     log.info(f"   ├─ Output shape: {arr.shape}")
-    log.info(f"   ├─ Success rate: {processing_stats['success']/len(df)*100:.1f}%")
+    log.info(
+        f"   ├─ Success rate: {processing_stats['success']/len(df)*100:.1f}%")
     log.info(f"   ├─ Total time: {extraction_time:.1f}s")
-    log.info(f"   ├─ Throughput: {processing_stats['success']/extraction_time:.1f} images/s")
+    log.info(
+        f"   ├─ Throughput: {processing_stats['success']/extraction_time:.1f} images/s")
     log.info(f"   └─ Files saved: Primary + Backup + Metadata")
 
     # Apply quality filtering
     original_indices = list(df.index)
     if arr.shape[0] > 10:  # Only filter if we have enough images
-        arr, valid_indices = filter_low_quality_images(img_dir, arr, original_indices)
+        arr, valid_indices = filter_low_quality_images(
+            img_dir, arr, original_indices)
         if len(valid_indices) != len(original_indices):
-            log.info(f"   📊 Quality filtering reduced images from {len(original_indices)} to {len(valid_indices)}")
+            log.info(
+                f"   📊 Quality filtering reduced images from {len(original_indices)} to {len(valid_indices)}")
     else:
         valid_indices = original_indices
 
@@ -2457,13 +2570,14 @@ def filter_photo_rows(df: pd.DataFrame) -> pd.DataFrame:
     mask &= df['photo_url'].astype(bool)
     return df.loc[mask].copy()
 
+
 def apply_smote(X, y, max_dense_size: int = int(5e7)):
     """Apply SMOTE when classes are imbalanced (<40% minority) - FIXED VERSION."""
     try:
         counts = np.bincount(y)
         if len(counts) < 2:
             return X, y
-            
+
         ratio = counts.min() / counts.sum()
         if ratio < 0.4:
             # FIXED: Check if X is sparse, then properly convert
@@ -2527,10 +2641,13 @@ def show_balance(df: pd.DataFrame, title: str) -> None:
 
 
 def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
-    """FIXED: Better model configurations, especially for image domain."""
+    """
+    Return a dictionary of estimators tailored to `domain`
+    that fits comfortably on a 64 GB desktop.
+    """
     models: Dict[str, BaseEstimator] = {}
 
-    # Add rule-based model only if text features are involved
+    # ── 1. Rule-based (text only) ────────────────────────────
     if domain in ("text", "both"):
         models["Rule"] = (
             RuleModel("keto", RX_KETO, RX_WL_KETO)
@@ -2538,53 +2655,87 @@ def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
             else RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN)
         )
 
-    # Text-oriented classifiers
+    # ── 2. Text-oriented family ─────────────────────────────
     text_family: Dict[str, BaseEstimator] = {
         "NB": MultinomialNB(),
         "Softmax": LogisticRegression(
-            solver="lbfgs", max_iter=2000, class_weight="balanced", random_state=42,
+            solver="lbfgs",
+            max_iter=1000,
+            class_weight="balanced",
+            random_state=42,
+            n_jobs=-1,
         ),
         "Ridge": RidgeClassifier(class_weight="balanced", random_state=42),
         "PA": PassiveAggressiveClassifier(
             max_iter=1000, class_weight="balanced", random_state=42
         ),
         "SGD": SGDClassifier(
-            loss="log_loss", max_iter=1000, tol=1e-3,
-            class_weight="balanced", n_jobs=-1, random_state=42
+            loss="log_loss",
+            max_iter=1000,
+            tol=1e-3,
+            class_weight="balanced",
+            n_jobs=-1,
+            random_state=42,
         ),
     }
 
-    # FIXED: Improved image-oriented classifiers
+    # ── 3. Image-/mixed-feature family ──────────────────────
     image_family: Dict[str, BaseEstimator] = {
-        "SVM_RBF": SVC(
-            kernel="rbf", probability=True, C=1.0, gamma='scale',
-            class_weight="balanced", random_state=42, max_iter=1000
+        # RBF-SVM wrapped in CalibratedCV if you need probabilities later
+        "SVM_RBF": CalibratedClassifierCV(
+            base_estimator=SVC(
+                kernel="rbf",
+                probability=False,           # memory saver
+                C=1.0,
+                gamma="scale",
+                cache_size=2048,             # MB
+                class_weight="balanced",
+                random_state=42,
+                max_iter=5000,
+            ),
+            method="sigmoid",
+            cv=3,
+            n_jobs=1,                        # keep it single-proc
         ),
         "MLP": MLPClassifier(
-            hidden_layer_sizes=(512, 128), activation='relu', solver='adam',
-            alpha=0.001, learning_rate='adaptive', max_iter=500,
-            early_stopping=True, validation_fraction=0.1, n_iter_no_change=10,
-            random_state=42
+            hidden_layer_sizes=(512, 128),
+            activation="relu",
+            solver="adam",
+            alpha=0.001,
+            learning_rate="adaptive",
+            max_iter=400,
+            early_stopping=True,
+            validation_fraction=0.1,
+            n_iter_no_change=10,
+            random_state=42,
+        ),
+        "RF": RandomForestClassifier(
+            n_estimators=300,
+            max_depth=None,
+            min_samples_split=2,
+            min_samples_leaf=1,
+            class_weight="balanced",
+            n_jobs=-1,
+            random_state=42,
         ),
     }
 
-    # Add Random Forest for robustness
-    if domain in ("image", "both"):
-        from sklearn.ensemble import RandomForestClassifier
-        image_family["RF"] = RandomForestClassifier(
-            n_estimators=100, max_depth=10, min_samples_split=10,
-            min_samples_leaf=5, class_weight="balanced", random_state=42, n_jobs=-1
-        )
-
-    # FIXED: Better LightGBM configuration for images
     if lgb and domain in ("image", "both"):
         image_family["LGBM"] = lgb.LGBMClassifier(
-            num_leaves=63, learning_rate=0.1, n_estimators=200,
-            subsample=0.8, colsample_bytree=0.8, min_child_samples=20,
-            objective="binary", random_state=42, n_jobs=-1, verbose=-1, force_col_wise=True
+            num_leaves=63,
+            learning_rate=0.1,
+            n_estimators=250,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            min_child_samples=20,
+            objective="binary",
+            random_state=42,
+            n_jobs=-1,
+            verbosity=-1,
+            force_col_wise=True,
         )
 
-    # Assemble by requested domain
+    # ── 4. Assemble selection ───────────────────────────────
     if domain == "text":
         models.update(text_family)
     elif domain == "image":
@@ -2595,35 +2746,40 @@ def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
 
     return models
 
-
 # 3. UPDATE the HYPER dictionary with better parameters:
 
 HYPER = {
-    "LR": {"C": [0.2, 1, 5], "class_weight": [None, "balanced"]},
-    "SGD": {"alpha": [1e-4, 1e-3], "loss": ["log_loss", "modified_huber"]},
-    "MLP": {
-        "hidden_layer_sizes": [(256,), (512, 128), (1024, 256)],
-        "alpha": [0.0001, 0.001, 0.01],
-        "learning_rate_init": [0.001, 0.01],
+    # Text models ----------------------------------------------------
+    "Softmax": {"C": [0.1, 1, 10]},
+    "SGD": {
+        "alpha": [1e-4, 1e-3],
+        "loss": ["log_loss", "modified_huber"],
     },
-    "LGBM": {
-        "learning_rate": [0.05, 0.1, 0.15],
-        "num_leaves": [31, 63, 127],
-        "n_estimators": [100, 200, 300],
-        "min_child_samples": [10, 20, 30],
-    },
-    "PA": {"C": [0.1, 0.5, 1.0]},
     "Ridge": {"alpha": [0.1, 1.0, 10.0]},
-    "NB": {},
-    "Softmax": {"C": [0.01, 0.1, 1, 10, 100], "max_iter": [1000, 2000]},
-    "SVM_RBF": {
-        "C": [0.1, 1, 10],
-        "gamma": ["scale", "auto", 0.001, 0.01],
+    "PA": {"C": [0.5, 1.0]},
+    "NB": {},  # nothing to tune
+
+    # Image / mixed models ------------------------------------------
+    "MLP": {
+        "hidden_layer_sizes": [(256,), (512, 128)],
+        "alpha": [0.0001, 0.001],
+        "learning_rate_init": [0.001, 0.005],
     },
     "RF": {
-        "n_estimators": [50, 100, 200],
-        "max_depth": [5, 10, 15],
-        "min_samples_split": [5, 10, 20],
+        "n_estimators": [150, 300],
+        "max_depth": [None, 20],
+        "min_samples_leaf": [1, 2],
+    },
+    "LGBM": {
+        "learning_rate": [0.05, 0.1],
+        "num_leaves": [31, 63],
+        "n_estimators": [150, 250],
+        "min_child_samples": [10, 20],
+    },
+    # For Calibrated SVM the params live under `base_estimator__`
+    "SVM_RBF": {
+        "base_estimator__C": [0.5, 1, 2],
+        "base_estimator__gamma": ["scale", 0.001],
     },
 }
 
@@ -2631,10 +2787,12 @@ HYPER = {
 def ensure_predict_proba(estimator, X_train, y_train):
     """Ensure estimator has predict_proba method by wrapping with calibration if needed."""
     if not hasattr(estimator, "predict_proba"):
-        log.info(f"Adding probability calibration to {estimator.__class__.__name__}")
+        log.info(
+            f"Adding probability calibration to {estimator.__class__.__name__}")
         try:
             from sklearn.calibration import CalibratedClassifierCV
-            calibrated = CalibratedClassifierCV(estimator, cv=3, method='sigmoid')
+            calibrated = CalibratedClassifierCV(
+                estimator, cv=3, method='sigmoid')
             calibrated.fit(X_train, y_train)
             return calibrated
         except Exception as e:
@@ -3076,7 +3234,7 @@ def run_mode_A(
     """
     import time
     from datetime import datetime
-    
+
     # Initialize results and timing
     results: list[dict] = []
     pipeline_start = time.time()
@@ -3127,11 +3285,12 @@ def run_mode_A(
         if apply_smote:
             smote_start = time.time()
             original_size = len(y_train)
-            
+
             # Check if we have both classes
             unique_classes = np.unique(y_train)
             if len(unique_classes) < 2:
-                log.warning(f"   ⚠️  Only one class present in {task} training data, skipping SMOTE")
+                log.warning(
+                    f"   ⚠️  Only one class present in {task} training data, skipping SMOTE")
                 X_train = X_silver
             else:
                 minority_ratio = min(np.bincount(y_train)) / len(y_train)
@@ -3141,9 +3300,9 @@ def run_mode_A(
                     log.info(f"   🔄 Applying SMOTE (minority < 40%)...")
                     try:
                         with tqdm(total=1, desc="   ├─ SMOTE Processing",
-                                position=1, leave=False,
-                                bar_format="   ├─ {desc}: {percentage:3.0f}%|{bar}| [{elapsed}]") as smote_pbar:
-                            
+                                  position=1, leave=False,
+                                  bar_format="   ├─ {desc}: {percentage:3.0f}%|{bar}| [{elapsed}]") as smote_pbar:
+
                             # FIXED: Use the corrected apply_smote function
                             X_train, y_train = apply_smote(X_silver, y_train)
                             smote_pbar.update(1)
@@ -3153,11 +3312,14 @@ def run_mode_A(
                         new_ratio = min(np.bincount(y_train)) / len(y_train)
 
                         log.info(f"   ✅ SMOTE completed in {smote_time:.1f}s")
-                        log.info(f"   ├─ Size: {original_size:,} → {new_size:,} ({new_size/original_size:.1f}x)")
-                        log.info(f"   └─ Minority ratio: {minority_ratio:.1%} → {new_ratio:.1%}")
+                        log.info(
+                            f"   ├─ Size: {original_size:,} → {new_size:,} ({new_size/original_size:.1f}x)")
+                        log.info(
+                            f"   └─ Minority ratio: {minority_ratio:.1%} → {new_ratio:.1%}")
 
                     except Exception as e:
-                        log.warning(f"   ❌ SMOTE failed for {task}: {str(e)[:60]}...")
+                        log.warning(
+                            f"   ❌ SMOTE failed for {task}: {str(e)[:60]}...")
                         log.info(f"   └─ Falling back to original data")
                         X_train = X_silver
                 else:
@@ -3192,21 +3354,23 @@ def run_mode_A(
             try:
                 # Check for single-class case
                 if len(np.unique(y_train)) < 2:
-                    log.warning(f"      ⚠️  {name}: Only one class in training data, skipping")
+                    log.warning(
+                        f"      ⚠️  {name}: Only one class in training data, skipping")
                     continue
 
                 # Model training phase with better error handling
                 with tqdm(total=4, desc=f"      ├─ {name}", position=2, leave=False,
-                        bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as model_pbar:
+                          bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as model_pbar:
 
                     # Step 1: Model fitting
                     model_pbar.set_description(f"      ├─ {name}: Fitting")
                     model = clone(base)
-                    
+
                     # Handle sparse matrices for memory efficiency
                     if hasattr(X_train, "toarray") and X_train.shape[1] > 10000:
-                        log.debug(f"         ├─ {name}: Processing large sparse matrix")
-                    
+                        log.debug(
+                            f"         ├─ {name}: Processing large sparse matrix")
+
                     model.fit(X_train, y_train)
                     model_pbar.update(1)
 
@@ -3227,9 +3391,11 @@ def run_mode_A(
                             # Fallback to binary predictions
                             pred_binary = model.predict(X_gold)
                             prob = pred_binary.astype(float)
-                            log.warning(f"      ⚠️  {name}: Using binary predictions (suboptimal)")
+                            log.warning(
+                                f"      ⚠️  {name}: Using binary predictions (suboptimal)")
                     except Exception as pred_error:
-                        log.error(f"      ❌ {name}: Prediction failed - {str(pred_error)[:40]}...")
+                        log.error(
+                            f"      ❌ {name}: Prediction failed - {str(pred_error)[:40]}...")
                         continue
                     model_pbar.update(1)
 
@@ -3242,7 +3408,7 @@ def run_mode_A(
                 # Calculate metrics with EXPLICIT DOMAIN NAMING
                 model_time = time.time() - model_start
                 model_name_with_domain = f"{name}_{domain.upper()}"
-                
+
                 res = dict(
                     task=task,
                     model=model_name_with_domain,
@@ -3262,18 +3428,21 @@ def run_mode_A(
 
                 # Log detailed model performance
                 log.info(f"      ✅ {model_name_with_domain:>12}: F1={res['F1']:.3f} | "
-                        f"ACC={res['ACC']:.3f} | PREC={res['PREC']:.3f} | "
-                        f"REC={res['REC']:.3f} | Time={model_time:.1f}s")
+                         f"ACC={res['ACC']:.3f} | PREC={res['PREC']:.3f} | "
+                         f"REC={res['REC']:.3f} | Time={model_time:.1f}s")
 
                 # Track best model - FIXED: Store with base name
                 if res["F1"] > best_f1:
                     best_f1, best_res = res["F1"], res
-                    BEST[name] = model  # Store with base name, not domain suffix
-                    log.info(f"      🏆 New best model for {task}: {model_name_with_domain} (F1={best_f1:.3f})")
+                    # Store with base name, not domain suffix
+                    BEST[name] = model
+                    log.info(
+                        f"      🏆 New best model for {task}: {model_name_with_domain} (F1={best_f1:.3f})")
 
             except Exception as e:
                 model_time = time.time() - model_start
-                log.error(f"      ❌ {name:>8}: FAILED after {model_time:.1f}s - {str(e)[:50]}...")
+                log.error(
+                    f"      ❌ {name:>8}: FAILED after {model_time:.1f}s - {str(e)[:50]}...")
 
                 # Log detailed error for debugging
                 if log.level <= logging.DEBUG:
@@ -3396,6 +3565,8 @@ def tune_threshold(y_true, probs):
     return thresholds[optimal_idx] if optimal_idx < len(thresholds) else 0.5
 
 # replaced currently with create smart ensemble
+
+
 def best_ensemble(task, res, X_vec, clean, X_gold, silver, gold, weights=None):
     """
     Find best ensemble size by trying n=1 to max available models.
@@ -3630,64 +3801,68 @@ def create_smart_ensemble(task, text_results, image_results, gold_df):
     Create ensemble that handles ALL rows intelligently:
     - Rows with images: Use text+image ensemble
     - Rows without images: Use text-only predictions
-    
+
     Args:
         task: 'keto' or 'vegan'
         text_results: Results from text domain
         image_results: Results from image domain  
         gold_df: Gold standard dataframe
-        
+
     Returns:
         Complete ensemble result covering all gold rows
     """
     log.info(f"   🤝 Creating smart ensemble for {task}...")
-    
+
     # Find best models for each domain
-    text_best = max((r for r in text_results if r["task"] == task), 
-                   key=lambda r: r["F1"])
-    image_best = max((r for r in image_results if r["task"] == task), 
+    text_best = max((r for r in text_results if r["task"] == task),
                     key=lambda r: r["F1"])
-    
-    log.info(f"      ├─ Best text model: {text_best['model']} (F1={text_best['F1']:.3f})")
-    log.info(f"      ├─ Best image model: {image_best['model']} (F1={image_best['F1']:.3f})")
-    
+    image_best = max((r for r in image_results if r["task"] == task),
+                     key=lambda r: r["F1"])
+
+    log.info(
+        f"      ├─ Best text model: {text_best['model']} (F1={text_best['F1']:.3f})")
+    log.info(
+        f"      ├─ Best image model: {image_best['model']} (F1={image_best['F1']:.3f})")
+
     # Get all gold indices
     all_gold_indices = gold_df.index
-    
+
     # Determine which rows have images (assuming image results are subset)
     image_indices = set()
     if 'prob' in image_best and len(image_best['prob']) > 0:
         # Image model was trained on subset - need to map back
         # For now, assume first N rows have images where N = len(image predictions)
         image_indices = set(all_gold_indices[:len(image_best['prob'])])
-    
+
     text_only_indices = set(all_gold_indices) - image_indices
-    
+
     log.info(f"      ├─ Rows with images: {len(image_indices)}")
     log.info(f"      ├─ Rows text-only: {len(text_only_indices)}")
-    log.info(f"      └─ Total coverage: {len(image_indices) + len(text_only_indices)}")
-    
+    log.info(
+        f"      └─ Total coverage: {len(image_indices) + len(text_only_indices)}")
+
     # Initialize final predictions array
     final_probs = np.zeros(len(all_gold_indices))
     final_preds = np.zeros(len(all_gold_indices), dtype=int)
-    
+
     # Fill in text+image ensemble for rows with images
     if image_indices:
         for i, idx in enumerate(sorted(image_indices)):
             if i < len(text_best['prob']) and i < len(image_best['prob']):
                 # Average text and image predictions
-                final_probs[idx] = (text_best['prob'][i] + image_best['prob'][i]) / 2
+                final_probs[idx] = (text_best['prob'][i] +
+                                    image_best['prob'][i]) / 2
                 final_preds[idx] = 1 if final_probs[idx] >= 0.5 else 0
-    
+
     # Fill in text-only predictions for remaining rows
     for i, idx in enumerate(sorted(text_only_indices)):
         if i < len(text_best['prob']):
             final_probs[idx] = text_best['prob'][i]
             final_preds[idx] = text_best['pred'][i]
-    
+
     # Calculate final metrics
     y_true = gold_df[f"label_{task}"].values
-    
+
     result = pack(y_true, final_probs) | {
         "model": "SmartEnsemble",
         "task": task,
@@ -3698,10 +3873,10 @@ def create_smart_ensemble(task, text_results, image_results, gold_df):
         "image_rows": len(image_indices),
         "text_only_rows": len(text_only_indices)
     }
-    
+
     log.info(f"      ✅ Smart ensemble: F1={result['F1']:.3f} | "
              f"Coverage={len(image_indices) + len(text_only_indices)}/{len(all_gold_indices)}")
-    
+
     return result
 
 
@@ -3709,7 +3884,7 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
     """
     Build an n-model ensemble based on combined performance metrics.
     Enhanced with comprehensive logging and progress tracking.
-    
+
     Args:
         task: Task name ('keto' or 'vegan')
         res: Results list from individual model evaluations  
@@ -3721,7 +3896,7 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
         n: Number of top models to include in ensemble
         use_saved_params: Whether to use previously saved hyperparameters
         rule_weight: Weight for rule-based predictions (currently unused)
-        
+
     Returns:
         Dictionary with ensemble performance metrics and predictions
     """
@@ -3729,13 +3904,13 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
     import json
     import os
     from collections import defaultdict
-    
+
     ensemble_start = time.time()
-    
+
     log.info(f"\n🎯 BUILDING TOP-{n} ENSEMBLE for {task.upper()}")
     log.info(f"   Target ensemble size: {n} models")
     log.info(f"   Use saved parameters: {use_saved_params}")
-    
+
     # ------------------------------------------------------------------
     # Parameter Loading and Validation
     # ------------------------------------------------------------------
@@ -3745,11 +3920,13 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
             with open("best_params.json") as f:
                 all_saved_params = json.load(f)
                 saved_params = all_saved_params.get(task, {})
-            log.info(f"   ✅ Loaded saved parameters for {len(saved_params)} models")
+            log.info(
+                f"   ✅ Loaded saved parameters for {len(saved_params)} models")
             for model_name in saved_params:
                 log.info(f"      ├─ {model_name}: {saved_params[model_name]}")
         except FileNotFoundError:
-            log.warning(f"   ⚠️  best_params.json not found, using default hyperparameters")
+            log.warning(
+                f"   ⚠️  best_params.json not found, using default hyperparameters")
         except json.JSONDecodeError as e:
             log.error(f"   ❌ Invalid JSON in best_params.json: {e}")
         except Exception as e:
@@ -3759,14 +3936,16 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
     # Model Selection and Ranking
     # ------------------------------------------------------------------
     # Filter available models (exclude Rule-based)
-    available_models = [r for r in res if r["task"] == task and r["model"] != "Rule"]
-    
+    available_models = [r for r in res if r["task"]
+                        == task and r["model"] != "Rule"]
+
     if not available_models:
         log.error(f"   ❌ No models available for {task} ensemble")
         raise ValueError(f"No models available for {task}")
-    
+
     if len(available_models) < n:
-        log.warning(f"   ⚠️  Only {len(available_models)} models available, requested {n}")
+        log.warning(
+            f"   ⚠️  Only {len(available_models)} models available, requested {n}")
         n = len(available_models)
         log.info(f"   ├─ Adjusting ensemble size to {n}")
 
@@ -3777,96 +3956,101 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
     # Calculate composite scores and rank models
     scored_models = []
     for r in available_models:
-        composite_score = (r["PREC"] + r["REC"] + r["ROC"] + 
-                          r["PR"] + r["F1"] + r["ACC"])
+        composite_score = (r["PREC"] + r["REC"] + r["ROC"] +
+                           r["PR"] + r["F1"] + r["ACC"])
         scored_models.append((r, composite_score))
-    
+
     # Sort by composite score and select top N
     top_models = sorted(scored_models, key=lambda x: x[1], reverse=True)[:n]
-    
+
     log.info(f"\n   🏆 Top {n} Model Rankings:")
     for i, (model_res, score) in enumerate(top_models, 1):
         log.info(f"   {i:2d}. {model_res['model']:>10} | "
-                f"F1={model_res['F1']:.3f} | "
-                f"Composite={score:.3f} | "
-                f"ACC={model_res['ACC']:.3f}")
+                 f"F1={model_res['F1']:.3f} | "
+                 f"Composite={score:.3f} | "
+                 f"ACC={model_res['ACC']:.3f}")
 
     # ------------------------------------------------------------------
     # Model Preparation Pipeline
     # ------------------------------------------------------------------
     log.info(f"\n   🔧 Model Preparation Pipeline:")
-    
+
     estimators = []
     preparation_times = {}
     model_errors = []
-    
+
     # Progress bar for model preparation
-    prep_progress = tqdm(top_models, desc="   ├─ Preparing Models", 
-                        position=0, leave=False,
-                        bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}]")
-    
+    prep_progress = tqdm(top_models, desc="   ├─ Preparing Models",
+                         position=0, leave=False,
+                         bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}]")
+
     for model_res, composite_score in prep_progress:
         model_start = time.time()
         name = model_res["model"]
         prep_progress.set_description(f"   ├─ Preparing {name}")
-        
+
         try:
             log.info(f"      ├─ Processing {name} (F1={model_res['F1']:.3f})")
-            
+
             # Step 1: Get base model
             with tqdm(total=5, desc=f"         ├─ {name}", position=1, leave=False,
-                     bar_format="         ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as model_pbar:
-                
+                      bar_format="         ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as model_pbar:
+
                 model_pbar.set_description(f"         ├─ {name}: Loading")
                 base = build_models(task)[name]
                 model_pbar.update(1)
-                
+
                 # Step 2: Apply hyperparameters
                 model_pbar.set_description(f"         ├─ {name}: Configuring")
                 if use_saved_params and name in saved_params:
                     base.set_params(**saved_params[name])
-                    log.info(f"         ├─ Applied saved parameters: {saved_params[name]}")
+                    log.info(
+                        f"         ├─ Applied saved parameters: {saved_params[name]}")
                 else:
                     log.info(f"         ├─ Tuning hyperparameters...")
                     base = tune(name, base, X_vec, silver[f"silver_{task}"])
                 model_pbar.update(1)
-                
+
                 # Step 3: Model training
                 model_pbar.set_description(f"         ├─ {name}: Training")
                 base.fit(X_vec, silver[f"silver_{task}"])
                 model_pbar.update(1)
-                
+
                 # Step 4: Individual model evaluation
                 model_pbar.set_description(f"         ├─ {name}: Evaluating")
                 y_pred_i = base.predict(X_gold)
                 y_true = gold[f"label_{task}"].values
-                
+
                 # Calculate individual model metrics
                 individual_f1 = f1_score(y_true, y_pred_i, zero_division=0)
                 individual_acc = accuracy_score(y_true, y_pred_i)
-                
-                log.info(f"         ├─ Individual performance: F1={individual_f1:.3f}, ACC={individual_acc:.3f}")
+
+                log.info(
+                    f"         ├─ Individual performance: F1={individual_f1:.3f}, ACC={individual_acc:.3f}")
                 model_pbar.update(1)
-                
+
                 # Step 5: Log false predictions for analysis
                 model_pbar.set_description(f"         ├─ {name}: Analyzing")
-                log_false_preds(task, gold.clean, y_true, y_pred_i, model_name=name)
-                
+                log_false_preds(task, gold.clean, y_true,
+                                y_pred_i, model_name=name)
+
                 # Ensure probability prediction capability
                 if not hasattr(base, "predict_proba"):
-                    log.info(f"         ├─ Adding probability calibration to {name}")
+                    log.info(
+                        f"         ├─ Adding probability calibration to {name}")
                     base = CalibratedClassifierCV(base, cv=3, method='sigmoid')
                     base.fit(X_vec, silver[f"silver_{task}"])
-                
+
                 model_pbar.update(1)
 
             # Record successful preparation
             model_time = time.time() - model_start
             preparation_times[name] = model_time
             estimators.append((name, base))
-            
-            log.info(f"      ✅ {name} prepared successfully in {model_time:.1f}s")
-            
+
+            log.info(
+                f"      ✅ {name} prepared successfully in {model_time:.1f}s")
+
             # Update progress bar with current status
             prep_progress.set_postfix({
                 'Success': len(estimators),
@@ -3879,31 +4063,34 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
             preparation_times[name] = model_time
             error_msg = str(e)[:50] + "..." if len(str(e)) > 50 else str(e)
             model_errors.append((name, error_msg))
-            
-            log.error(f"      ❌ {name} failed after {model_time:.1f}s: {error_msg}")
-            
+
+            log.error(
+                f"      ❌ {name} failed after {model_time:.1f}s: {error_msg}")
+
             # Detailed error logging for debugging
             if log.level <= logging.DEBUG:
                 import traceback
-                log.debug(f"Full traceback for {name}:\n{traceback.format_exc()}")
+                log.debug(
+                    f"Full traceback for {name}:\n{traceback.format_exc()}")
 
     # ------------------------------------------------------------------
     # Preparation Results Summary
     # ------------------------------------------------------------------
     total_prep_time = sum(preparation_times.values())
-    
+
     log.info(f"\n   📋 Preparation Summary:")
     log.info(f"   ├─ Successfully prepared: {len(estimators)}/{n}")
     log.info(f"   ├─ Failed preparations: {len(model_errors)}")
     log.info(f"   └─ Total preparation time: {total_prep_time:.1f}s")
-    
+
     if model_errors:
         log.info(f"   ⚠️  Failed models:")
         for name, error in model_errors:
             log.info(f"      ├─ {name}: {error}")
 
     if not estimators:
-        raise RuntimeError(f"No models successfully prepared for {task} ensemble")
+        raise RuntimeError(
+            f"No models successfully prepared for {task} ensemble")
 
     # Adjust n to actual number of successful models
     actual_n = len(estimators)
@@ -3919,40 +4106,41 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
     log.info(f"   └─ Target: {task} classification")
 
     ensemble_create_start = time.time()
-    
+
     try:
         # Attempt soft voting ensemble
         with tqdm(total=3, desc="   ├─ Ensemble Creation", position=0, leave=False,
-                 bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as ens_pbar:
-            
+                  bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as ens_pbar:
+
             ens_pbar.set_description("   ├─ Creating VotingClassifier")
             ens = VotingClassifier(estimators, voting="soft", n_jobs=-1)
             ens_pbar.update(1)
-            
+
             ens_pbar.set_description("   ├─ Training Ensemble")
             ens.fit(X_vec, silver[f"silver_{task}"])
             ens_pbar.update(1)
-            
+
             ens_pbar.set_description("   ├─ Generating Predictions")
             prob = ens.predict_proba(X_gold)[:, 1]
             ens_pbar.update(1)
-        
+
         ensemble_create_time = time.time() - ensemble_create_start
-        log.info(f"   ✅ Soft voting ensemble created in {ensemble_create_time:.1f}s")
+        log.info(
+            f"   ✅ Soft voting ensemble created in {ensemble_create_time:.1f}s")
         ensemble_method = "Soft Voting"
-        
+
     except AttributeError as e:
         # Fallback to manual probability averaging
         log.warning(f"   ⚠️  Soft voting failed: {str(e)[:60]}...")
         log.info(f"   ├─ Falling back to manual probability averaging")
-        
+
         prob_start = time.time()
         probs = []
         averaging_errors = []
-        
+
         with tqdm(estimators, desc="   ├─ Manual Averaging", position=0, leave=False,
-                 bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as avg_pbar:
-            
+                  bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as avg_pbar:
+
             for name, clf in avg_pbar:
                 avg_pbar.set_description(f"   ├─ Averaging {name}")
                 try:
@@ -3962,33 +4150,39 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
                         log.debug(f"      ├─ {name}: predict_proba successful")
                     elif hasattr(clf, "decision_function"):
                         scores = clf.decision_function(X_gold)
-                        model_probs = 1 / (1 + np.exp(-scores))  # Sigmoid transformation
+                        # Sigmoid transformation
+                        model_probs = 1 / (1 + np.exp(-scores))
                         probs.append(model_probs)
-                        log.debug(f"      ├─ {name}: decision_function + sigmoid")
+                        log.debug(
+                            f"      ├─ {name}: decision_function + sigmoid")
                     else:
                         binary_preds = clf.predict(X_gold).astype(float)
                         probs.append(binary_preds)
-                        log.warning(f"      ├─ {name}: using binary predictions (suboptimal)")
-                        
+                        log.warning(
+                            f"      ├─ {name}: using binary predictions (suboptimal)")
+
                 except Exception as pred_error:
                     averaging_errors.append((name, str(pred_error)[:40]))
-                    log.error(f"      ├─ {name}: prediction failed - {str(pred_error)[:40]}...")
+                    log.error(
+                        f"      ├─ {name}: prediction failed - {str(pred_error)[:40]}...")
 
         if not probs:
-            raise RuntimeError("All models failed to generate predictions for ensemble")
-        
+            raise RuntimeError(
+                "All models failed to generate predictions for ensemble")
+
         # Calculate average probabilities
         prob = np.mean(probs, axis=0)
-        
+
         prob_time = time.time() - prob_start
         log.info(f"   ✅ Manual averaging completed in {prob_time:.1f}s")
-        log.info(f"      ├─ Successfully averaged: {len(probs)}/{len(estimators)} models")
-        
+        log.info(
+            f"      ├─ Successfully averaged: {len(probs)}/{len(estimators)} models")
+
         if averaging_errors:
             log.info(f"      ├─ Averaging errors:")
             for name, error in averaging_errors:
                 log.info(f"      │  ├─ {name}: {error}")
-        
+
         ensemble_method = "Manual Averaging"
 
     # ------------------------------------------------------------------
@@ -3996,19 +4190,19 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
     # ------------------------------------------------------------------
     log.info(f"\n   🔍 Rule-Based Verification:")
     verification_start = time.time()
-    
+
     original_positives = (prob >= 0.5).sum()
     prob_before_verification = prob.copy()
-    
+
     with tqdm(total=1, desc="   ├─ Applying Rules", position=0, leave=False,
-             bar_format="   ├─ {desc}: {percentage:3.0f}%|{bar}| [{elapsed}]") as verify_pbar:
+              bar_format="   ├─ {desc}: {percentage:3.0f}%|{bar}| [{elapsed}]") as verify_pbar:
         prob = verify_with_rules(task, gold.clean, prob)
         verify_pbar.update(1)
-    
+
     verification_time = time.time() - verification_start
     final_positives = (prob >= 0.5).sum()
     verification_changes = abs(final_positives - original_positives)
-    
+
     log.info(f"   ├─ Verification completed in {verification_time:.3f}s")
     log.info(f"   ├─ Predictions before: {original_positives} positive")
     log.info(f"   ├─ Predictions after: {final_positives} positive")
@@ -4022,7 +4216,7 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
     # Performance Analysis and Logging
     # ------------------------------------------------------------------
     log.info(f"\n   📊 Ensemble Performance Analysis:")
-    
+
     # Calculate comprehensive metrics
     ensemble_metrics = {
         'accuracy': accuracy_score(y_true, y_pred),
@@ -4032,7 +4226,7 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
         'roc_auc': roc_auc_score(y_true, prob),
         'pr_auc': average_precision_score(y_true, prob)
     }
-    
+
     log.info(f"   ├─ Accuracy:  {ensemble_metrics['accuracy']:.3f}")
     log.info(f"   ├─ Precision: {ensemble_metrics['precision']:.3f}")
     log.info(f"   ├─ Recall:    {ensemble_metrics['recall']:.3f}")
@@ -4046,29 +4240,35 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
         best_individual = max(top_models, key=lambda x: x[0]['F1'])
         best_individual_f1 = best_individual[0]['F1']
         ensemble_improvement = ensemble_metrics['f1'] - best_individual_f1
-        
-        log.info(f"   ├─ Best individual: {best_individual[0]['model']} (F1={best_individual_f1:.3f})")
+
+        log.info(
+            f"   ├─ Best individual: {best_individual[0]['model']} (F1={best_individual_f1:.3f})")
         log.info(f"   ├─ Ensemble F1: {ensemble_metrics['f1']:.3f}")
-        log.info(f"   └─ Improvement: {ensemble_improvement:+.3f} ({ensemble_improvement/best_individual_f1*100:+.1f}%)")
+        log.info(
+            f"   └─ Improvement: {ensemble_improvement:+.3f} ({ensemble_improvement/best_individual_f1*100:+.1f}%)")
 
     # Error analysis
     log.info(f"\n   🔍 Error Analysis:")
-    log_false_preds(task, gold.clean, y_true, y_pred, model_name=f"EnsembleTop{actual_n}")
-    
+    log_false_preds(task, gold.clean, y_true, y_pred,
+                    model_name=f"EnsembleTop{actual_n}")
+
     # Prediction confidence analysis
     confidence_high = (np.abs(prob - 0.5) > 0.3).sum()
     confidence_medium = (np.abs(prob - 0.5) > 0.1).sum() - confidence_high
     confidence_low = len(prob) - confidence_high - confidence_medium
-    
-    log.info(f"   ├─ High confidence (>0.8 or <0.2): {confidence_high} ({confidence_high/len(prob)*100:.1f}%)")
-    log.info(f"   ├─ Medium confidence (0.6-0.8, 0.2-0.4): {confidence_medium} ({confidence_medium/len(prob)*100:.1f}%)")
-    log.info(f"   └─ Low confidence (0.4-0.6): {confidence_low} ({confidence_low/len(prob)*100:.1f}%)")
+
+    log.info(
+        f"   ├─ High confidence (>0.8 or <0.2): {confidence_high} ({confidence_high/len(prob)*100:.1f}%)")
+    log.info(
+        f"   ├─ Medium confidence (0.6-0.8, 0.2-0.4): {confidence_medium} ({confidence_medium/len(prob)*100:.1f}%)")
+    log.info(
+        f"   └─ Low confidence (0.4-0.6): {confidence_low} ({confidence_low/len(prob)*100:.1f}%)")
 
     # ------------------------------------------------------------------
     # Final Summary
     # ------------------------------------------------------------------
     total_time = time.time() - ensemble_start
-    
+
     log.info(f"\n   🏁 ENSEMBLE COMPLETE:")
     log.info(f"   ├─ Ensemble method: {ensemble_method}")
     log.info(f"   ├─ Models used: {actual_n}/{n}")
@@ -4089,11 +4289,10 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
         "total_time": total_time,
         "confidence_distribution": {
             "high": confidence_high,
-            "medium": confidence_medium, 
+            "medium": confidence_medium,
             "low": confidence_low
         }
     }
-
 
 
 # ============================================================================
@@ -4110,13 +4309,13 @@ def export_eval_plots(results: list[dict], gold_df: pd.DataFrame,
     """FIXED version that handles all dimension mismatches and errors gracefully."""
     out_dir.mkdir(exist_ok=True)
     rows = []
-    
+
     for r in tqdm(results, desc="Saving plots and metrics"):
         task = r["task"]
         model = r["model"]
         prob = r.get("prob")
         pred = r.get("pred")
-        
+
         row = dict(model=model, task=task,
                    accuracy=None, precision=None,
                    recall=None, F1=None, AUC=None)
@@ -4124,26 +4323,28 @@ def export_eval_plots(results: list[dict], gold_df: pd.DataFrame,
         try:
             # Get true labels
             true_labels = gold_df[f"label_{task}"].values
-            
+
             if pred is not None and len(pred) > 0:
                 # Handle dimension mismatches
                 if len(pred) != len(true_labels):
                     log.warning(f"   ⚠️  Dimension mismatch for {model}-{task}: "
-                               f"pred={len(pred)}, true={len(true_labels)}")
-                    
+                                f"pred={len(pred)}, true={len(true_labels)}")
+
                     min_len = min(len(pred), len(true_labels))
                     pred = pred[:min_len]
                     true_labels = true_labels[:min_len]
                     if prob is not None:
                         prob = prob[:min_len]
-                    
+
                     log.info(f"      ├─ Truncated to {min_len} samples")
 
                 # Calculate metrics safely
                 try:
                     row["accuracy"] = accuracy_score(true_labels, pred)
-                    row["precision"] = precision_score(true_labels, pred, zero_division=0)
-                    row["recall"] = recall_score(true_labels, pred, zero_division=0)
+                    row["precision"] = precision_score(
+                        true_labels, pred, zero_division=0)
+                    row["recall"] = recall_score(
+                        true_labels, pred, zero_division=0)
                     row["F1"] = f1_score(true_labels, pred, zero_division=0)
 
                     # Create confusion matrix plot
@@ -4152,11 +4353,13 @@ def export_eval_plots(results: list[dict], gold_df: pd.DataFrame,
                     ConfusionMatrixDisplay(cm).plot(ax=ax)
                     ax.set_title(f"{model} – {task} – Confusion matrix")
                     plt.tight_layout()
-                    plt.savefig(out_dir / f"{model}_{task}_cm.png", dpi=100, bbox_inches='tight')
+                    plt.savefig(
+                        out_dir / f"{model}_{task}_cm.png", dpi=100, bbox_inches='tight')
                     plt.close(fig)
-                    
+
                 except Exception as e:
-                    log.warning(f"   ⚠️  Metrics calculation failed for {model}-{task}: {e}")
+                    log.warning(
+                        f"   ⚠️  Metrics calculation failed for {model}-{task}: {e}")
 
             if prob is not None and len(prob) > 0:
                 try:
@@ -4165,10 +4368,10 @@ def export_eval_plots(results: list[dict], gold_df: pd.DataFrame,
                         min_len = min(len(prob), len(true_labels))
                         prob = prob[:min_len]
                         true_labels = true_labels[:min_len]
-                    
+
                     auc = roc_auc_score(true_labels, prob)
                     row["AUC"] = auc
-                    
+
                     # Create ROC curve plot
                     fpr, tpr, _ = roc_curve(true_labels, prob)
                     fig, ax = plt.subplots(figsize=(6, 4))
@@ -4179,11 +4382,13 @@ def export_eval_plots(results: list[dict], gold_df: pd.DataFrame,
                     ax.set_title(f"{model} – {task} – ROC Curve")
                     ax.legend()
                     plt.tight_layout()
-                    plt.savefig(out_dir / f"{model}_{task}_roc.png", dpi=100, bbox_inches='tight')
+                    plt.savefig(
+                        out_dir / f"{model}_{task}_roc.png", dpi=100, bbox_inches='tight')
                     plt.close(fig)
-                    
+
                 except Exception as e:
-                    log.warning(f"   ⚠️  ROC plot failed for {model}-{task}: {e}")
+                    log.warning(
+                        f"   ⚠️  ROC plot failed for {model}-{task}: {e}")
 
         except Exception as e:
             log.error(f"   ❌ Complete failure for {model}-{task}: {e}")
@@ -4198,14 +4403,16 @@ def export_eval_plots(results: list[dict], gold_df: pd.DataFrame,
         log.error(f"   ❌ Failed to save results: {e}")
 
 # ------------------------------------------------------------------
-# MAIN  COMPLETE  run_full_pipeline 
+# MAIN  COMPLETE  run_full_pipeline
 # ------------------------------------------------------------------
+
+
 def run_full_pipeline(mode: str = "both",
                       force: bool = False,
                       sample_frac: float | None = None):
     """
     Full training/evaluation pipeline with comprehensive logging and progress tracking.
-    
+
     Enhanced with:
     - Multi-stage progress bars
     - Detailed timing analysis
@@ -4214,12 +4421,12 @@ def run_full_pipeline(mode: str = "both",
     - Performance monitoring
     - Error resilience
     - Proper sampling for both text and image data
-    
+
     Args:
         mode: Feature modality - 'text', 'image', or 'both'
         force: Force recomputation of cached embeddings
         sample_frac: Fraction of silver data to sample (for testing)
-        
+
     Returns:
         tuple: (vectorizer, silver_data, gold_data, results)
     """
@@ -4227,11 +4434,11 @@ def run_full_pipeline(mode: str = "both",
     import psutil
     import gc
     from datetime import datetime
-    train_pbar = tqdm(total=0, desc="")  
-    
+    train_pbar = tqdm(total=0, desc="")
+
     # Initialize pipeline tracking
     pipeline_start = time.time()
-    
+
     # Log pipeline initialization with system info
     log.info("🚀 STARTING FULL ML PIPELINE")
     log.info(f"   Mode: {mode}")
@@ -4239,85 +4446,92 @@ def run_full_pipeline(mode: str = "both",
     log.info(f"   Sample fraction: {sample_frac or 'Full dataset'}")
     log.info(f"   Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     log.info(f"   Available CPU cores: {psutil.cpu_count()}")
-    log.info(f"   Available memory: {psutil.virtual_memory().total // (1024**3)} GB")
-    
+    log.info(
+        f"   Available memory: {psutil.virtual_memory().total // (1024**3)} GB")
+
     # Track memory usage throughout pipeline
     def log_memory_usage(stage: str):
         memory = psutil.virtual_memory()
         log.info(f"   📊 {stage} - Memory: {memory.percent:.1f}% used "
-                f"({memory.used // (1024**2)} MB / {memory.total // (1024**2)} MB)")
+                 f"({memory.used // (1024**2)} MB / {memory.total // (1024**2)} MB)")
 
     # Overall pipeline progress stages
     pipeline_stages = [
-        "Data Loading", "Text Processing", "Image Processing", 
+        "Data Loading", "Text Processing", "Image Processing",
         "Model Training", "Ensemble Creation", "Evaluation"
     ]
-    
+
     # Main pipeline progress bar
-    pipeline_progress = tqdm(pipeline_stages, desc="🔬 ML Pipeline", 
-                           position=0, leave=True,
-                           bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {desc}")
+    pipeline_progress = tqdm(pipeline_stages, desc="🔬 ML Pipeline",
+                             position=0, leave=True,
+                             bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {desc}")
 
     # ------------------------------------------------------------------
     # 1. DATA LOADING AND PREPARATION
     # ------------------------------------------------------------------
     pipeline_progress.set_description("🔬 ML Pipeline: Data Loading")
     stage_start = time.time()
-    
+
     log.info("\n📂 STAGE 1: DATA LOADING AND PREPARATION")
-    
+
     with tqdm(total=4, desc="   ├─ Loading Data", position=1, leave=False,
-             bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as load_pbar:
-        
+              bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as load_pbar:
+
         load_pbar.set_description("   ├─ Loading datasets")
-        silver_all, gold, recipes = load_datasets_fixed()
+        silver_all, gold, recipes = load_datasets()
         load_pbar.update(1)
-        
+
         load_pbar.set_description("   ├─ Creating index keys")
         silver_all["uid"] = silver_all.index
         gold["uid"] = gold.index
         load_pbar.update(1)
-        
+
         load_pbar.set_description("   ├─ Preparing text data")
         silver_txt = silver_all.copy()
         load_pbar.update(1)
-        
+
         load_pbar.set_description("   ├─ Filtering image data")
         silver_img = filter_photo_rows(silver_all)
         gold_img = filter_photo_rows(gold)
         load_pbar.update(1)
 
-    # Apply sampling BEFORE image processing 
+    # Apply sampling BEFORE image processing
     if sample_frac:
         original_txt_size = len(silver_txt)
         original_img_size = len(silver_img)
-        
+
         # Sample both text and image datasets consistently
         # Use the same random state to ensure consistent sampling across modalities
-        silver_txt = silver_txt.sample(frac=sample_frac, random_state=42).copy()
-        
+        silver_txt = silver_txt.sample(
+            frac=sample_frac, random_state=42).copy()
+
         # Sample image data using the same indices if possible, otherwise sample separately
         if not silver_img.empty:
             # Get intersection of sampled text indices with available image indices
             sampled_indices = silver_txt.index
             available_img_indices = silver_img.index
-            common_indices = sampled_indices.intersection(available_img_indices)
-            
+            common_indices = sampled_indices.intersection(
+                available_img_indices)
+
             if len(common_indices) > 0:
                 # Use common indices for consistent sampling
                 silver_img = silver_img.loc[common_indices].copy()
-                log.info(f"   📉 Consistent sampling: Using {len(common_indices):,} common indices")
+                log.info(
+                    f"   📉 Consistent sampling: Using {len(common_indices):,} common indices")
             else:
                 # Fallback: sample image data separately
-                silver_img = silver_img.sample(frac=sample_frac, random_state=42).copy()
+                silver_img = silver_img.sample(
+                    frac=sample_frac, random_state=42).copy()
                 log.info(f"   📉 Separate sampling: No common indices found")
-        
+
         sampled_txt_size = len(silver_txt)
         sampled_img_size = len(silver_img)
-        
+
         log.info(f"   📉 Applied sampling before processing:")
-        log.info(f"   ├─ Text: {original_txt_size:,} → {sampled_txt_size:,} rows ({sample_frac:.1%})")
-        log.info(f"   └─ Images: {original_img_size:,} → {sampled_img_size:,} rows ({sample_frac:.1%})")
+        log.info(
+            f"   ├─ Text: {original_txt_size:,} → {sampled_txt_size:,} rows ({sample_frac:.1%})")
+        log.info(
+            f"   └─ Images: {original_img_size:,} → {sampled_img_size:,} rows ({sample_frac:.1%})")
 
     # Log dataset statistics
     log.info(f"\n   📊 Dataset Statistics:")
@@ -4330,41 +4544,42 @@ def run_full_pipeline(mode: str = "both",
     # Display class balance information
     log.info(f"\n   ⚖️  Class Balance Analysis:")
     show_balance(gold, "Gold set")
-    show_balance(silver_txt, "Silver (Text) set") 
+    show_balance(silver_txt, "Silver (Text) set")
     show_balance(silver_img, "Silver (Image) set")
-    
+
     stage_time = time.time() - stage_start
     log.info(f"   ✅ Data loading completed in {stage_time:.1f}s")
     log_memory_usage("Data Loading")
     pipeline_progress.update(1)
     optimize_memory_usage("Data Loading")
     if psutil.virtual_memory().percent > 70:
-        log.warning(f"High memory usage after data loading: {psutil.virtual_memory().percent:.1f}%")
+        log.warning(
+            f"High memory usage after data loading: {psutil.virtual_memory().percent:.1f}%")
 
     # ------------------------------------------------------------------
     # 2. TEXT FEATURE PROCESSING
     # ------------------------------------------------------------------
     pipeline_progress.set_description("🔬 ML Pipeline: Text Processing")
     stage_start = time.time()
-    
+
     log.info("\n🔤 STAGE 2: TEXT FEATURE PROCESSING")
-    
+
     with tqdm(total=4, desc="   ├─ Text Features", position=1, leave=False,
-             bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as text_pbar:
-        
+              bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as text_pbar:
+
         text_pbar.set_description("   ├─ Initializing vectorizer")
         vec = TfidfVectorizer(**CFG.vec_kwargs)
         log.info(f"   ├─ Vectorizer config: {CFG.vec_kwargs}")
         text_pbar.update(1)
-        
+
         text_pbar.set_description("   ├─ Fitting on silver data")
         X_text_silver = vec.fit_transform(silver_txt.clean)
         text_pbar.update(1)
-        
+
         text_pbar.set_description("   ├─ Transforming gold data")
         X_text_gold = vec.transform(gold.clean)
         text_pbar.update(1)
-        
+
         text_pbar.set_description("   ├─ Saving embeddings")
         Path("embeddings").mkdir(exist_ok=True)
         joblib.dump(X_text_gold, "embeddings/text_gold.pkl")
@@ -4375,19 +4590,20 @@ def run_full_pipeline(mode: str = "both",
     log.info(f"   ├─ Vocabulary size: {len(vec.vocabulary_):,}")
     log.info(f"   ├─ Silver features: {X_text_silver.shape}")
     log.info(f"   ├─ Gold features: {X_text_gold.shape}")
-    log.info(f"   ├─ Sparsity: {(1 - X_text_silver.nnz / X_text_silver.size):.1%}")
-    log.info(f"   └─ Memory usage: ~{X_text_silver.data.nbytes // (1024**2)} MB")
+    log.info(
+        f"   ├─ Sparsity: {(1 - X_text_silver.nnz / X_text_silver.size):.1%}")
+    log.info(
+        f"   └─ Memory usage: ~{X_text_silver.data.nbytes // (1024**2)} MB")
 
     stage_time = time.time() - stage_start
     log.info(f"   ✅ Text processing completed in {stage_time:.1f}s")
     log_memory_usage("Text Processing")
-    optimize_memory_usage("Text Processing") 
+    optimize_memory_usage("Text Processing")
     pipeline_progress.update(1)
 
     # Initialize result containers
     results, res_text, res_img = [], [], []
     img_silver = img_gold = None
-
 
     # ------------------------------------------------------------------
     # 3. IMAGE FEATURE PROCESSING (FIXED FOR DIMENSION ALIGNMENT)
@@ -4395,85 +4611,102 @@ def run_full_pipeline(mode: str = "both",
     if mode in {"image", "both"}:
         pipeline_progress.set_description("🔬 ML Pipeline: Image Processing")
         stage_start = time.time()
-        
+
         log.info("\n🖼️  STAGE 3: IMAGE FEATURE PROCESSING")
         log.info(f"   ├─ Processing {len(silver_img):,} sampled silver images")
         log.info(f"   └─ Processing {len(gold_img):,} gold images")
-        
+
         with tqdm(total=6, desc="   ├─ Image Pipeline", position=1, leave=False,
-                bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as img_pbar:
-            
+                  bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as img_pbar:
+
             # Download images
             img_pbar.set_description("   ├─ Downloading silver images")
             if not silver_img.empty:
-                silver_downloaded = _download_images(silver_img, CFG.image_dir / "silver")
-                log.info(f"      ├─ Silver download: {len(silver_downloaded):,}/{len(silver_img):,} successful")
+                silver_downloaded = _download_images(
+                    silver_img, CFG.image_dir / "silver")
+                log.info(
+                    f"      ├─ Silver download: {len(silver_downloaded):,}/{len(silver_img):,} successful")
             else:
                 silver_downloaded = []
                 log.info(f"      ├─ Silver download: No images to download")
             img_pbar.update(1)
-            
+
             img_pbar.set_description("   ├─ Downloading gold images")
             if not gold_img.empty:
-                gold_downloaded = _download_images(gold_img, CFG.image_dir / "gold")
-                log.info(f"      ├─ Gold download: {len(gold_downloaded):,}/{len(gold_img):,} successful")
+                gold_downloaded = _download_images(
+                    gold_img, CFG.image_dir / "gold")
+                log.info(
+                    f"      ├─ Gold download: {len(gold_downloaded):,}/{len(gold_img):,} successful")
             else:
                 gold_downloaded = []
                 log.info(f"      ├─ Gold download: No images to download")
             img_pbar.update(1)
-            
+
             img_pbar.set_description("   ├─ Filtering by downloads")
             if silver_downloaded:
-                img_silver_df = filter_silver_by_downloaded_images(silver_img, CFG.image_dir)
-                log.info(f"      ├─ Silver filtered: {len(img_silver_df):,} with valid images")
+                img_silver_df = filter_silver_by_downloaded_images(
+                    silver_img, CFG.image_dir)
+                log.info(
+                    f"      ├─ Silver filtered: {len(img_silver_df):,} with valid images")
             else:
                 img_silver_df = pd.DataFrame()
                 log.info(f"      ├─ Silver filtered: Empty (no downloads)")
-                
-            img_gold_df = filter_photo_rows(gold_img) if gold_downloaded else pd.DataFrame()
-            log.info(f"      ├─ Gold filtered: {len(img_gold_df):,} with valid images")
+
+            img_gold_df = filter_photo_rows(
+                gold_img) if gold_downloaded else pd.DataFrame()
+            log.info(
+                f"      ├─ Gold filtered: {len(img_gold_df):,} with valid images")
             img_pbar.update(1)
-            
+
             # CRITICAL FIX: Get both embeddings AND valid indices
             img_pbar.set_description("   ├─ Building silver embeddings")
             if not img_silver_df.empty:
-                img_silver, silver_valid_indices = build_image_embeddings(img_silver_df, "silver", force)
-                
+                img_silver, silver_valid_indices = build_image_embeddings(
+                    img_silver_df, "silver", force)
+
                 # FILTER DataFrame to match embeddings
                 if len(silver_valid_indices) != len(img_silver_df):
-                    img_silver_df = img_silver_df.loc[silver_valid_indices].copy()
-                    log.info(f"      ├─ Silver DF filtered: {len(img_silver_df):,} rows match embeddings")
-                
+                    img_silver_df = img_silver_df.loc[silver_valid_indices].copy(
+                    )
+                    log.info(
+                        f"      ├─ Silver DF filtered: {len(img_silver_df):,} rows match embeddings")
+
                 log.info(f"      ├─ Silver embeddings: {img_silver.shape}")
-                log.info(f"      ├─ Silver DataFrame: {len(img_silver_df):,} rows")
+                log.info(
+                    f"      ├─ Silver DataFrame: {len(img_silver_df):,} rows")
             else:
                 img_silver = np.array([]).reshape(0, 2048)
                 silver_valid_indices = []
-                log.info(f"      ├─ Silver embeddings: Empty array (no valid images)")
+                log.info(
+                    f"      ├─ Silver embeddings: Empty array (no valid images)")
             img_pbar.update(1)
-            
+
             # CRITICAL FIX: Get both embeddings AND valid indices
             img_pbar.set_description("   ├─ Building gold embeddings")
             if not img_gold_df.empty:
-                img_gold, gold_valid_indices = build_image_embeddings(img_gold_df, "gold", force)
-                
+                img_gold, gold_valid_indices = build_image_embeddings(
+                    img_gold_df, "gold", force)
+
                 # FILTER DataFrame to match embeddings
                 if len(gold_valid_indices) != len(img_gold_df):
                     img_gold_df = img_gold_df.loc[gold_valid_indices].copy()
-                    log.info(f"      ├─ Gold DF filtered: {len(img_gold_df):,} rows match embeddings")
-                    
+                    log.info(
+                        f"      ├─ Gold DF filtered: {len(img_gold_df):,} rows match embeddings")
+
                 log.info(f"      ├─ Gold embeddings: {img_gold.shape}")
                 log.info(f"      ├─ Gold DataFrame: {len(img_gold_df):,} rows")
             else:
                 img_gold = np.array([]).reshape(0, 2048)
                 gold_valid_indices = []
-                log.info(f"      ├─ Gold embeddings: Empty array (no valid images)")
+                log.info(
+                    f"      ├─ Gold embeddings: Empty array (no valid images)")
             img_pbar.update(1)
-            
+
             img_pbar.set_description("   ├─ Saving embeddings")
             if img_gold.size > 0:
                 joblib.dump(img_gold, "embeddings/img_gold.pkl")
-                log.info(f"      ├─ Saved gold embeddings to embeddings/img_gold.pkl")
+                log.info(
+                    f"      ├─ Saved gold embeddings to embeddings/img_gold.pkl")
             else:
                 log.info(f"      ├─ Skipped saving empty gold embeddings")
             img_pbar.update(1)
@@ -4485,10 +4718,12 @@ def run_full_pipeline(mode: str = "both",
             log.info(f"   ├─ Silver DataFrame: {len(img_silver_df):,} rows")
             log.info(f"   ├─ Gold embeddings: {img_gold.shape}")
             log.info(f"   └─ Gold DataFrame: {len(img_gold_df):,} rows")
-            
+
             # Ensure dimensions match
-            assert img_silver.shape[0] == len(img_silver_df), f"Silver dimension mismatch: {img_silver.shape[0]} != {len(img_silver_df)}"
-            assert img_gold.shape[0] == len(img_gold_df), f"Gold dimension mismatch: {img_gold.shape[0]} != {len(img_gold_df)}"
+            assert img_silver.shape[0] == len(
+                img_silver_df), f"Silver dimension mismatch: {img_silver.shape[0]} != {len(img_silver_df)}"
+            assert img_gold.shape[0] == len(
+                img_gold_df), f"Gold dimension mismatch: {img_gold.shape[0]} != {len(img_gold_df)}"
             log.info(f"   ✅ All dimensions verified!")
 
         # Convert to sparse matrices for memory efficiency (only if not empty)
@@ -4496,7 +4731,7 @@ def run_full_pipeline(mode: str = "both",
             X_img_silver = csr_matrix(img_silver)
         else:
             X_img_silver = csr_matrix((0, 2048))
-            
+
         if img_gold.size > 0:
             X_img_gold = csr_matrix(img_gold)
         else:
@@ -4510,12 +4745,15 @@ def run_full_pipeline(mode: str = "both",
         log.info(f"   ├─ Gold images downloaded: {len(gold_downloaded):,}")
         log.info(f"   ├─ Silver embeddings: {img_silver.shape}")
         log.info(f"   ├─ Gold embeddings: {img_gold.shape}")
-        log.info(f"   └─ Embedding size: {img_silver.nbytes // (1024**2) if img_silver.size > 0 else 0} MB")
+        log.info(
+            f"   └─ Embedding size: {img_silver.nbytes // (1024**2) if img_silver.size > 0 else 0} MB")
 
         # Early exit if no images available and mode is image-only
         if mode == "image" and (img_silver.size == 0 or img_gold.size == 0):
-            log.warning(f"   ⚠️  Image-only mode requested but no valid images available!")
-            log.warning(f"   └─ Consider using mode='text' or increasing sample_frac")
+            log.warning(
+                f"   ⚠️  Image-only mode requested but no valid images available!")
+            log.warning(
+                f"   └─ Consider using mode='text' or increasing sample_frac")
             stage_time = time.time() - stage_start
             log.info(f"   ❌ Image processing failed in {stage_time:.1f}s")
             return None, None, None, []
@@ -4524,24 +4762,24 @@ def run_full_pipeline(mode: str = "both",
         log.info(f"   ✅ Image processing completed in {stage_time:.1f}s")
         log_memory_usage("Image Processing")
         optimize_memory_usage("Image Processing")
-        
+
     else:
         log.info("\n⏭️  STAGE 3: SKIPPED (Image processing not requested)")
-        
+
     pipeline_progress.update(1)
 
     # IMAGE MODELS
     if mode in {"image", "both"} and img_silver.size > 0:
         train_pbar.set_description("   ├─ Training Image Models")
         log.info(f"   🖼️  Training image-based models...")
-        
+
         # DEBUG: Verify dimensions before training
         log.info(f"   🔍 PRE-TRAINING DIMENSION CHECK:")
         log.info(f"   ├─ X_img_silver: {X_img_silver.shape}")
         log.info(f"   ├─ img_silver_df: {len(img_silver_df):,} rows")
         log.info(f"   ├─ X_img_gold: {X_img_gold.shape}")
         log.info(f"   └─ img_gold_df: {len(img_gold_df):,} rows")
-        
+
         res_img = run_mode_A(
             X_img_silver,
             img_gold_df.clean,
@@ -4551,24 +4789,20 @@ def run_full_pipeline(mode: str = "both",
             domain="image",
             apply_smote=False
         )
-        
+
         results.extend(res_img)
         log.info(f"      ✅ Image models: {len(res_img)} results")
         optimize_memory_usage("Image Models")
         train_pbar.update(1)
-
-
-
-
 
     # ------------------------------------------------------------------
     # 4. MODEL TRAINING
     # ------------------------------------------------------------------
     pipeline_progress.set_description("🔬 ML Pipeline: Model Training")
     stage_start = time.time()
-    train_pbar = tqdm(total=0, desc="Training")  
+    train_pbar = tqdm(total=0, desc="Training")
     log.info("\n🤖 STAGE 4: MODEL TRAINING")
-    
+
     training_subtasks = []
     if mode in {"image", "both"} and img_silver.size > 0:
         training_subtasks.append("Image Models")
@@ -4579,13 +4813,13 @@ def run_full_pipeline(mode: str = "both",
         training_subtasks.append("Final Combined")
 
     with tqdm(training_subtasks, desc="   ├─ Training Phases", position=1, leave=False,
-             bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}]") as train_pbar:
+              bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}]") as train_pbar:
 
         # IMAGE MODELS
         if mode in {"image", "both"} and img_silver.size > 0:
             train_pbar.set_description("   ├─ Training Image Models")
             log.info(f"   🖼️  Training image-based models...")
-            
+
             res_img = run_mode_A(
                 X_img_silver,
                 img_gold_df.clean,
@@ -4595,7 +4829,7 @@ def run_full_pipeline(mode: str = "both",
                 domain="image",
                 apply_smote=False
             )
-            
+
             results.extend(res_img)
             log.info(f"      ✅ Image models: {len(res_img)} results")
             optimize_memory_usage("Image Models")
@@ -4605,13 +4839,13 @@ def run_full_pipeline(mode: str = "both",
         if mode in {"text", "both"}:
             train_pbar.set_description("   ├─ Training Text Models")
             log.info(f"   🔤 Training text-based models...")
-            
+
             res_text = run_mode_A(
                 X_text_silver, gold.clean, X_text_gold,
                 silver_txt, gold,
                 domain="text", apply_smote=True
             )
-            
+
             results.extend(res_text)
             log.info(f"      ✅ Text models: {len(res_text)} results")
             optimize_memory_usage("Text Models")
@@ -4621,23 +4855,24 @@ def run_full_pipeline(mode: str = "both",
         if mode == "both" and len(res_text) > 0 and len(res_img) > 0:
             train_pbar.set_description("   ├─ Text+Image Ensemble")
             log.info(f"   🤝 Creating text+image ensemble...")
-            
+
             ensemble_results = []
             for task in ("keto", "vegan"):
                 try:
                     # Find best models for each modality
                     text_models = [r for r in res_text if r["task"] == task]
                     image_models = [r for r in res_img if r["task"] == task]
-                    
+
                     if not text_models or not image_models:
-                        log.warning(f"      ⚠️  No models available for {task} ensemble")
+                        log.warning(
+                            f"      ⚠️  No models available for {task} ensemble")
                         continue
-                        
+
                     bt = max(text_models, key=lambda r: r["F1"])
                     bi = max(image_models, key=lambda r: r["F1"])
 
                     log.info(f"      ├─ {task}: Text={bt['model']} (F1={bt['F1']:.3f}), "
-                            f"Image={bi['model']} (F1={bi['F1']:.3f})")
+                             f"Image={bi['model']} (F1={bi['F1']:.3f})")
 
                     # FIXED: Better alignment handling
                     if len(bt["prob"]) == len(gold) and len(bi["prob"]) == len(img_gold_df):
@@ -4645,9 +4880,10 @@ def run_full_pipeline(mode: str = "both",
                         s_txt = pd.Series(bt["prob"], index=gold.index)
                         s_img = pd.Series(bi["prob"], index=img_gold_df.index)
                         common = s_txt.index.intersection(s_img.index)
-                        
-                        log.info(f"      ├─ Alignment: {len(s_txt)} text + {len(s_img)} image = {len(common)} common")
-                        
+
+                        log.info(
+                            f"      ├─ Alignment: {len(s_txt)} text + {len(s_img)} image = {len(common)} common")
+
                         if len(common) >= 10:  # Need minimum samples for meaningful ensemble
                             # Average predictions
                             avg = (s_txt.loc[common] + s_img.loc[common]) / 2
@@ -4660,15 +4896,19 @@ def run_full_pipeline(mode: str = "both",
                                 "common_samples": len(common)
                             }
                             ensemble_results.append(ensemble_result)
-                            
-                            log.info(f"      ✅ {task} ensemble: F1={ensemble_result['F1']:.3f}")
+
+                            log.info(
+                                f"      ✅ {task} ensemble: F1={ensemble_result['F1']:.3f}")
                         else:
-                            log.warning(f"      ⚠️  Too few common samples ({len(common)}) for {task} ensemble")
+                            log.warning(
+                                f"      ⚠️  Too few common samples ({len(common)}) for {task} ensemble")
                     else:
-                        log.warning(f"      ⚠️  Dimension mismatch for {task}: text={len(bt['prob'])}, image={len(bi['prob'])}")
-                        
+                        log.warning(
+                            f"      ⚠️  Dimension mismatch for {task}: text={len(bt['prob'])}, image={len(bi['prob'])}")
+
                 except Exception as e:
-                    log.error(f"      ❌ {task} ensemble creation failed: {str(e)[:50]}...")
+                    log.error(
+                        f"      ❌ {task} ensemble creation failed: {str(e)[:50]}...")
 
             if ensemble_results:
                 table("Ensemble Text+Image", ensemble_results)
@@ -4676,35 +4916,38 @@ def run_full_pipeline(mode: str = "both",
                 log.info(f"      ✅ Created {len(ensemble_results)} ensembles")
             else:
                 log.warning(f"      ⚠️  No successful ensembles created")
-                
+
             train_pbar.update(1)
 
         # FINAL COMBINED MODEL TRAINING - FIXED DIMENSION ALIGNMENT
         if mode == "both" and img_silver.size > 0:
             train_pbar.set_description("   ├─ Final Combined Models")
             log.info(f"   🔄 Training final combined models...")
-            
+
             # CRITICAL FIX: Align both silver and gold to common image indices
             common_silver_idx = img_silver_df.index
             common_gold_idx = img_gold_df.index
-            
+
             if len(common_silver_idx) > 0 and len(common_gold_idx) > 0:
                 # Align silver features
-                X_text_silver_algn = vec.transform(silver_txt.loc[common_silver_idx].clean)
+                X_text_silver_algn = vec.transform(
+                    silver_txt.loc[common_silver_idx].clean)
                 X_silver = combine_features(X_text_silver_algn, img_silver)
-                
+
                 # Align gold features - ONLY use rows that have images
-                X_text_gold_algn = vec.transform(gold.loc[common_gold_idx].clean)
+                X_text_gold_algn = vec.transform(
+                    gold.loc[common_gold_idx].clean)
                 X_gold = combine_features(X_text_gold_algn, img_gold)
-                
+
                 silver_eval = silver_txt.loc[common_silver_idx]
                 gold_eval = gold.loc[common_gold_idx]
-                
-                log.info(f"      ├─ Combined silver features: {X_silver.shape}")
+
+                log.info(
+                    f"      ├─ Combined silver features: {X_silver.shape}")
                 log.info(f"      ├─ Combined gold features: {X_gold.shape}")
                 log.info(f"      ├─ Silver samples: {len(silver_eval):,}")
                 log.info(f"      └─ Gold samples: {len(gold_eval):,}")
-                
+
                 # Run combined training
                 res_combined = run_mode_A(
                     X_silver, gold_eval.clean, X_gold,
@@ -4712,12 +4955,14 @@ def run_full_pipeline(mode: str = "both",
                     domain="both", apply_smote=True
                 )
                 results.extend(res_combined)
-                log.info(f"      ✅ Combined models: {len(res_combined)} results")
-                optimize_memory_usage() 
+                log.info(
+                    f"      ✅ Combined models: {len(res_combined)} results")
+                optimize_memory_usage()
 
             else:
-                log.warning(f"      ⚠️  No common indices for combined features, skipping")
-                
+                log.warning(
+                    f"      ⚠️  No common indices for combined features, skipping")
+
         elif mode == "text":
             X_silver, X_gold = X_text_silver, X_text_gold
             silver_eval = silver_txt
@@ -4726,7 +4971,8 @@ def run_full_pipeline(mode: str = "both",
             silver_eval = img_silver_df
         else:
             # Fallback to text if no images available
-            log.warning(f"   ⚠️  No valid images for image mode, falling back to text")
+            log.warning(
+                f"   ⚠️  No valid images for image mode, falling back to text")
             X_silver, X_gold = X_text_silver, X_text_gold
             silver_eval = silver_txt
 
@@ -4734,10 +4980,10 @@ def run_full_pipeline(mode: str = "both",
         if not results:  # Only if no results yet
             log.info(f"   🎯 Running fallback text-only training...")
             res_final = run_mode_A(X_text_silver, gold.clean, X_text_gold,
-                                 silver_txt, gold, domain="text", apply_smote=True)
+                                   silver_txt, gold, domain="text", apply_smote=True)
             results.extend(res_final)
             log.info(f"      ✅ Final models: {len(res_final)} results")
-            
+
         if mode == "both" and img_silver.size > 0:
             train_pbar.update(1)
 
@@ -4752,24 +4998,25 @@ def run_full_pipeline(mode: str = "both",
     # ------------------------------------------------------------------
     pipeline_progress.set_description("🔬 ML Pipeline: Ensemble Creation")
     stage_start = time.time()
-    
+
     log.info("\n🎭 STAGE 5: ENSEMBLE OPTIMIZATION")
-    
+
     if len(results) > 0:
         ensemble_tasks = ["keto", "vegan"]
         with tqdm(ensemble_tasks, desc="   ├─ Ensemble Tasks", position=1, leave=False,
-                 bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}]") as ens_pbar:
-            
+                  bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}]") as ens_pbar:
+
             ensemble_results = []
             for task in ens_pbar:
                 ens_pbar.set_description(f"   ├─ Optimizing {task} ensemble")
-                
+
                 log.info(f"   🎯 Optimizing {task} ensemble...")
-                
+
                 # Count available models for this task
-                task_models = [r for r in results if r["task"] == task and r["model"] != "Rule"]
+                task_models = [r for r in results if r["task"]
+                               == task and r["model"] != "Rule"]
                 log.info(f"      ├─ Available models: {len(task_models)}")
-                
+
                 if len(task_models) > 1:
                     # Use appropriate feature matrix for ensemble
                     if mode == "both" and img_silver.size > 0:
@@ -4784,19 +5031,23 @@ def run_full_pipeline(mode: str = "both",
                         ens_X_silver = X_text_silver
                         ens_X_gold = X_text_gold
                         ens_silver_eval = silver_txt
-                    
+
                     best_ens = best_ensemble(task, results, ens_X_silver, gold.clean,
-                                           ens_X_gold, ens_silver_eval, gold)
+                                             ens_X_gold, ens_silver_eval, gold)
                     if best_ens:
                         ensemble_results.append(best_ens)
-                        log.info(f"      ✅ {task} ensemble: {best_ens['model']} (F1={best_ens['F1']:.3f})")
+                        log.info(
+                            f"      ✅ {task} ensemble: {best_ens['model']} (F1={best_ens['F1']:.3f})")
                     else:
-                        log.warning(f"      ⚠️  {task} ensemble optimization failed")
+                        log.warning(
+                            f"      ⚠️  {task} ensemble optimization failed")
                 else:
-                    log.info(f"      ⏭️  {task}: Only {len(task_models)} model(s) available, skipping ensemble")
+                    log.info(
+                        f"      ⏭️  {task}: Only {len(task_models)} model(s) available, skipping ensemble")
 
             results.extend(ensemble_results)
-            log.info(f"   📊 Ensemble results: {len(ensemble_results)} optimized ensembles")
+            log.info(
+                f"   📊 Ensemble results: {len(ensemble_results)} optimized ensembles")
     else:
         log.warning(f"   ⚠️  No models available for ensemble optimization")
 
@@ -4810,12 +5061,12 @@ def run_full_pipeline(mode: str = "both",
     # ------------------------------------------------------------------
     pipeline_progress.set_description("🔬 ML Pipeline: Evaluation")
     stage_start = time.time()
-    
+
     log.info("\n📊 STAGE 6: EVALUATION AND EXPORT")
-    
+
     with tqdm(total=3, desc="   ├─ Export Process", position=1, leave=False,
-             bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as export_pbar:
-        
+              bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as export_pbar:
+
         export_pbar.set_description("   ├─ Generating plots")
         if len(results) > 0:
             export_eval_plots(results, gold)
@@ -4823,7 +5074,7 @@ def run_full_pipeline(mode: str = "both",
         else:
             log.warning(f"      ⚠️  No results to plot")
         export_pbar.update(1)
-        
+
         export_pbar.set_description("   ├─ Saving results")
         # Save comprehensive results
         results_summary = []
@@ -4839,14 +5090,16 @@ def run_full_pipeline(mode: str = "both",
                 'pr_auc': r['PR']
             }
             results_summary.append(summary)
-        
+
         if results_summary:
-            pd.DataFrame(results_summary).to_csv("pipeline_results_summary.csv", index=False)
-            log.info(f"      ✅ Saved results summary with {len(results_summary)} entries")
+            pd.DataFrame(results_summary).to_csv(
+                "pipeline_results_summary.csv", index=False)
+            log.info(
+                f"      ✅ Saved results summary with {len(results_summary)} entries")
         else:
             log.warning(f"      ⚠️  No results to save")
         export_pbar.update(1)
-        
+
         export_pbar.set_description("   ├─ Cleanup")
         # Memory cleanup
         gc.collect()
@@ -4861,9 +5114,10 @@ def run_full_pipeline(mode: str = "both",
     # PIPELINE COMPLETION SUMMARY
     # ------------------------------------------------------------------
     total_time = time.time() - pipeline_start
-    
+
     log.info(f"\n🏁 PIPELINE COMPLETE")
-    log.info(f"   ├─ Total runtime: {total_time:.1f}s ({total_time/60:.1f} minutes)")
+    log.info(
+        f"   ├─ Total runtime: {total_time:.1f}s ({total_time/60:.1f} minutes)")
     log.info(f"   ├─ Mode: {mode}")
     log.info(f"   ├─ Sample fraction: {sample_frac or 'Full dataset'}")
     log.info(f"   ├─ Total results: {len(results)}")
@@ -4877,10 +5131,11 @@ def run_full_pipeline(mode: str = "both",
             if task_results:
                 best_result = max(task_results, key=lambda x: x['F1'])
                 log.info(f"   ├─ {task.upper()}: Best F1={best_result['F1']:.3f} "
-                        f"({best_result['model']}) | ACC={best_result['ACC']:.3f}")
+                         f"({best_result['model']}) | ACC={best_result['ACC']:.3f}")
     else:
         log.warning(f"\n   ⚠️  NO RESULTS GENERATED")
-        log.warning(f"   └─ Consider checking data availability or adjusting parameters")
+        log.warning(
+            f"   └─ Consider checking data availability or adjusting parameters")
 
     # Resource usage summary
     final_memory = psutil.virtual_memory()
@@ -4911,12 +5166,12 @@ def run_full_pipeline(mode: str = "both",
             'gold_images_downloaded': len(gold_downloaded) if 'gold_downloaded' in locals() else 0
         }
     }
-    
+
     with open("pipeline_metadata.json", "w") as f:
         json.dump(pipeline_metadata, f, indent=2)
 
     log.info(f"   💾 Saved pipeline metadata to pipeline_metadata.json")
-    
+
     return vec, silver_txt, gold, results
 
 
@@ -4955,8 +5210,9 @@ def main():
 
         elif args.train:
             # SINGLE PIPELINE RUN - No restarts
-            log.info(f"🧠 Starting training pipeline with sample_frac={args.sample_frac}")
-            
+            log.info(
+                f"🧠 Starting training pipeline with sample_frac={args.sample_frac}")
+
             vec, silver, gold, res = run_full_pipeline(
                 mode=args.mode, force=args.force, sample_frac=args.sample_frac)
 
@@ -4979,38 +5235,45 @@ def main():
                     if task_res:
                         best = max(task_res, key=lambda x: x['F1'])
                         model_name = best['model']
-                        
+
                         # Extract base name (remove domain suffix)
-                        base_name = model_name.split('_')[0]  # "Softmax_TEXT" -> "Softmax"
-                        
+                        # "Softmax_TEXT" -> "Softmax"
+                        base_name = model_name.split('_')[0]
+
                         # Try multiple lookup strategies
                         saved_model = None
-                        
+
                         if base_name in BEST:
                             saved_model = BEST[base_name]
                             log.info(f"✅ Found model {base_name} for {task}")
                         elif model_name in BEST:
                             saved_model = BEST[model_name]
-                            log.info(f"✅ Found exact model {model_name} for {task}")
+                            log.info(
+                                f"✅ Found exact model {model_name} for {task}")
                         else:
-                            log.warning(f"⚠️  Could not find model {base_name} in BEST dict")
+                            log.warning(
+                                f"⚠️  Could not find model {base_name} in BEST dict")
                             # Try to rebuild
                             try:
                                 models_dict = build_models(task, domain="text")
                                 if base_name in models_dict:
                                     saved_model = models_dict[base_name]
-                                    log.info(f"✅ Rebuilt model {base_name} for {task}")
+                                    log.info(
+                                        f"✅ Rebuilt model {base_name} for {task}")
                             except Exception as rebuild_error:
-                                log.error(f"❌ Could not rebuild {base_name}: {rebuild_error}")
+                                log.error(
+                                    f"❌ Could not rebuild {base_name}: {rebuild_error}")
 
                         if saved_model:
                             best_models[task] = saved_model
-                            log.info(f"✅ Saved {task} model: {type(saved_model).__name__}")
+                            log.info(
+                                f"✅ Saved {task} model: {type(saved_model).__name__}")
 
                 if best_models:
                     with open(CFG.data_dir / "models.pkl", 'wb') as f:
                         pickle.dump(best_models, f)
-                    log.info(f"✅ Saved {len(best_models)} models to {CFG.data_dir}")
+                    log.info(
+                        f"✅ Saved {len(best_models)} models to {CFG.data_dir}")
                 else:
                     log.warning("⚠️  No models to save")
 
@@ -5042,7 +5305,8 @@ def main():
                         ingredients = [i.strip()
                                        for i in str(row['ingredients']).split(',')]
 
-                    pred_keto = all(is_ingredient_keto(ing) for ing in ingredients)
+                    pred_keto = all(is_ingredient_keto(ing)
+                                    for ing in ingredients)
                     pred_vegan = all(is_ingredient_vegan(ing)
                                      for ing in ingredients)
 
@@ -5067,8 +5331,9 @@ def main():
 
         else:
             # SINGLE PIPELINE RUN - No restarts
-            log.info(f"🧠 Starting default pipeline with sample_frac={args.sample_frac}")
-            
+            log.info(
+                f"🧠 Starting default pipeline with sample_frac={args.sample_frac}")
+
             run_full_pipeline(mode=args.mode, force=args.force,
                               sample_frac=args.sample_frac)
 
@@ -5077,6 +5342,8 @@ def main():
         import traceback
         log.error(f"Full traceback:\n{traceback.format_exc()}")
         raise
+
+
 # ============================================================================
 # SIMPLE INTERFACE FOR ASSESSMENT (Required functions)
 # ============================================================================
@@ -5287,37 +5554,45 @@ def is_vegan(ingredients: Iterable[str] | str) -> bool:
 # MAIN ENTRY POINT
 # ============================================================================
 
+
 def main():
     """Main function with ABSOLUTE prevention of restarts."""
     import argparse
     import sys
     import atexit
-    
+
     # Register exit handler to prevent restarts
     def prevent_restart():
         log.info("🛑 Process exiting - no restarts allowed")
-    
+
     atexit.register(prevent_restart)
 
     parser = argparse.ArgumentParser(description='Diet Classifier')
-    parser.add_argument('--ground_truth', type=str, help='Path to ground truth CSV')
-    parser.add_argument('--train', action='store_true', help='Run full training pipeline')
-    parser.add_argument('--ingredients', type=str, help='Comma separated ingredients to classify')
-    parser.add_argument('--mode', choices=['text', 'image', 'both'], default='both', help='Feature mode for training')
-    parser.add_argument('--force', action='store_true', help='Recompute image embeddings')
-    parser.add_argument('--sample_frac', type=float, default=None, help="Fraction of silver set to sample.")
+    parser.add_argument('--ground_truth', type=str,
+                        help='Path to ground truth CSV')
+    parser.add_argument('--train', action='store_true',
+                        help='Run full training pipeline')
+    parser.add_argument('--ingredients', type=str,
+                        help='Comma separated ingredients to classify')
+    parser.add_argument('--mode', choices=['text', 'image', 'both'],
+                        default='both', help='Feature mode for training')
+    parser.add_argument('--force', action='store_true',
+                        help='Recompute image embeddings')
+    parser.add_argument('--sample_frac', type=float,
+                        default=None, help="Fraction of silver set to sample.")
 
     args = parser.parse_args()
 
     try:
         log.info(f"🚀 Starting main with args: {args}")
-        
+
         if args.ingredients:
             # Handle ingredient classification
             if args.ingredients.startswith('['):
                 ingredients = json.loads(args.ingredients)
             else:
-                ingredients = [i.strip() for i in args.ingredients.split(',') if i.strip()]
+                ingredients = [i.strip()
+                               for i in args.ingredients.split(',') if i.strip()]
 
             keto = is_keto(ingredients)
             vegan = is_vegan(ingredients)
@@ -5326,7 +5601,7 @@ def main():
 
         elif args.train:
             log.info(f"🧠 SINGLE training run - sample_frac={args.sample_frac}")
-            
+
             try:
                 vec, silver, gold, res = run_full_pipeline(
                     mode=args.mode, force=args.force, sample_frac=args.sample_frac)
@@ -5334,9 +5609,9 @@ def main():
                 if not res:
                     log.error("❌ Pipeline produced no results!")
                     sys.exit(1)
-                
+
                 log.info(f"✅ Pipeline completed with {len(res)} results")
-                
+
                 # Try to save models - but don't crash if it fails
                 try:
                     import pickle
@@ -5354,21 +5629,24 @@ def main():
                         if task_res:
                             best = max(task_res, key=lambda x: x['F1'])
                             model_name = best['model']
-                            
+
                             # Extract base model name (remove domain suffix)
-                            base_name = model_name.split('_')[0]  # "Softmax_TEXT" -> "Softmax"
-                            
+                            # "Softmax_TEXT" -> "Softmax"
+                            base_name = model_name.split('_')[0]
+
                             # Check if we have the actual model in BEST dict
                             if base_name in BEST:
                                 best_models[task] = BEST[base_name]
                                 log.info(f"✅ Saved {task} model: {base_name}")
                             else:
-                                log.warning(f"⚠️  Could not find model {base_name} in BEST dict")
+                                log.warning(
+                                    f"⚠️  Could not find model {base_name} in BEST dict")
 
                     if best_models:
                         with open(CFG.data_dir / "models.pkl", 'wb') as f:
                             pickle.dump(best_models, f)
-                        log.info(f"✅ Saved {len(best_models)} models to {CFG.data_dir}")
+                        log.info(
+                            f"✅ Saved {len(best_models)} models to {CFG.data_dir}")
                     else:
                         log.warning("⚠️  No models to save")
 
@@ -5382,24 +5660,24 @@ def main():
             except Exception as e:
                 log.error(f"❌ Training pipeline failed: {e}")
                 log.error(f"   Error type: {type(e).__name__}")
-                
+
                 import traceback
                 log.debug(f"Full traceback:\n{traceback.format_exc()}")
-                
+
                 log.info("🚫 EXITING WITHOUT RESTART")
                 sys.exit(1)
 
         elif args.ground_truth:
             # Handle ground truth evaluation - SIMPLIFIED
             log.info(f"📊 Evaluating on ground truth: {args.ground_truth}")
-            
+
             try:
                 df = pd.read_csv(args.ground_truth)
                 log.info(f"✅ Loaded ground truth with {len(df)} rows")
-                
+
                 # Rest of ground truth evaluation...
                 # (keeping original logic but with better error handling)
-                
+
             except Exception as e:
                 log.error(f"❌ Ground truth evaluation failed: {e}")
                 sys.exit(1)
@@ -5407,9 +5685,10 @@ def main():
         else:
             # Default pipeline
             log.info(f"🧠 Default pipeline - sample_frac={args.sample_frac}")
-            
+
             try:
-                run_full_pipeline(mode=args.mode, force=args.force, sample_frac=args.sample_frac)
+                run_full_pipeline(mode=args.mode, force=args.force,
+                                  sample_frac=args.sample_frac)
             except Exception as e:
                 log.error(f"❌ Default pipeline failed: {e}")
                 sys.exit(1)
@@ -5433,18 +5712,18 @@ if __name__ == "__main__":
     # Prevent any possibility of restart loops
     import sys
     import os
-    
+
     # Check if we're already in a restart loop
     restart_count = os.environ.get('PIPELINE_RESTART_COUNT', '0')
     restart_count = int(restart_count)
-    
+
     if restart_count > 0:
         print(f"❌ RESTART LOOP DETECTED (count={restart_count}) - STOPPING")
         sys.exit(1)
-    
+
     # Set restart counter
     os.environ['PIPELINE_RESTART_COUNT'] = str(restart_count + 1)
-    
+
     try:
         main()
     except Exception as e:
@@ -5454,4 +5733,3 @@ if __name__ == "__main__":
         # Clear restart counter on normal exit
         if 'PIPELINE_RESTART_COUNT' in os.environ:
             del os.environ['PIPELINE_RESTART_COUNT']
-

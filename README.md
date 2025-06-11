@@ -481,7 +481,7 @@ def build_image_embeddings(df, mode, force=False):
 
 ### Robust Data Loading
 ```python
-def load_datasets_fixed():
+def load_datasets():
     """Load and prepare silver/gold datasets with proper alignment"""
     
     # Load raw data
