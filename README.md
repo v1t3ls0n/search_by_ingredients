@@ -539,6 +539,530 @@ def test_full_pipeline():
 
 ---
 
+## 💻 Detailed Code Analysis
+
+### Core Classification Functions
+
+The heart of the system lies in the main classification functions that combine multiple approaches:
+
+```python
+def is_ingredient_keto(ingredient: str) -> bool:
+    """
+    Determine if an ingredient is keto-friendly using a multi-layered approach:
+    1. Quick whitelist check for known keto ingredients
+    2. Text normalization for consistent processing
+    3. Blacklist check for high-carb ingredients
+    4. Token-based verification for multi-word ingredients
+    5. ML model prediction with rule-based verification
+    """
+    if not ingredient:
+        return True
+
+    # LAYER 1: Quick whitelist check using regex patterns
+    # This catches keto-friendly items that might otherwise be flagged
+    # Example: "almond flour" contains "flour" but is keto-friendly
+    if RX_WL_KETO.search(ingredient):
+        return True
+
+    # LAYER 2: Normalize the ingredient text
+    # Removes measurements, parentheticals, numbers for consistent matching
+    normalized = normalise(ingredient)
+
+    # LAYER 3: Quick blacklist check
+    # Fast regex check for obvious non-keto ingredients
+    if RX_KETO.search(normalized):
+        return False
+
+    # LAYER 4: Token-based ingredient verification
+    # Handles multi-word ingredients like "kidney bean soup"
+    tokens = tokenize_ingredient(normalized)
+    if not is_keto_ingredient_list(tokens):
+        return False
+
+    # LAYER 5: ML model prediction with verification
+    _ensure_pipeline()  # Initialize models if not already done
+    if 'keto' in _pipeline_state['models']:
+        model = _pipeline_state['models']['keto']
+        if _pipeline_state['vectorizer']:
+            try:
+                # Transform text to TF-IDF features
+                X = _pipeline_state['vectorizer'].transform([normalized])
+                prob = model.predict_proba(X)[0, 1]
+            except Exception as e:
+                # Fallback to rule-based if ML fails
+                log.warning("Vectorizer failed: %s. Using rule-based fallback.", e)
+                prob = RuleModel("keto", RX_KETO, RX_WL_KETO).predict_proba([normalized])[0, 1]
+        else:
+            prob = RuleModel("keto", RX_KETO, RX_WL_KETO).predict_proba([normalized])[0, 1]
+
+        # LAYER 6: Hard verification of ML predictions
+        # Apply domain rules to catch ML errors
+        prob_adj = verify_with_rules("keto", pd.Series([normalized]), np.array([prob]))[0]
+        return prob_adj >= 0.5
+
+    return True
+```
+
+### Text Normalization Pipeline
+
+Critical for consistent ingredient matching across different recipe formats:
+
+```python
+def normalise(t: str | list | tuple | np.ndarray) -> str:
+    """
+    Comprehensive text normalization pipeline that handles:
+    - Multiple input formats (string, list, array)
+    - Unicode normalization and ASCII conversion
+    - Measurement removal
+    - Parenthetical removal
+    - Number removal
+    - Lemmatization for word form consistency
+    """
+    
+    # STEP 1: Handle different input formats
+    # The allrecipes dataset stores ingredients as lists in parquet format
+    # but as strings in CSV format - this unifies the handling
+    if not isinstance(t, str):
+        if isinstance(t, (list, tuple, np.ndarray)):
+            t = " ".join(map(str, t))  # Join list elements
+        else:
+            t = str(t)
+    
+    # STEP 2: Unicode normalization and ASCII conversion
+    # Handles accented characters: "café" → "cafe"
+    t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode()
+    
+    # STEP 3: Remove parentheticals and convert to lowercase
+    # "flour (all-purpose)" → "flour"
+    # "eggs (large)" → "eggs"
+    t = re.sub(r"\([^)]*\)", " ", t.lower())
+    
+    # STEP 4: Remove measurement units
+    # "2 cups flour" → "flour"
+    # "1 tablespoon olive oil" → "olive oil"
+    t = _UNITS.sub(" ", t)
+    
+    # STEP 5: Remove numbers and fractions
+    # "3 1/2 cups" → "cups"
+    # "10.5 oz" → "oz"
+    t = re.sub(r"\d+(?:[/\.]\d+)?", " ", t)
+    
+    # STEP 6: Clean punctuation except hyphens (important for compound words)
+    # "salt-free" should remain "salt-free"
+    t = re.sub(r"[^\w\s-]", " ", t)
+    
+    # STEP 7: Normalize whitespace
+    t = re.sub(r"\s+", " ", t).strip()
+    
+    # STEP 8: Lemmatization for consistent word forms
+    # "cookies" → "cookie", "leaves" → "leaf"
+    if _LEMM:  # If NLTK lemmatizer is available
+        return " ".join(_LEMM.lemmatize(w) for w in t.split() if len(w) > 2)
+    
+    # Fallback: just remove short words
+    return " ".join(w for w in t.split() if len(w) > 2)
+```
+
+### Hard Verification Layer
+
+This is a key innovation that prevents ML models from making systematic errors:
+
+```python
+def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarray:
+    """
+    Apply rule-based verification to ML predictions to prevent systematic errors.
+    This acts as a "safety net" that overrides ML predictions when domain rules
+    provide clear evidence.
+    
+    Args:
+        task: Either "keto" or "vegan"
+        clean: Series of normalized ingredient texts
+        prob: Array of ML probability predictions
+        
+    Returns:
+        Array of adjusted probabilities after rule verification
+    """
+    adjusted = prob.copy()
+
+    if task == "keto":
+        # REGEX-BASED VERIFICATION
+        # Check against whitelist and blacklist patterns
+        is_whitelisted = clean.str.contains(RX_WL_KETO)
+        is_blacklisted = clean.str.contains(RX_KETO)
+        
+        # Force non-keto classification for blacklisted items not on whitelist
+        # Example: "wheat flour" is blacklisted, "almond flour" is whitelisted
+        forced_non_keto = is_blacklisted & ~is_whitelisted
+        adjusted[forced_non_keto.values] = 0.0
+
+        # TOKEN-BASED VERIFICATION
+        # Additional check using tokenized ingredient analysis
+        # Handles cases like "kidney bean soup" where "kidney bean" should be flagged
+        for i, txt in enumerate(clean):
+            if adjusted[i] > 0.5:  # Only check positive predictions
+                tokens = tokenize_ingredient(normalise(txt))
+                if not is_keto_ingredient_list(tokens):
+                    adjusted[i] = 0.0
+                    log.debug("Heuristically rejected '%s' as non-keto", txt)
+
+        if forced_non_keto.any():
+            log.debug("Keto Verification: forced %d probs to 0 (regex)", forced_non_keto.sum())
+
+    else:  # vegan verification
+        # Vegan verification is simpler - just check blacklist vs whitelist
+        # Example: "chicken" is blacklisted, "chicken of the woods" is whitelisted
+        bad = clean.str.contains(RX_VEGAN) & ~clean.str.contains(RX_WL_VEGAN)
+        adjusted[bad.values] = 0.0
+        
+        if bad.any():
+            log.debug("Vegan Verification: forced %d probs to 0", bad.sum())
+
+    return adjusted
+```
+
+### Token-Based Ingredient Analysis
+
+Handles complex multi-word ingredients that simple regex might miss:
+
+```python
+def tokenize_ingredient(text: str) -> list[str]:
+    """
+    Extract meaningful tokens from ingredient text.
+    Focuses on word boundaries and hyphenated compounds.
+    
+    Example: "organic free-range chicken breast" → 
+             ["organic", "free-range", "chicken", "breast"]
+    """
+    return re.findall(r"\b\w[\w-]*\b", text.lower())
+
+
+def is_keto_ingredient_list(tokens: list[str]) -> bool:
+    """
+    Check if ingredient tokens contain any non-keto items.
+    This handles multi-word ingredients that might be missed by simple matching.
+    
+    Algorithm:
+    1. For each non-keto ingredient in our database
+    2. Split it into tokens
+    3. Check if ALL tokens of that ingredient appear in the input
+    
+    Example:
+    - Input tokens: ["kidney", "bean", "soup"]
+    - Non-keto ingredient: "kidney bean" → tokens: ["kidney", "bean"]
+    - Match found: both "kidney" AND "bean" are present → return False
+    """
+    for ingredient in NON_KETO:
+        ing_tokens = ingredient.split()
+        # Check if ALL tokens of this non-keto ingredient are present
+        if all(tok in tokens for tok in ing_tokens):
+            return False
+    return True
+
+
+def find_non_keto_hits(text: str) -> list[str]:
+    """
+    Debugging function to identify which specific non-keto ingredients
+    were found in the text. Useful for understanding why something
+    was classified as non-keto.
+    """
+    tokens = set(tokenize_ingredient(text))
+    return sorted([
+        ingredient for ingredient in NON_KETO
+        if all(tok in tokens for tok in ingredient.split())
+    ])
+```
+
+### Silver Label Generation
+
+Creates weak supervision labels from domain knowledge:
+
+```python
+def build_silver(recipes: pd.DataFrame) -> pd.DataFrame:
+    """
+    Generate silver (weak) labels using rule-based heuristics.
+    These labels are "noisy" but provide enough signal for ML training.
+    
+    Process:
+    1. Normalize all ingredient texts
+    2. Apply regex-based classification rules
+    3. Generate binary labels for keto and vegan categories
+    
+    The resulting labels will have some errors, but ML models can learn
+    to generalize beyond these rule-based patterns.
+    """
+    df = recipes[["ingredients"]].copy()
+    
+    # Normalize ingredient text for consistent matching
+    df["clean"] = df.ingredients.fillna("").map(normalise)
+
+    # KETO LABELING: Default to keto-friendly unless blacklisted
+    # Philosophy: Most whole foods are keto-friendly, flag obvious carbs
+    df["silver_keto"] = (~df.clean.str.contains(RX_KETO)).astype(int)
+    
+    # VEGAN LABELING: Default to vegan unless contains animal products
+    # Philosophy: Plant foods are vegan unless animal products detected
+    # Handle whitelisted exceptions (e.g., "peanut butter" contains "butter")
+    bad = df.clean.str.contains(RX_VEGAN) & ~df.clean.str.contains(RX_WL_VEGAN)
+    df["silver_vegan"] = (~bad).astype(int)
+    
+    return df
+```
+
+### Model Training Pipeline
+
+The core ML training loop with error handling and hyperparameter tuning:
+
+```python
+def run_mode_A(
+    X_silver,                 # Feature matrix for silver (training) data
+    gold_clean: pd.Series,    # Clean text for gold (test) data
+    X_gold,                   # Feature matrix for gold (test) data  
+    silver_df: pd.DataFrame,  # Silver dataset with labels
+    gold_df: pd.DataFrame,    # Gold dataset with true labels
+    *,
+    domain: str = "text",     # Feature domain: 'text', 'image', or 'both'
+    apply_smote: bool = True  # Whether to apply SMOTE for class imbalance
+) -> list[dict]:
+    """
+    Train models on silver labels, evaluate on gold labels.
+    This is the core training pipeline that handles:
+    - Class imbalance correction
+    - Multiple model architectures
+    - Hyperparameter tuning
+    - Rule-based verification
+    """
+    results: list[dict] = []
+
+    for task in ("keto", "vegan"):
+        # Extract training and test labels
+        y_train = silver_df[f"silver_{task}"].values
+        y_true = gold_df[f"label_{task}"].values
+
+        # CLASS IMBALANCE HANDLING
+        # Apply SMOTE if minority class < 40% of total
+        if apply_smote:
+            try:
+                X_train, y_train = apply_smote(X_silver, y_train)
+                log.info(f"Applied SMOTE for {task}: {len(y_train)} samples after balancing")
+            except Exception as e:
+                log.warning(f"SMOTE failed for {task}: {e}")
+                X_train = X_silver
+        else:
+            X_train = X_silver
+
+        # MODEL TRAINING AND EVALUATION
+        best_f1, best_res = -1.0, None
+        
+        # Try each model architecture
+        for name, base in build_models(task, domain).items():
+            try:
+                # Train model on silver labels
+                model = clone(base).fit(X_train, y_train)
+                
+                # Generate predictions on gold set
+                prob = model.predict_proba(X_gold)[:, 1]
+                
+                # CRITICAL: Apply rule-based verification
+                # This prevents systematic ML errors
+                prob = verify_with_rules(task, gold_clean, prob)
+                pred = (prob >= 0.5).astype(int)
+
+                # Calculate comprehensive metrics
+                res = dict(
+                    task=task, model=name,
+                    ACC=accuracy_score(y_true, pred),
+                    PREC=precision_score(y_true, pred, zero_division=0),
+                    REC=recall_score(y_true, pred, zero_division=0),
+                    F1=f1_score(y_true, pred, zero_division=0),
+                    ROC=roc_auc_score(y_true, prob),
+                    PR=average_precision_score(y_true, prob),
+                    prob=prob, pred=pred,
+                )
+
+                # Track best model by F1 score
+                if res["F1"] > best_f1:
+                    best_f1, best_res = res["F1"], res
+                    BEST[task] = model  # Cache trained model
+
+            except Exception as e:
+                log.warning(f"{name} failed on {task}: {e}")
+
+        # Fallback to rule-based model if all ML models fail
+        if best_res is None:
+            log.warning(f"No trainable model for {task}; using RuleModel.")
+            rule = RuleModel(task, RX_KETO if task == "keto" else RX_VEGAN, 
+                           RX_WL_KETO if task == "keto" else RX_WL_VEGAN)
+            prob = rule.predict_proba(gold_clean)[:, 1]
+            pred = (prob >= 0.5).astype(int)
+            best_res = pack(y_true, prob) | dict(task=task, model="Rule",
+                                               prob=prob, pred=pred)
+            BEST[task] = rule
+
+        results.append(best_res)
+
+    # Display results in formatted table
+    table("MODE A (silver → gold)", results)
+    return results
+```
+
+### Memory-Efficient SMOTE Implementation
+
+Handles class imbalance while managing memory constraints:
+
+```python
+def apply_smote(X, y, max_dense_size: int = int(5e7)):
+    """
+    Apply SMOTE (Synthetic Minority Oversampling Technique) when classes are imbalanced.
+    
+    Key Innovation: Memory-efficient handling of large sparse matrices.
+    Many text feature matrices are too large to convert to dense format for SMOTE.
+    This function intelligently chooses between SMOTE and RandomOverSampler
+    based on memory constraints.
+    
+    Args:
+        X: Feature matrix (sparse or dense)
+        y: Target labels
+        max_dense_size: Maximum number of elements allowed for dense conversion
+        
+    Returns:
+        Resampled X and y with balanced class distribution
+    """
+    
+    # Check class distribution
+    counts = np.bincount(y)
+    minority_ratio = counts.min() / counts.sum()
+    
+    # Only apply resampling if significantly imbalanced
+    if minority_ratio < 0.4:  # Less than 40% minority class
+        
+        if hasattr(X, "toarray"):  # Sparse matrix
+            # Calculate memory requirements for dense conversion
+            elements = X.shape[0] * X.shape[1]
+            
+            if elements > max_dense_size:
+                # Matrix too large for SMOTE - use RandomOverSampler instead
+                # RandomOverSampler works directly on sparse matrices
+                log.info(f"Using RandomOverSampler (sparse matrix too large: {elements} elements)")
+                ros = RandomOverSampler(random_state=42)
+                return ros.fit_resample(X, y)
+            else:
+                # Convert to dense for SMOTE
+                X = X.toarray()
+        
+        # Apply SMOTE with conservative sampling strategy
+        # Don't fully balance - just improve minority representation
+        smote = SMOTE(sampling_strategy=0.3, random_state=42)
+        return smote.fit_resample(X, y)
+    
+    # Classes already balanced - return unchanged
+    return X, y
+```
+
+### Image Processing Pipeline
+
+Efficient ResNet-50 feature extraction with caching:
+
+```python
+def build_image_embeddings(df: pd.DataFrame,
+                           mode: str,
+                           force: bool = False) -> np.ndarray:
+    """
+    Extract ResNet-50 features from recipe images.
+    
+    Key Features:
+    - Intelligent caching to avoid recomputation
+    - Robust error handling for corrupted images
+    - GPU acceleration when available
+    - Memory-efficient batch processing
+    - Zero-padding for missing images
+    """
+    if not TORCH_AVAILABLE:
+        log.warning("Torch not available — returning zero vectors.")
+        return np.zeros((len(df), 2048), dtype=np.float32)
+
+    img_dir = CFG.image_dir / mode
+    embed_path = img_dir / "embeddings.npy"
+
+    # INTELLIGENT CACHING
+    # Check if cached embeddings exist and match current dataframe size
+    if embed_path.exists() and not force:
+        emb = np.load(embed_path)
+        if emb.shape[0] == len(df):
+            log.info(f"Loading cached embeddings from {embed_path}")
+            return emb
+        log.warning(f"Cached embeddings ({emb.shape[0]}) don't match "
+                   f"current dataframe ({len(df)}) — rebuilding…")
+
+    log.info(f"Computing embeddings for {len(df)} images in '{mode}' mode...")
+
+    # DEVICE SETUP
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    # MODEL SETUP - Remove classification head for feature extraction
+    model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+    model.fc = torch.nn.Identity()  # Remove final layer → output 2048-dim features
+    model.eval()
+    model.to(device)
+
+    # PREPROCESSING PIPELINE
+    # Standard ImageNet preprocessing for ResNet-50
+    preprocess = transforms.Compose([
+        transforms.Resize(256),          # Resize shortest side to 256
+        transforms.CenterCrop(224),      # Crop center 224x224 region
+        transforms.ToTensor(),           # Convert PIL → tensor [0,1]
+        transforms.Normalize(            # ImageNet normalization
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225]
+        ),
+    ])
+
+    # FEATURE EXTRACTION LOOP
+    vectors = []
+    success, missing, failed = 0, 0, 0
+
+    for idx in tqdm(df.index, desc=f"Embedding images ({mode})"):
+        img_file = img_dir / f"{idx}.jpg"
+        
+        if not img_file.exists():
+            # Handle missing images gracefully
+            missing += 1
+            vectors.append(np.zeros(2048, dtype=np.float32))
+            continue
+            
+        try:
+            # Load and process image
+            img = Image.open(img_file).convert('RGB')
+            
+            with torch.no_grad():  # Disable gradients for inference
+                tensor = preprocess(img).unsqueeze(0).to(device)  # Add batch dim
+                vec = model(tensor).squeeze().cpu().numpy()       # Extract features
+                
+            success += 1
+            vectors.append(vec)
+            
+        except Exception as e:
+            # Handle corrupted images
+            log.warning(f"Failed to process {img_file}: {e}")
+            vec = np.zeros(2048, dtype=np.float32)
+            failed += 1
+            vectors.append(vec)
+
+    # SAVE RESULTS
+    arr = np.vstack(vectors)
+    embed_path.parent.mkdir(parents=True, exist_ok=True)
+    np.save(embed_path, arr)
+
+    log.info(f"[{mode}] Embedding complete: {success} ok, {missing} missing, "
+            f"{failed} failed, total {len(df)}")
+    log.info(f"[{mode}] Saved embeddings to {embed_path}")
+    
+    return arr
+```
+
+These code examples demonstrate the sophisticated multi-layered approach used in the diet classifier, combining rule-based heuristics, machine learning, and robust error handling to achieve high accuracy on this challenging weak supervision problem.
+
+---
+
 ## 📚 References & Citations
 
 ### Academic Foundation
