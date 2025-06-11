@@ -25,6 +25,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
+from rapidfuzz import process
 
 # --- Third-party: core ---
 import joblib
@@ -75,7 +76,6 @@ try:
         import lightgbm as lgb
     except ImportError:
         lgb = None  # LightGBM optional
-
 
     SKLEARN_AVAILABLE = True
 
@@ -150,458 +150,6 @@ except Exception as e:  # pragma: no cover
 from imblearn.over_sampling import SMOTE, RandomOverSampler
 
 # ============================================================================
-# DOMAIN HARDCODED LISTS (HEURISTICS) - Complete from original
-# ============================================================================
-
-NON_KETO = list(set([
-    # "corn",
-    "kidney bean",
-    "apple", "banana", "orange", "grape", "kiwi", "mango", "peach",
-    "apple", "white rice", "long grain rice", "cornmeal",
-    "baking potato", "potato wedge", "potato slice", "russet potato",
-    "potato", "potato wedge", "potato slice", "russet potato",
-    "tomato sauce",
-    "strawberry", "banana", "pineapple", "grape",
-    "soy sauce", "teriyaki sauce", "hoisin sauce", "ketchup", "bbq sauce",
-    "orange juice", "agave nectar",
-    'pizza flour',
-    'adzuki bean',
-    'alcoholic lemonade',
-    'alcopop',
-    'ale',
-    'all-purpose flour',
-    'amaranth',
-    'amaretto',
-    'apricot',
-    'arrowroot',
-    'bagel',
-    'bailey',
-    'baked bean',
-    'barley flour',
-    'bbq sauce',
-    'bloody mary',
-    'bread',
-    'breading',
-    'breakfast cereal',
-    'breezer',
-    'brown sugar',
-    'buckwheat flour',
-    'buckwheat groat',
-    'bulgur',
-    'cake',
-    'cannellini bean',
-    'cassava',
-    'chapati',
-    'chip',
-    'chocolate milk',
-    'chutney',
-    'coconut sugar',
-    'cooky',
-    'cosmopolitan',
-    'couscous',
-    'curacao',
-    'daiquiri',
-    'demerara',
-    'doughnut',
-    'durum wheat flour',
-    'einkorn flour',
-    'emmer grain',
-    'energy bar',
-    'farina',
-    'fonio',
-    'frangelico',
-    'freekeh',
-    'french fry',
-    'fruit punch',
-    'garbanzo bean',
-    'gnocchi',
-    'graham cracker',
-    'granola',
-    'great northern bean',
-    'gummy bear',
-    'hamburger bun',
-    'hard candy',
-    'candy',
-    'hard cider',
-    'cider',
-    'hoisin sauce',
-    'hot-dog bun',
-    'hummus',
-    'ice cream',
-    'ipa',
-    'jackfruit',
-    'job\'s tear',
-    'jobs tear',
-    'job tear',
-    'kahlua',
-    'kamut flour',
-    'ketchup',
-    'lager',
-    'lima bean',
-    'limoncello',
-    'lotus root',
-    'mai tai',
-    'margarita',
-    'marmalade',
-    'mike hard lemonade',
-    'millet',
-    'mojito',
-    'molasses',
-    'moscato',
-    'muesli',
-    'muffin',
-    'muscovado sugar',
-    'naan',
-    'navy bean',
-    'oat flour',
-    'oatmeal',
-    'papaya',
-    'pasta',
-    'pastry',
-    'persimmon',
-    'pie crust',
-    'pilsner',
-    'pina colada',
-    'pinto bean',
-    'pita',
-    'pizza crust',
-    'pizza',
-    'pomegranate',
-    'port',
-    'porter',
-    'pretzel',
-    'prune',
-    'quinoa',
-    'refried bean',
-    'riesling',
-    'roti',
-    'rye flour',
-    'sangria',
-    'semolina',
-    'sherry',
-    'smirnoff ice',
-    'sorghum flour',
-    'sorghum grain',
-    'soybean sweetened',
-    'spelt flour',
-    'stout',
-    'sugar',
-    'sweet chili sauce',
-    'sweet pickle',
-    'sweet relish',
-    'sweet soy glaze',
-    'sweetened condensed milk',
-    'sweetened cranberry',
-    'sweetened yogurt',
-    'tangerine',
-    'tapioca',
-    'taro',
-    'tater tot',
-    'teff grain',
-    'tempura batter',
-    'teriyaki sauce',
-    'tortilla',
-    'triple sec',
-    'triticale',
-    'turbinado',
-    'ube',
-    'water chestnut',
-    'wheat flour',
-    'whiskey sour',
-    'whole-wheat flour',
-]))
-
-NON_VEGAN = list(set([
-    'aioli',
-    'albumen',
-    'anchovy',
-    'anchovypaste',
-    'asiago',
-    'bacon',
-    'beef',
-    'boar',
-    'bone',
-    'bonito',
-    'bratwurst',
-    'bresaola',
-    'brie',
-    'broth',
-    'butter',
-    'buttermilk',
-    'calamari',
-    'camembert',
-    'capocollo',
-    'carp',
-    'casein',
-    'catfish',
-    'caviar',
-    'cheddar',
-    'cheese',
-    'chicken',
-    'chorizo',
-    'clam',
-    'cod',
-    'collagen',
-    'condensed',
-    'coppa',
-    'cotechino',
-    'crab',
-    'cream',
-    'cremefraiche',
-    'curd',
-    'custard',
-    'dashi',
-    'duck',
-    'eel',
-    'egg',
-    'emmental',
-    'escargot',
-    'evaporated',
-    'feta',
-    'fish',
-    'fishpaste',
-    'fontina',
-    'frog',
-    'gelatin',
-    'ghee',
-    'gizzard',
-    'goat',
-    'goose',
-    'gorgonzola',
-    'gravy',
-    'grouse',
-    'gruyere',
-    'guanciale',
-    'haddock',
-    'halibut',
-    'halloumi',
-    'ham',
-    'hare',
-    'heart',
-    'herring',
-    'honey',
-    'icecream',
-    'katsuobushi',
-    'kefir',
-    'kid',
-    'kidney',
-    'knackwurst',
-    'krill',
-    'lactose',
-    'lamb',
-    'langoustine',
-    'lard',
-    'liver',
-    'lobster',
-    'mackerel',
-    'manchego',
-    'mascarpone',
-    'mayonnaise',
-    'meringue',
-    'mettwurst',
-    'milk',
-    'mortadella',
-    'mozzarella',
-    'mussel',
-    'mutton',
-    'nampla',
-    'octopus',
-    'offal',
-    'omelet',
-    'omelette',
-    'oxtail',
-    'oyster',
-    'pancetta',
-    'paneer',
-    'parmesan',
-    'parmigiano',
-    'partridge',
-    'pastrami',
-    'pecorino',
-    'pepperoni',
-    'pheasant',
-    'pollock',
-    'pork',
-    'prawn',
-    'prosciutto',
-    'provolone',
-    'quail',
-    'quark',
-    'rabbit',
-    'reggiano',
-    'ribeye',
-    'ricotta',
-    'roe',
-    'roquefort',
-    'salami',
-    'salmon',
-    'sardine',
-    'sausage',
-    'scallop',
-    'scampi',
-    'shellfish',
-    'shrimp',
-    'shrimppaste',
-    'sirloin',
-    'snail',
-    'snapper',
-    'sole',
-    'sourcream',
-    'speck',
-    'squid',
-    'steak',
-    'stilton',
-    'stock',
-    'stracciatella',
-    'sweetbread',
-    'taleggio',
-    'tallow',
-    'tilapia',
-    'tongue',
-    'tripe',
-    'trout',
-    'tuna',
-    'turkey',
-    'veal',
-    'venison',
-    'whey',
-    'worcestershire',
-    'yogurt',
-    'yolk',
-]))
-
-KETO_WHITELIST = [
-    r"\balmond flour\b",
-    r"\bkidney\b",
-    r"\bcoconut flour\b",
-    r"\bflaxseed flour\b",
-    r"\bchia flour\b",
-    r"\bsunflower seed flour\b",
-    r"\bpeanut flour\b",
-    r"\bhemp flour\b",
-    r"\bsesame flour\b",
-    r"\bwalnut flour\b",
-    r"\bpecan flour\b",
-    r"\bmacadamia flour\b",
-    r"\bhazelnut flour\b",
-    r"\blemon juice\b",
-    r"\balmond milk\b",
-    r"\bcoconut milk\b",
-    r"\bflax milk\b",
-    r"\bmacadamia milk\b",
-    r"\bhemp milk\b",
-    r"\bcashew milk\b",
-    r"\balmond cream\b",
-    r"\bcoconut cream\b",
-    r"\bsour cream\b",
-    r"\balmond butter\b",
-    r"\bpeanut butter\b",
-    r"\bcoconut butter\b",
-    r"\bmacadamia butter\b",
-    r"\bpecan butter\b",
-    r"\bwalnut butter\b",
-    r"\bhemp butter\b",
-    r"\balmond bread\b",
-    r"\bcoconut bread\b",
-    r"\bcloud bread\b",
-    r"\bketo bread\b",
-    r"\bcoconut sugar[- ]free\b",
-    r"\bstevia\b",
-    r"\berytritol\b",
-    r"\bmonk fruit\b",
-    r"\bswerve\b",
-    r"\ballulose\b",
-    r"\bxylitol\b",
-    r"\bsugar[- ]free\b",
-    r"\bcauliflower rice\b",
-    r"\bshirataki noodles\b",
-    r"\bzucchini noodles\b",
-    r"\bkelp noodles\b",
-    r"\bsugar[- ]free chocolate\b",
-    r"\bketo chocolate\b",
-    r"\bavocado\b",
-    r"\bcacao\b",
-    r"\bcocoa powder\b",
-    r"\bketo ice[- ]cream\b",
-    r"\bsugar[- ]free ice[- ]cream\b",
-    r"\bjicama\b",
-    r"\bzucchini\b",
-    r"\bcucumber\b",
-    r"\bbroccoli\b",
-    r"\bcauliflower\b",
-]
-
-VEGAN_WHITELIST = [
-    # — egg —
-    r"\beggplant\b",
-    r"\begg\s*fruit\b",
-    r"\bvegan\s+egg\b",
-    # — milk —
-    r"\bmillet\b",
-    r"\bmilk\s+thistle\b",
-    r"\bcoconut\s+milk\b",
-    r"\boat\s+milk\b",
-    r"\bsoy\s+milk\b",
-    r"\balmond\s+milk\b",
-    r"\bcashew\s+milk\b",
-    r"\brice\s+milk\b",
-    r"\bhazelnut\s+milk\b",
-    r"\bpea\s+milk\b",
-    # — rice —
-    r"\bcauliflower rice\b",
-    r"\bbroccoli rice\b",
-    r"\bsweet potato rice\b",
-    r"\bzucchini rice\b",
-    r"\bcabbage rice\b",
-    r"\bkonjac rice\b",
-    r"\bshirataki rice\b",
-    r"\bmiracle rice\b",
-    r"\bpalmini rice\b",
-    # — butter —
-    r"\bbutternut\b",
-    r"\bbutterfly\s+pea\b",
-    r"\bcocoa\s+butter\b",
-    r"\bpeanut\s+butter\b",
-    r"\balmond\s+butter\b",
-    r"\bsunflower(?:\s*seed)?\s+butter\b",
-    r"\bpistachio\s+butter\b",
-    r"\bvegan\s+butter\b",
-    # — honey —
-    r"\bhoneydew\b",
-    r"\bhoneysuckle\b",
-    r"\bhoneycrisp\b",
-    r"\bhoney\s+locust\b",
-    r"\bhoneyberry\b",
-    # — cream —
-    r"\bcream\s+of\s+tartar\b",
-    r"\bice[- ]cream\s+bean\b",
-    r"\bcoconut\s+cream\b",
-    r"\bcashew\s+cream\b",
-    r"\bvegan\s+cream\b",
-    # — cheese —
-    r"\bcheesewood\b",
-    r"\bvegan\s+cheese\b",
-    r"\bcashew\s+cheese\b",
-    # — fish —
-    r"\bfish\s+mint\b",
-    r"\bfish\s+pepper\b",
-    # — beef —
-    r"\bbeefsteak\s+plant\b",
-    r"\bbeefsteak\s+mushroom\b",
-    # — chicken / hen —
-    r"\bchicken[- ]of[- ]the[- ]woods\b",
-    r"\bchicken\s+mushroom\b",
-    r"\bhen[- ]of[- ]the[- ]woods\b",
-    # — meat —
-    r"\bsweetmeat\s+(?:pumpkin|squash)\b",
-    # — bacon —
-    r"\bcoconut\s+bacon\b",
-    r"\bmushroom\s+bacon\b",
-    r"\bsoy\s+bacon\b",
-    r"\bvegan\s+bacon\b",
-]
-
-# ============================================================================
 # LOGGING
 # ============================================================================
 
@@ -611,11 +159,13 @@ logging.basicConfig(level=logging.INFO,
 log = logging.getLogger("PIPE")
 
 # ============================================================================
-# CONFIG
+# DATA FETCHING (ARG_MAX DATASET. USDA DATASET. IMAGE FILES DF FROM ARG_MAX DATASET URLS)
 # ============================================================================
+
 @dataclass(frozen=True)
 class Config:
     data_dir: Path = Path("dataset/arg_max")
+    usda_dir: Path = Path("/app/data/usda")
     url_map: Mapping[str, str] = field(default_factory=lambda: {
         "allrecipes.parquet":
         "https://argmax.nyc3.digitaloceanspaces.com/recipes/allrecipes.parquet",
@@ -625,144 +175,62 @@ class Config:
     vec_kwargs: Dict[str, Any] = field(default_factory=lambda: dict(
         min_df=2, ngram_range=(1, 3), max_features=50000, sublinear_tf=True))
     image_dir: Path = Path("dataset/arg_max/images")
-
 CFG = Config()
-
-# ============================================================================
-# REGEX HELPERS
-# ============================================================================
-
-def compile_any(words: Iterable[str]) -> re.Pattern[str]:
-    return re.compile(r"\b(?:%s)\b" % "|".join(map(re.escape, words)), re.I)
-
-RX_KETO = compile_any(NON_KETO)
-RX_VEGAN = compile_any(NON_VEGAN)
-RX_WL_KETO = re.compile("|".join(KETO_WHITELIST), re.I)
-RX_WL_VEGAN = re.compile("|".join(VEGAN_WHITELIST), re.I)
-
-# ============================================================================
-# NORMALIZATION
-# ============================================================================
-
-_LEMM = WordNetLemmatizer() if wnl else None
-_UNITS = re.compile(r"\b(?:g|gram|kg|oz|ml|l|cup|cups|tsp|tbsp|teaspoon|"
-                    r"tablespoon|pound|lb|slice|slices|small|large|medium)\b")
-
-def normalise(t: str | list | tuple | np.ndarray) -> str:
-    """Normalize ingredient text for consistent matching.
-
-    The ``ingredients`` field from the allrecipes dataset may be stored as a
-    list/array of strings when loaded from parquet.  ``normalise`` now accepts
-    such iterables and joins them before applying text cleanup so that both
-    CSV and parquet formats behave the same.
+def _load_usda_carb_table() -> pd.DataFrame:
+    """ 
+    QUICK USDA LOADER  (only food.csv, food_nutrient.csv, nutrient.csv)
+    Returns a tidy DataFrame with two columns:
+    food_desc (lower-cased string) ,  carb_100g (float32)
     """
-    if not isinstance(t, str):
-        if isinstance(t, (list, tuple, np.ndarray)):
-            t = " ".join(map(str, t))
-        else:
-            t = str(t)
-    t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode()
-    t = re.sub(r"\([^)]*\)", " ", t.lower())
-    t = _UNITS.sub(" ", t)
-    t = re.sub(r"\d+(?:[/\.]\d+)?", " ", t)
-    t = re.sub(r"[^\w\s-]", " ", t)
-    t = re.sub(r"\s+", " ", t).strip()
-    if _LEMM:
-        return " ".join(_LEMM.lemmatize(w) for w in t.split() if len(w) > 2)
-    return " ".join(w for w in t.split() if len(w) > 2)
+    from pathlib import Path
+    import pandas as pd
 
-# ============================================================================
-# RULE MODEL
-# ============================================================================
+    # 1. resolve file paths
+    usda = CFG.usda_dir
+    food_csv = usda / "food.csv"
+    food_nutrient_csv = usda / "food_nutrient.csv"
+    nutrient_csv = usda / "nutrient.csv"
 
-class RuleModel(BaseEstimator, ClassifierMixin):
-    def __init__(self, task: str, rx_black, rx_white=None,
-                 pos_prob=0.98, neg_prob=0.02):
-        self.task, self.rx_black, self.rx_white = task, rx_black, rx_white
-        self.pos_prob, self.neg_prob = pos_prob, neg_prob
+    if not (food_csv.exists() and food_nutrient_csv.exists() and nutrient_csv.exists()):
+        log.warning(
+            "USDA tables not found in %s – skipping numeric carb table", usda)
+        return pd.DataFrame(columns=["food_desc", "carb_100g"])
 
-    def fit(self, X, y=None): return self
+    # 2. locate nutrient_id for carbohydrate
+    nutrient = pd.read_csv(nutrient_csv, usecols=["id", "name"])
+    carb_id = int(
+        nutrient.loc[
+            nutrient["name"].str.contains(
+                "Carbohydrate, by difference", case=False),
+            "id"
+        ].iloc[0]
+    )
 
-    def _pos(self, d: str) -> bool:
-        return (not bool(self.rx_black.search(d)) if self.task == "keto"
-                else not bool(self.rx_black.search(d)) or
-                bool(self.rx_white and self.rx_white.search(d)))
+    # 3. pull carb rows from food_nutrient
+    carb_rows = pd.read_csv(
+        food_nutrient_csv,
+        usecols=["fdc_id", "nutrient_id", "amount"],
+        dtype={"fdc_id": "int32", "nutrient_id": "int16", "amount": "float32"},
+    ).query("nutrient_id == @carb_id")[["fdc_id", "amount"]]
 
-    def predict_proba(self, X):
-        p = np.fromiter((self.pos_prob if self._pos(d) else self.neg_prob
-                         for d in X), float, count=len(X))
-        return np.c_[1-p, p]
-
-    def predict(self, X):
-        return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
-
-# ============================================================================
-# VERIFICATION LAYER
-# ============================================================================
-
-
-def filter_silver_by_downloaded_images(silver_df: pd.DataFrame, image_dir: Path) -> pd.DataFrame:
-    """Keep only rows in silver that have corresponding downloaded image files."""
-    downloaded_ids = [int(p.stem)
-                      for p in (image_dir / "silver").glob("*.jpg")]
-    return silver_df.loc[silver_df.index.intersection(downloaded_ids)].copy()
-
-
-def tokenize_ingredient(text: str) -> list[str]:
-    return re.findall(r"\b\w[\w-]*\b", text.lower())
-
-
-def is_keto_ingredient_list(tokens: list[str]) -> bool:
-    for ingredient in NON_KETO:
-        ing_tokens = ingredient.split()
-        if all(tok in tokens for tok in ing_tokens):
-            return False
-    return True
-
-
-def find_non_keto_hits(text: str) -> list[str]:
-    tokens = set(tokenize_ingredient(text))
-    return sorted([
-        ingredient for ingredient in NON_KETO
-        if all(tok in tokens for tok in ingredient.split())
-    ])
-
-
-def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarray:
-    """Apply rule-based verification to ML predictions."""
-    adjusted = prob.copy()
-
-    if task == "keto":
-        # Regex-based whitelist/blacklist
-        is_whitelisted = clean.str.contains(RX_WL_KETO)
-        is_blacklisted = clean.str.contains(RX_KETO)
-        forced_non_keto = is_blacklisted & ~is_whitelisted
-        adjusted[forced_non_keto.values] = 0.0
-
-        # Token-based ingredient verification
-        for i, txt in enumerate(clean):
-            if adjusted[i] > 0.5:
-                tokens = tokenize_ingredient(normalise(txt))
-                if not is_keto_ingredient_list(tokens):
-                    adjusted[i] = 0.0
-                    log.debug("Heuristically rejected '%s' as non-keto", txt)
-
-        if forced_non_keto.any():
-            log.debug("Keto Verification: forced %d probs to 0 (regex)",
-                      forced_non_keto.sum())
-
-    else:  # vegan
-        bad = clean.str.contains(RX_VEGAN) & ~clean.str.contains(RX_WL_VEGAN)
-        adjusted[bad.values] = 0.0
-        if bad.any():
-            log.debug("Vegan Verification: forced %d probs to 0", bad.sum())
-
-    return adjusted
-
-# ============================================================================
-# DATA I/O
-# ============================================================================
-
+    # 4. join with food descriptions
+    food = pd.read_csv(
+        food_csv,
+        usecols=["fdc_id", "description"],
+        dtype={"fdc_id": "int32", "description": "string"},
+    )
+    carb_df = (
+        carb_rows.merge(food, on="fdc_id", how="left", validate="m:1")
+        .dropna(subset=["description"])
+        .assign(
+            food_desc=lambda df: df["description"].str.lower().str.strip(),
+            carb_100g=lambda df: df["amount"].round(1),
+        )[["food_desc", "carb_100g"]]
+        .drop_duplicates("food_desc")
+        .reset_index(drop=True)
+    )
+    log.info("USDA carb table loaded: %d distinct food descriptions", len(carb_df))
+    return carb_df
 
 def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> list[int]:
     """
@@ -1261,7 +729,6 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
 
     return valid_indices
 
-
 def filter_low_quality_images(img_dir: Path, embeddings: np.ndarray, original_indices: list) -> tuple:
     """Filter out low-quality images and return both embeddings AND indices."""
     if embeddings.shape[0] == 0:
@@ -1292,7 +759,6 @@ def filter_low_quality_images(img_dir: Path, embeddings: np.ndarray, original_in
         log.info(
             f"      ├─ Quality filtering: Keeping all images (filter too aggressive)")
         return embeddings, original_indices
-
 
 def load_datasets() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
@@ -1826,6 +1292,18 @@ def load_datasets() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     log_memory_usage("Validation complete")
     pipeline_progress.update(1)
 
+    # ----------------------------------------------------------------------
+    # STAGE 5: Load USDA nutrient table  ← NEW
+    # ----------------------------------------------------------------------
+    pipeline_progress.set_description("   ├─ Loading USDA carbs")
+    stage_start = time.time()
+
+    carb_df = _load_usda_carb_table()     # <- call helper
+
+    log.info("   ✅ USDA table loaded in %.1fs – %d rows",
+             time.time() - stage_start, len(carb_df))
+    pipeline_progress.update(1)
+
     # ------------------------------------------------------------------
     # Pipeline Completion Summary
     # ------------------------------------------------------------------
@@ -1845,14 +1323,826 @@ def load_datasets() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         f"   ├─ Ground Truth: {len(ground_truth):,} rows × {len(ground_truth.columns)} columns")
     log.info(
         f"   ├─ Silver Labels: {len(silver):,} rows × {len(silver.columns)} columns")
+
+    log.info(f"   ├─ USDA Carb Tbl:  {len(carb_df):,} rows × {len(carb_df.columns)} columns "
+             f"({carb_df.memory_usage(deep=True).sum() / (1024**2):.1f} MB)")
     log.info(f"   └─ Ready for ML pipeline: ✅")
 
     # Garbage collection for memory optimization
     import gc
     gc.collect()
 
-    return silver, ground_truth, recipes
+    return silver, ground_truth, recipes, carb_df
 
+# ===================================================================
+# HARD-CODED LISTS/REGEX FOR DOMAIN-SPECIFIC CATEGORIZATION
+# ===================================================================
+NON_KETO = list(set([
+    # "corn",
+    "kidney bean",
+    "apple", "banana", "orange", "grape", "kiwi", "mango", "peach",
+    "apple", "white rice", "long grain rice", "cornmeal",
+    "baking potato", "potato wedge", "potato slice", "russet potato",
+    "potato", "potato wedge", "potato slice", "russet potato",
+    "tomato sauce",
+    "strawberry", "banana", "pineapple", "grape",
+    "soy sauce", "teriyaki sauce", "hoisin sauce", "ketchup", "bbq sauce",
+    "orange juice", "agave nectar",
+    'pizza flour',
+    'adzuki bean',
+    'alcoholic lemonade',
+    'alcopop',
+    'ale',
+    'all-purpose flour',
+    'amaranth',
+    'amaretto',
+    'apricot',
+    'arrowroot',
+    'bagel',
+    'bailey',
+    'baked bean',
+    'barley flour',
+    'bbq sauce',
+    'bloody mary',
+    'bread',
+    'breading',
+    'breakfast cereal',
+    'breezer',
+    'brown sugar',
+    'buckwheat flour',
+    'buckwheat groat',
+    'bulgur',
+    'cake',
+    'cannellini bean',
+    'cassava',
+    'chapati',
+    'chip',
+    'chocolate milk',
+    'chutney',
+    'coconut sugar',
+    'cooky',
+    'cosmopolitan',
+    'couscous',
+    'curacao',
+    'daiquiri',
+    'demerara',
+    'doughnut',
+    'durum wheat flour',
+    'einkorn flour',
+    'emmer grain',
+    'energy bar',
+    'farina',
+    'fonio',
+    'frangelico',
+    'freekeh',
+    'french fry',
+    'fruit punch',
+    'garbanzo bean',
+    'gnocchi',
+    'graham cracker',
+    'granola',
+    'great northern bean',
+    'gummy bear',
+    'hamburger bun',
+    'hard candy',
+    'candy',
+    'hard cider',
+    'cider',
+    'hoisin sauce',
+    'hot-dog bun',
+    'hummus',
+    'ice cream',
+    'ipa',
+    'jackfruit',
+    'job\'s tear',
+    'jobs tear',
+    'job tear',
+    'kahlua',
+    'kamut flour',
+    'ketchup',
+    'lager',
+    'lima bean',
+    'limoncello',
+    'lotus root',
+    'mai tai',
+    'margarita',
+    'marmalade',
+    'mike hard lemonade',
+    'millet',
+    'mojito',
+    'molasses',
+    'moscato',
+    'muesli',
+    'muffin',
+    'muscovado sugar',
+    'naan',
+    'navy bean',
+    'oat flour',
+    'oatmeal',
+    'papaya',
+    'pasta',
+    'pastry',
+    'persimmon',
+    'pie crust',
+    'pilsner',
+    'pina colada',
+    'pinto bean',
+    'pita',
+    'pizza crust',
+    'pizza',
+    'pomegranate',
+    'port',
+    'porter',
+    'pretzel',
+    'prune',
+    'quinoa',
+    'refried bean',
+    'riesling',
+    'roti',
+    'rye flour',
+    'sangria',
+    'semolina',
+    'sherry',
+    'smirnoff ice',
+    'sorghum flour',
+    'sorghum grain',
+    'soybean sweetened',
+    'spelt flour',
+    'stout',
+    'sugar',
+    'sweet chili sauce',
+    'sweet pickle',
+    'sweet relish',
+    'sweet soy glaze',
+    'sweetened condensed milk',
+    'sweetened cranberry',
+    'sweetened yogurt',
+    'tangerine',
+    'tapioca',
+    'taro',
+    'tater tot',
+    'teff grain',
+    'tempura batter',
+    'teriyaki sauce',
+    'tortilla',
+    'triple sec',
+    'triticale',
+    'turbinado',
+    'ube',
+    'water chestnut',
+    'wheat flour',
+    'whiskey sour',
+    'whole-wheat flour',
+]))
+
+NON_VEGAN = list(set([
+    'aioli',
+    'albumen',
+    'anchovy',
+    'anchovypaste',
+    'asiago',
+    'bacon',
+    'beef',
+    'boar',
+    'bone',
+    'bonito',
+    'bratwurst',
+    'bresaola',
+    'brie',
+    'broth',
+    'butter',
+    'buttermilk',
+    'calamari',
+    'camembert',
+    'capocollo',
+    'carp',
+    'casein',
+    'catfish',
+    'caviar',
+    'cheddar',
+    'cheese',
+    'chicken',
+    'chorizo',
+    'clam',
+    'cod',
+    'collagen',
+    'condensed',
+    'coppa',
+    'cotechino',
+    'crab',
+    'cream',
+    'cremefraiche',
+    'curd',
+    'custard',
+    'dashi',
+    'duck',
+    'eel',
+    'egg',
+    'emmental',
+    'escargot',
+    'evaporated',
+    'feta',
+    'fish',
+    'fishpaste',
+    'fontina',
+    'frog',
+    'gelatin',
+    'ghee',
+    'gizzard',
+    'goat',
+    'goose',
+    'gorgonzola',
+    'gravy',
+    'grouse',
+    'gruyere',
+    'guanciale',
+    'haddock',
+    'halibut',
+    'halloumi',
+    'ham',
+    'hare',
+    'heart',
+    'herring',
+    'honey',
+    'icecream',
+    'katsuobushi',
+    'kefir',
+    'kid',
+    'kidney',
+    'knackwurst',
+    'krill',
+    'lactose',
+    'lamb',
+    'langoustine',
+    'lard',
+    'liver',
+    'lobster',
+    'mackerel',
+    'manchego',
+    'mascarpone',
+    'mayonnaise',
+    'meringue',
+    'mettwurst',
+    'milk',
+    'mortadella',
+    'mozzarella',
+    'mussel',
+    'mutton',
+    'nampla',
+    'octopus',
+    'offal',
+    'omelet',
+    'omelette',
+    'oxtail',
+    'oyster',
+    'pancetta',
+    'paneer',
+    'parmesan',
+    'parmigiano',
+    'partridge',
+    'pastrami',
+    'pecorino',
+    'pepperoni',
+    'pheasant',
+    'pollock',
+    'pork',
+    'prawn',
+    'prosciutto',
+    'provolone',
+    'quail',
+    'quark',
+    'rabbit',
+    'reggiano',
+    'ribeye',
+    'ricotta',
+    'roe',
+    'roquefort',
+    'salami',
+    'salmon',
+    'sardine',
+    'sausage',
+    'scallop',
+    'scampi',
+    'shellfish',
+    'shrimp',
+    'shrimppaste',
+    'sirloin',
+    'snail',
+    'snapper',
+    'sole',
+    'sourcream',
+    'speck',
+    'squid',
+    'steak',
+    'stilton',
+    'stock',
+    'stracciatella',
+    'sweetbread',
+    'taleggio',
+    'tallow',
+    'tilapia',
+    'tongue',
+    'tripe',
+    'trout',
+    'tuna',
+    'turkey',
+    'veal',
+    'venison',
+    'whey',
+    'worcestershire',
+    'yogurt',
+    'yolk',
+]))
+
+KETO_WHITELIST = [
+    r"\balmond flour\b",
+    r"\bkidney\b",
+    r"\bcoconut flour\b",
+    r"\bflaxseed flour\b",
+    r"\bchia flour\b",
+    r"\bsunflower seed flour\b",
+    r"\bpeanut flour\b",
+    r"\bhemp flour\b",
+    r"\bsesame flour\b",
+    r"\bwalnut flour\b",
+    r"\bpecan flour\b",
+    r"\bmacadamia flour\b",
+    r"\bhazelnut flour\b",
+    r"\blemon juice\b",
+    r"\balmond milk\b",
+    r"\bcoconut milk\b",
+    r"\bflax milk\b",
+    r"\bmacadamia milk\b",
+    r"\bhemp milk\b",
+    r"\bcashew milk\b",
+    r"\balmond cream\b",
+    r"\bcoconut cream\b",
+    r"\bsour cream\b",
+    r"\balmond butter\b",
+    r"\bpeanut butter\b",
+    r"\bcoconut butter\b",
+    r"\bmacadamia butter\b",
+    r"\bpecan butter\b",
+    r"\bwalnut butter\b",
+    r"\bhemp butter\b",
+    r"\balmond bread\b",
+    r"\bcoconut bread\b",
+    r"\bcloud bread\b",
+    r"\bketo bread\b",
+    r"\bcoconut sugar[- ]free\b",
+    r"\bstevia\b",
+    r"\berytritol\b",
+    r"\bmonk fruit\b",
+    r"\bswerve\b",
+    r"\ballulose\b",
+    r"\bxylitol\b",
+    r"\bsugar[- ]free\b",
+    r"\bcauliflower rice\b",
+    r"\bshirataki noodles\b",
+    r"\bzucchini noodles\b",
+    r"\bkelp noodles\b",
+    r"\bsugar[- ]free chocolate\b",
+    r"\bketo chocolate\b",
+    r"\bavocado\b",
+    r"\bcacao\b",
+    r"\bcocoa powder\b",
+    r"\bketo ice[- ]cream\b",
+    r"\bsugar[- ]free ice[- ]cream\b",
+    r"\bjicama\b",
+    r"\bzucchini\b",
+    r"\bcucumber\b",
+    r"\bbroccoli\b",
+    r"\bcauliflower\b",
+]
+
+VEGAN_WHITELIST = [
+    # — egg —
+    r"\beggplant\b",
+    r"\begg\s*fruit\b",
+    r"\bvegan\s+egg\b",
+    # — milk —
+    r"\bmillet\b",
+    r"\bmilk\s+thistle\b",
+    r"\bcoconut\s+milk\b",
+    r"\boat\s+milk\b",
+    r"\bsoy\s+milk\b",
+    r"\balmond\s+milk\b",
+    r"\bcashew\s+milk\b",
+    r"\brice\s+milk\b",
+    r"\bhazelnut\s+milk\b",
+    r"\bpea\s+milk\b",
+    # — rice —
+    r"\bcauliflower rice\b",
+    r"\bbroccoli rice\b",
+    r"\bsweet potato rice\b",
+    r"\bzucchini rice\b",
+    r"\bcabbage rice\b",
+    r"\bkonjac rice\b",
+    r"\bshirataki rice\b",
+    r"\bmiracle rice\b",
+    r"\bpalmini rice\b",
+    # — butter —
+    r"\bbutternut\b",
+    r"\bbutterfly\s+pea\b",
+    r"\bcocoa\s+butter\b",
+    r"\bpeanut\s+butter\b",
+    r"\balmond\s+butter\b",
+    r"\bsunflower(?:\s*seed)?\s+butter\b",
+    r"\bpistachio\s+butter\b",
+    r"\bvegan\s+butter\b",
+    # — honey —
+    r"\bhoneydew\b",
+    r"\bhoneysuckle\b",
+    r"\bhoneycrisp\b",
+    r"\bhoney\s+locust\b",
+    r"\bhoneyberry\b",
+    # — cream —
+    r"\bcream\s+of\s+tartar\b",
+    r"\bice[- ]cream\s+bean\b",
+    r"\bcoconut\s+cream\b",
+    r"\bcashew\s+cream\b",
+    r"\bvegan\s+cream\b",
+    # — cheese —
+    r"\bcheesewood\b",
+    r"\bvegan\s+cheese\b",
+    r"\bcashew\s+cheese\b",
+    # — fish —
+    r"\bfish\s+mint\b",
+    r"\bfish\s+pepper\b",
+    # — beef —
+    r"\bbeefsteak\s+plant\b",
+    r"\bbeefsteak\s+mushroom\b",
+    # — chicken / hen —
+    r"\bchicken[- ]of[- ]the[- ]woods\b",
+    r"\bchicken\s+mushroom\b",
+    r"\bhen[- ]of[- ]the[- ]woods\b",
+    # — meat —
+    r"\bsweetmeat\s+(?:pumpkin|squash)\b",
+    # — bacon —
+    r"\bcoconut\s+bacon\b",
+    r"\bmushroom\s+bacon\b",
+    r"\bsoy\s+bacon\b",
+    r"\bvegan\s+bacon\b",
+]
+
+
+# ============================================================================
+# REGEX HELPERS
+# ============================================================================
+_CARB_MAP: dict[str, float] | None = None
+_FUZZY_KEYS: list[str] | None = None
+
+def compile_any(words: Iterable[str]) -> re.Pattern[str]:
+    return re.compile(r"\b(?:%s)\b" % "|".join(map(re.escape, words)), re.I)
+
+RX_KETO = compile_any(NON_KETO)
+RX_VEGAN = compile_any(NON_VEGAN)
+RX_WL_KETO = re.compile("|".join(KETO_WHITELIST), re.I)
+RX_WL_VEGAN = re.compile("|".join(VEGAN_WHITELIST), re.I)
+
+# ============================================================================
+# NORMALIZATION
+# ============================================================================
+_LEMM = WordNetLemmatizer() if wnl else None
+_UNITS = re.compile(r"\b(?:g|gram|kg|oz|ml|l|cup|cups|tsp|tbsp|teaspoon|"
+                    r"tablespoon|pound|lb|slice|slices|small|large|medium)\b")
+
+def normalise(t: str | list | tuple | np.ndarray) -> str:
+    """Normalize ingredient text for consistent matching.
+
+    The ``ingredients`` field from the allrecipes dataset may be stored as a
+    list/array of strings when loaded from parquet.  ``normalise`` now accepts
+    such iterables and joins them before applying text cleanup so that both
+    CSV and parquet formats behave the same.
+    """
+    if not isinstance(t, str):
+        if isinstance(t, (list, tuple, np.ndarray)):
+            t = " ".join(map(str, t))
+        else:
+            t = str(t)
+    t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode()
+    t = re.sub(r"\([^)]*\)", " ", t.lower())
+    t = _UNITS.sub(" ", t)
+    t = re.sub(r"\d+(?:[/\.]\d+)?", " ", t)
+    t = re.sub(r"[^\w\s-]", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    if _LEMM:
+        return " ".join(_LEMM.lemmatize(w) for w in t.split() if len(w) > 2)
+    return " ".join(w for w in t.split() if len(w) > 2)
+
+# ============================================================================
+# DOMAIN HARDCODED LISTS (HEURISTICS)
+# ============================================================================
+
+def _ensure_carb_map() -> None:
+    """Lazy-load USDA table into a dict for µs look-ups."""
+    global _CARB_MAP, _FUZZY_KEYS
+    if _CARB_MAP is None:
+        df = _load_usda_carb_table()
+        _CARB_MAP = df.set_index("food_desc")["carb_100g"].to_dict()
+        _FUZZY_KEYS = list(_CARB_MAP)           # for RapidFuzz
+        log.info("Carb map initialised (%d keys)", len(_CARB_MAP))
+
+
+def carbs_per_100g(ing: str, fuzzy: bool = True) -> float | None:
+    """
+    Return carbohydrate grams / 100 g for a normalised ingredient string,
+    or *None* if unknown.
+    """
+    _ensure_carb_map()
+    key = ing.lower().strip()
+    val = _CARB_MAP.get(key)
+    if val is not None or not fuzzy:
+        return val
+
+    match = process.extractOne(key, _FUZZY_KEYS, score_cutoff=90)
+    return _CARB_MAP.get(match[0]) if match else None
+
+
+def is_ingredient_keto(ingredient: str) -> bool:
+    """
+    Determine if a single ingredient is keto-friendly.
+
+    Decision order
+    --------------
+    1. Regex whitelist    → True
+    2. USDA numeric rule  → False if carbs > 10 g / 100 g  
+       • whole phrase lookup  
+       • token-level fallback (ignores trivial stop-words)
+    3. Regex blacklist    → False
+    4. Token blacklist    → False
+    5. ML model + post-verification
+    """
+    if not ingredient:
+        return True
+
+    # ── 1. whitelist (immediate accept) ───────────────────────────
+    if RX_WL_KETO.search(ingredient):
+        return True
+
+    # ── 2. numeric carbohydrate rule (whole + token fallback) ────
+    norm = normalise(ingredient)
+
+    # — 2a. whole-phrase lookup
+    carbs = carbs_per_100g(norm)
+    if carbs is not None:
+        return carbs <= 10.0
+
+    # — 2b. token fallback
+    for tok in tokenize_ingredient(norm):
+        if tok in {"raw", "fresh", "dried", "powder", "mix", "sliced",
+                   "organic", "cup", "cups", "tsp", "tbsp", "g", "kg", "oz"}:
+            continue
+        carbs_tok = carbs_per_100g(tok, fuzzy=True)
+        if carbs_tok is not None and carbs_tok > 10.0:
+            return False
+
+    # ── 3. regex blacklist (fast) ────────────────────────────────
+    if RX_KETO.search(norm):
+        return False
+
+    # ── 4. token-level heuristic list ────────────────────────────
+    if not is_keto_ingredient_list(tokenize_ingredient(norm)):
+        return False
+
+    # ── 5. ML fallback (+ rule verification) ─────────────────────
+    _ensure_pipeline()
+    if 'keto' in _pipeline_state['models']:
+        model = _pipeline_state['models']['keto']
+        if _pipeline_state['vectorizer']:
+            try:
+                X = _pipeline_state['vectorizer'].transform([norm])
+                prob = model.predict_proba(X)[0, 1]
+            except Exception as e:
+                log.warning("Vectorizer failed: %s. Falling back to rules.", e)
+                prob = RuleModel(
+                    "keto", RX_KETO, RX_WL_KETO).predict_proba([norm])[0, 1]
+        else:
+            prob = RuleModel(
+                "keto", RX_KETO, RX_WL_KETO).predict_proba([norm])[0, 1]
+
+        prob_adj = verify_with_rules(
+            "keto", pd.Series([norm]), np.array([prob]))[0]
+        return prob_adj >= 0.5
+
+    # If no model available, default to True (passed all rule checks)
+    return True
+
+
+def is_ingredient_vegan(ingredient: str) -> bool:
+    """
+    Determine if an ingredient is vegan.
+
+    Uses the full pipeline: rule-based checks, ML models (if available),
+    and post-processing verification.
+
+    Args:
+        ingredient: Raw ingredient string
+
+    Returns:
+        True if vegan, False otherwise
+    """
+    if not ingredient:
+        return True
+
+    # Quick whitelist check
+    if RX_WL_VEGAN.search(ingredient):
+        return True
+
+    # Normalize
+    normalized = normalise(ingredient)
+
+    # Quick blacklist check
+    if RX_VEGAN.search(normalized) and not RX_WL_VEGAN.search(ingredient):
+        return False
+
+    # Use ML model if available
+    _ensure_pipeline()
+    if 'vegan' in _pipeline_state['models']:
+        model = _pipeline_state['models']['vegan']
+        if _pipeline_state['vectorizer']:
+            try:
+                X = _pipeline_state['vectorizer'].transform([normalized])
+                prob = model.predict_proba(X)[0, 1]
+            except Exception as e:
+                log.warning(
+                    "Vectorizer failed: %s. Using rule-based fallback.", e)
+                prob = RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN).predict_proba(
+                    [normalized])[0, 1]
+        else:
+            prob = RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN).predict_proba(
+                [normalized])[0, 1]
+
+        # Apply verification
+        prob_adj = verify_with_rules(
+            "vegan", pd.Series([normalized]), np.array([prob]))[0]
+        return prob_adj >= 0.5
+
+    return True
+
+
+def is_keto(ingredients: Iterable[str] | str) -> bool:
+    """Check if all ingredients are keto-friendly.
+
+    This will automatically train models on first use if none are saved.
+    """
+    _ensure_pipeline()
+    if isinstance(ingredients, str):
+        try:
+            if ingredients.startswith('['):
+                ingredients = json.loads(ingredients)
+            else:
+                ingredients = [i.strip()
+                               for i in ingredients.split(',') if i.strip()]
+        except Exception:
+            ingredients = [ingredients]
+    return all(is_ingredient_keto(ing) for ing in ingredients)
+
+
+def is_vegan(ingredients: Iterable[str] | str) -> bool:
+    """Check if all ingredients are vegan.
+
+    This will automatically train models on first use if none are saved.
+    """
+    _ensure_pipeline()
+    if isinstance(ingredients, str):
+        try:
+            if ingredients.startswith('['):
+                ingredients = json.loads(ingredients)
+            else:
+                ingredients = [i.strip()
+                               for i in ingredients.split(',') if i.strip()]
+        except Exception:
+            ingredients = [ingredients]
+    return all(is_ingredient_vegan(ing) for ing in ingredients)
+
+
+# ============================================================================
+# RULE MODEL
+# ============================================================================
+
+class RuleModel(BaseEstimator, ClassifierMixin):
+    def __init__(self, task: str, rx_black, rx_white=None,
+                 pos_prob=0.98, neg_prob=0.02):
+        self.task, self.rx_black, self.rx_white = task, rx_black, rx_white
+        self.pos_prob, self.neg_prob = pos_prob, neg_prob
+
+    def fit(self, X, y=None): return self
+
+    def _pos(self, d: str) -> bool:
+        """
+        Return True if the ingredient string *d* should be considered
+        positive (keto-friendly or vegan-friendly) by this rule model.
+        """
+        # ── Keto branch ────────────────────────────────────────────────
+        if self.task == "keto":
+            # 0. normalise once
+            norm = normalise(d)
+
+            # 1. whitelist → instant pass
+            if RX_WL_KETO.search(norm):
+                return True
+
+            # 2. numeric carb rule (≤ 10 g / 100 g) – overrides blacklist
+            carbs = carbs_per_100g(norm)
+            if carbs is not None and carbs > 10.0:
+                return False
+
+            # token-level numeric fallback (rare)
+            if carbs is None:
+                for tok in tokenize_ingredient(norm):
+                    if carbs_per_100g(tok, fuzzy=True) not in (None, 0) and \
+                       carbs_per_100g(tok, fuzzy=True) > 10.0:
+                        return False
+
+            # 3. regex blacklist (still useful for speed)
+            if self.rx_black.search(norm):
+                return False
+
+            # 4. token blacklist
+            if not is_keto_ingredient_list(tokenize_ingredient(norm)):
+                return False
+
+            # otherwise treat as keto-friendly
+            return True
+
+        # ── Vegan branch (unchanged logic) ────────────────────────────
+        else:  # self.task == "vegan"
+            return (
+                not bool(self.rx_black.search(d))
+                or bool(self.rx_white and self.rx_white.search(d))
+            )
+
+    def predict_proba(self, X):
+        p = np.fromiter((self.pos_prob if self._pos(d) else self.neg_prob
+                         for d in X), float, count=len(X))
+        return np.c_[1-p, p]
+
+    def predict(self, X):
+        return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
+
+# ============================================================================
+# VERIFICATION LAYER
+# ============================================================================
+
+
+def filter_silver_by_downloaded_images(silver_df: pd.DataFrame, image_dir: Path) -> pd.DataFrame:
+    """Keep only rows in silver that have corresponding downloaded image files."""
+    downloaded_ids = [int(p.stem)
+                      for p in (image_dir / "silver").glob("*.jpg")]
+    return silver_df.loc[silver_df.index.intersection(downloaded_ids)].copy()
+
+
+def tokenize_ingredient(text: str) -> list[str]:
+    return re.findall(r"\b\w[\w-]*\b", text.lower())
+
+
+def is_keto_ingredient_list(tokens: list[str]) -> bool:
+    for ingredient in NON_KETO:
+        ing_tokens = ingredient.split()
+        if all(tok in tokens for tok in ing_tokens):
+            return False
+    return True
+
+
+def find_non_keto_hits(text: str) -> list[str]:
+    tokens = set(tokenize_ingredient(text))
+    return sorted([
+        ingredient for ingredient in NON_KETO
+        if all(tok in tokens for tok in ingredient.split())
+    ])
+
+
+def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarray:
+    """Apply rule-based verification to ML predictions."""
+    adjusted = prob.copy()
+
+    if task == "keto":
+        # Regex-based whitelist/blacklist
+        is_whitelisted = clean.str.contains(RX_WL_KETO)
+        is_blacklisted = clean.str.contains(RX_KETO)
+        forced_non_keto = is_blacklisted & ~is_whitelisted
+        adjusted[forced_non_keto.values] = 0.0
+
+        # Token-based ingredient verification
+        for i, txt in enumerate(clean):
+            if adjusted[i] > 0.5:
+                tokens = tokenize_ingredient(normalise(txt))
+                if not is_keto_ingredient_list(tokens):
+                    adjusted[i] = 0.0
+                    log.debug("Heuristically rejected '%s' as non-keto", txt)
+
+        if forced_non_keto.any():
+            log.debug("Keto Verification: forced %d probs to 0 (regex)",
+                      forced_non_keto.sum())
+
+    else:  # vegan
+        bad = clean.str.contains(RX_VEGAN) & ~clean.str.contains(RX_WL_VEGAN)
+        adjusted[bad.values] = 0.0
+        if bad.any():
+            log.debug("Vegan Verification: forced %d probs to 0", bad.sum())
+
+    return adjusted
 
 
 # ============================================================================
@@ -2009,16 +2299,14 @@ def handle_memory_crisis():
             return 90.0  # Assume high usage if we can't measure
 
 
-
 # ============================================================================
-# PREPROCESSING 
+# PREPROCESSING
 # ============================================================================
 
 def combine_features(X_text, X_image) -> csr_matrix:
     """Concatenate sparse text matrix with dense image array."""
     img_sparse = csr_matrix(X_image)
     return hstack([X_text, img_sparse])
-
 
 
 # ====================================================================
@@ -2572,7 +2860,6 @@ def build_image_embeddings(df: pd.DataFrame,
     return arr, valid_indices
 
 
-
 def filter_photo_rows(df: pd.DataFrame) -> pd.DataFrame:
     """Return rows with usable photo URLs."""
     if 'photo_url' not in df.columns:
@@ -2617,6 +2904,7 @@ def show_balance(df: pd.DataFrame, title: str) -> None:
                 print(f"{lab:>5}: {pos:6}/{tot} ({pos/tot:>5.1%})")
                 break
 
+
 def apply_smote(X, y, max_dense_size: int = int(5e7)):
     """Apply SMOTE when classes are imbalanced (<40% minority) - FIXED VERSION."""
     try:
@@ -2651,7 +2939,6 @@ def apply_smote(X, y, max_dense_size: int = int(5e7)):
 # ============================================================================
 
 
-
 def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
     """
     Return a dictionary of estimators tailored to `domain`
@@ -2670,7 +2957,6 @@ def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
             max_iter=20000,                # give it breathing room
             random_state=42)
     )
-
 
     # ── 1. Rule-based (text only) ────────────────────────────
     if domain in ("text", "both"):
@@ -2708,10 +2994,10 @@ def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
     image_family: Dict[str, BaseEstimator] = {
         # RBF-SVM wrapped in CalibratedCV if you need probabilities later
         "SVM_RBF": CalibratedClassifierCV(
-        estimator=svm_pipe,
-        method="sigmoid",
-        cv=3,
-        n_jobs=1),
+            estimator=svm_pipe,
+            method="sigmoid",
+            cv=3,
+            n_jobs=1),
         "MLP": MLPClassifier(
             hidden_layer_sizes=(512, 128),
             activation="relu",
@@ -2763,6 +3049,7 @@ def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
 
 # 3. UPDATE the HYPER dictionary with better parameters:
 
+
 HYPER = {
     # Text models ----------------------------------------------------
     "Softmax": {"C": [0.1, 1, 10]},
@@ -2793,8 +3080,8 @@ HYPER = {
     },
     # For Calibrated SVM the params live under `estimator__`
     "SVM_RBF": {
-    "estimator__svc__C":     [0.5, 1, 2],
-    "estimator__svc__gamma": ["scale", 0.001]
+        "estimator__svc__C":     [0.5, 1, 2],
+        "estimator__svc__gamma": ["scale", 0.001]
     },
 }
 
@@ -3572,11 +3859,13 @@ def log_false_preds(task, texts, y_true, y_pred, model_name="Model"):
 # ENSEMBLE METHODS
 # ============================================================================
 
+
 def tune_threshold(y_true, probs):
     precision, recall, thresholds = precision_recall_curve(y_true, probs)
     f1 = 2 * (precision * recall) / (precision + recall + 1e-10)
     optimal_idx = np.argmax(f1)
     return thresholds[optimal_idx] if optimal_idx < len(thresholds) else 0.5
+
 
 def best_two_domains(
     task: str,
@@ -3607,8 +3896,9 @@ def best_two_domains(
         (r for r in text_results if r["task"] == task),
         key=lambda r: r["F1"]
     )
-    best_img  = max(
-        (r for r in image_results if r["task"] == task and len(r.get("prob", [])) > 0),
+    best_img = max(
+        (r for r in image_results if r["task"]
+         == task and len(r.get("prob", [])) > 0),
         key=lambda r: r["F1"],
         default=None
     )
@@ -3626,21 +3916,21 @@ def best_two_domains(
         final_prob = txt_prob.values
         rows_with_img = []
     else:
-        img_idx  = gold_df.index[:len(best_img["prob"])]
+        img_idx = gold_df.index[:len(best_img["prob"])]
         img_prob = pd.Series(best_img["prob"], index=img_idx)
 
         rows_with_img = img_idx
         final_prob = txt_prob.copy()
         final_prob.loc[rows_with_img] = (
             alpha * img_prob.loc[rows_with_img]
-          + (1 - alpha) * txt_prob.loc[rows_with_img]
+            + (1 - alpha) * txt_prob.loc[rows_with_img]
         )
         final_prob = final_prob.values
 
     # 3️⃣  verification + metrics
     final_prob = verify_with_rules(task, gold_df.clean, final_prob)
     final_pred = (final_prob >= 0.5).astype(int)
-    y_true     = gold_df[f"label_{task}"].values
+    y_true = gold_df[f"label_{task}"].values
 
     return pack(y_true, final_prob) | {
         "model": f"BestTwo(alpha={alpha})",
@@ -4070,7 +4360,6 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
     }
 
 
-
 def best_ensemble(
     task,
     res,
@@ -4082,7 +4371,7 @@ def best_ensemble(
     *,
     weights=None,
     image_res=None,          # list[dict] with image-domain results
-    alphas=(0.25, 0.5, 0.75) # search grid for α
+    alphas=(0.25, 0.5, 0.75)  # search grid for α
 ):
     """
     Single-domain exhaustive ensemble - OR -
@@ -4091,7 +4380,6 @@ def best_ensemble(
     Pass `image_res` to activate smart blending; otherwise behaviour is
     unchanged.
     """
-
 
     # =========================================================
     # 0)  SMART-BLEND FRONT END
@@ -4106,13 +4394,14 @@ def best_ensemble(
         # -- 0b. best IMAGE ensemble (same function on image_res) ---------
         img_pool = [r for r in image_res if r["task"] == task]
         if not img_pool:
-            log.info(f"   ⏭️  No image models for {task}; using text ensemble only")
+            log.info(
+                f"   ⏭️  No image models for {task}; using text ensemble only")
             return text_best
 
         image_best = best_ensemble(
             task, img_pool,           # <- treat image results as “res”
             X_vec=None, clean=clean,  # dummy placeholders (they’re unused
-            X_gold=None, silver=None, # because top_n is never called when
+            X_gold=None, silver=None,  # because top_n is never called when
             gold=gold,                # max_n == 1 inside the recursion)
             weights=weights,
             image_res=None
@@ -4123,20 +4412,22 @@ def best_ensemble(
 
         # -- 0c. build Series for probabilities ---------------------------
         txt_prob = pd.Series(text_best["prob"], index=gold.index)
-        img_len  = len(image_best["prob"])
-        img_idx  = gold.index[:img_len]           # same heuristic as original
+        img_len = len(image_best["prob"])
+        img_idx = gold.index[:img_len]           # same heuristic as original
         img_prob = pd.Series(image_best["prob"], index=img_idx)
 
         rows_img = img_idx
         rows_txt = txt_prob.index.difference(rows_img)
-        y_true   = gold[f"label_{task}"].values
+        y_true = gold[f"label_{task}"].values
 
         # -- 0d. α-grid search -------------------------------------------
         best_alpha, best_f1, best_prob = None, -1.0, None
         for α in alphas:
             blend = txt_prob.copy()
-            blend.loc[rows_img] = α * img_prob.loc[rows_img] + (1-α) * txt_prob.loc[rows_img]
-            f1 = f1_score(y_true, (blend.values >= .5).astype(int), zero_division=0)
+            blend.loc[rows_img] = α * img_prob.loc[rows_img] + \
+                (1-α) * txt_prob.loc[rows_img]
+            f1 = f1_score(y_true, (blend.values >= .5).astype(
+                int), zero_division=0)
             if f1 > best_f1:
                 best_alpha, best_f1, best_prob = α, f1, blend.values
 
@@ -4145,15 +4436,15 @@ def best_ensemble(
         best_pred = (best_prob >= .5).astype(int)
 
         return pack(y_true, best_prob) | {
-            "model"         : f"SmartEns(Text={text_best['model']},Img={image_best['model']},α={best_alpha})",
-            "task"          : task,
-            "prob"          : best_prob,
-            "pred"          : best_pred,
-            "alpha"         : best_alpha,
-            "rows_image"    : len(rows_img),
+            "model": f"SmartEns(Text={text_best['model']},Img={image_best['model']},α={best_alpha})",
+            "task": task,
+            "prob": best_prob,
+            "pred": best_pred,
+            "alpha": best_alpha,
+            "rows_image": len(rows_img),
             "rows_text_only": len(rows_txt),
-            "text_model"    : text_best["model"],
-            "image_model"   : image_best["model"],
+            "text_model": text_best["model"],
+            "image_model": image_best["model"],
         }
 
     import time
@@ -4227,7 +4518,7 @@ def best_ensemble(
     #                simply return the single best model already present
     #                in `res` (same logic as the early-exit when max_n == 1).
     # ------------------------------------------------------------------
-    
+
     if X_vec is None or X_gold is None or silver is None or gold is None:
         log.info(f" ℹ️  No feature matrices supplied for '{task}' – "
                  f"returning best existing model without re-fitting.")
@@ -4381,7 +4672,6 @@ def best_ensemble(
         log.info(f"   └─────┴──────────┴─────────┴─────────┴───────────┴──────────┘")
 
     return best_result
-
 
 
 # ============================================================================
@@ -5494,150 +5784,6 @@ def _ensure_pipeline():
 
         _pipeline_state['initialized'] = True
 
-
-def is_ingredient_keto(ingredient: str) -> bool:
-    """
-    Determine if an ingredient is keto-friendly.
-
-    Uses the full pipeline: rule-based checks, ML models (if available),
-    and post-processing verification.
-
-    Args:
-        ingredient: Raw ingredient string
-
-    Returns:
-        True if keto-friendly, False otherwise
-    """
-    if not ingredient:
-        return True
-
-    # Quick whitelist check
-    if RX_WL_KETO.search(ingredient):
-        return True
-
-    # Normalize
-    normalized = normalise(ingredient)
-
-    # Quick blacklist check
-    if RX_KETO.search(normalized):
-        return False
-
-    # Token-based check
-    tokens = tokenize_ingredient(normalized)
-    if not is_keto_ingredient_list(tokens):
-        return False
-
-    # Use ML model if available
-    _ensure_pipeline()
-    if 'keto' in _pipeline_state['models']:
-        model = _pipeline_state['models']['keto']
-        if _pipeline_state['vectorizer']:
-            try:
-                X = _pipeline_state['vectorizer'].transform([normalized])
-                prob = model.predict_proba(X)[0, 1]
-            except Exception as e:
-                log.warning(
-                    "Vectorizer failed: %s. Using rule-based fallback.", e)
-                prob = RuleModel("keto", RX_KETO, RX_WL_KETO).predict_proba(
-                    [normalized])[0, 1]
-        else:
-            prob = RuleModel("keto", RX_KETO, RX_WL_KETO).predict_proba(
-                [normalized])[0, 1]
-
-        # Apply verification
-        prob_adj = verify_with_rules(
-            "keto", pd.Series([normalized]), np.array([prob]))[0]
-        return prob_adj >= 0.5
-
-    return True
-
-
-def is_ingredient_vegan(ingredient: str) -> bool:
-    """
-    Determine if an ingredient is vegan.
-
-    Uses the full pipeline: rule-based checks, ML models (if available),
-    and post-processing verification.
-
-    Args:
-        ingredient: Raw ingredient string
-
-    Returns:
-        True if vegan, False otherwise
-    """
-    if not ingredient:
-        return True
-
-    # Quick whitelist check
-    if RX_WL_VEGAN.search(ingredient):
-        return True
-
-    # Normalize
-    normalized = normalise(ingredient)
-
-    # Quick blacklist check
-    if RX_VEGAN.search(normalized) and not RX_WL_VEGAN.search(ingredient):
-        return False
-
-    # Use ML model if available
-    _ensure_pipeline()
-    if 'vegan' in _pipeline_state['models']:
-        model = _pipeline_state['models']['vegan']
-        if _pipeline_state['vectorizer']:
-            try:
-                X = _pipeline_state['vectorizer'].transform([normalized])
-                prob = model.predict_proba(X)[0, 1]
-            except Exception as e:
-                log.warning(
-                    "Vectorizer failed: %s. Using rule-based fallback.", e)
-                prob = RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN).predict_proba(
-                    [normalized])[0, 1]
-        else:
-            prob = RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN).predict_proba(
-                [normalized])[0, 1]
-
-        # Apply verification
-        prob_adj = verify_with_rules(
-            "vegan", pd.Series([normalized]), np.array([prob]))[0]
-        return prob_adj >= 0.5
-
-    return True
-
-
-def is_keto(ingredients: Iterable[str] | str) -> bool:
-    """Check if all ingredients are keto-friendly.
-
-    This will automatically train models on first use if none are saved.
-    """
-    _ensure_pipeline()
-    if isinstance(ingredients, str):
-        try:
-            if ingredients.startswith('['):
-                ingredients = json.loads(ingredients)
-            else:
-                ingredients = [i.strip()
-                               for i in ingredients.split(',') if i.strip()]
-        except Exception:
-            ingredients = [ingredients]
-    return all(is_ingredient_keto(ing) for ing in ingredients)
-
-
-def is_vegan(ingredients: Iterable[str] | str) -> bool:
-    """Check if all ingredients are vegan.
-
-    This will automatically train models on first use if none are saved.
-    """
-    _ensure_pipeline()
-    if isinstance(ingredients, str):
-        try:
-            if ingredients.startswith('['):
-                ingredients = json.loads(ingredients)
-            else:
-                ingredients = [i.strip()
-                               for i in ingredients.split(',') if i.strip()]
-        except Exception:
-            ingredients = [ingredients]
-    return all(is_ingredient_vegan(ing) for ing in ingredients)
 
 # ============================================================================
 # MAIN ENTRY POINT
