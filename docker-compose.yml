@@ -44,7 +44,8 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/usr/src/data  # single bind mount handles everything
+      - ./web:/app               # 🔧 Mounts your Python source (fix)
+      - ./data:/usr/src/data     # Keeps your dataset mount
     networks:
       - argmax
     depends_on:
