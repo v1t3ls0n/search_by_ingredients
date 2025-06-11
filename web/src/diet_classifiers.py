@@ -2889,30 +2889,34 @@ def filter_photo_rows(df: pd.DataFrame) -> pd.DataFrame:
 # SILVER LABELS GENERATION (TRAINING DATA GENERATION)
 # ============================================================================
 
+def _rule_only_keto(text: str) -> bool:
+    if RX_WL_KETO.search(text):
+        return True
+    norm = normalise(text)
+    c = carbs_per_100g(norm)
+    if c is not None and c > 10:
+        return False
+    if RX_KETO.search(norm):
+        return False
+    if not is_keto_ingredient_list(tokenize_ingredient(norm)):
+        return False
+    return True      # passed all rule checks
+
+def _rule_only_vegan(text: str) -> bool:
+    if RX_WL_VEGAN.search(text):
+        return True
+    norm = normalise(text)
+    if RX_VEGAN.search(norm) and not RX_WL_VEGAN.search(text):
+        return False
+    return True
+
 def build_silver(recipes: pd.DataFrame) -> pd.DataFrame:
-    """
-    Generate silver (weak) labels entirely in memory.
-    Uses the same helpers as runtime classification so that the
-    weak labels respect:
-        • whitelist / blacklist
-        • USDA ≤ 10-g carb rule
-        • token fallback
-    """
     df = recipes[["ingredients"]].copy()
     df["clean"] = df["ingredients"].fillna("").map(normalise)
 
-    # keto label
-    df["silver_keto"] = df["clean"].map(
-        lambda txt: int(is_ingredient_keto(txt))
-    )
-
-    # vegan label
-    df["silver_vegan"] = df["clean"].map(
-        lambda txt: int(is_ingredient_vegan(txt))
-    )
-
+    df["silver_keto"]  = df["clean"].map(lambda t: int(_rule_only_keto(t)))
+    df["silver_vegan"] = df["clean"].map(lambda t: int(_rule_only_vegan(t)))
     return df
-
 
 # ============================================================================
 # CLASS BALANCE HELPER
