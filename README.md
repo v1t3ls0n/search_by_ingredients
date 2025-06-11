@@ -1,7 +1,8 @@
 # 🥑 Search By Ingredients Challenge Solution 
-$$ such that $$
-$$ \underset{s \in \mathcal{S}}{\operatorname{Argmax}} \ \text{score}(s) $$
-$$ subject to: s = \texttt{v1t3ls0n} $$
+
+\[
+\hat{s} = \operatorname*{arg\,max}_{s \in \mathcal{S}} \ \text{score}(s) \quad \text{subject to } I(s) = \texttt{v1t3ls0n}
+\]
 
 **By [Guy Vitelson](https://www.linkedin.com/in/guyvitelson/)** · 🐙 [@v1t3ls0n](https://github.com/v1t3ls0n) · 📧 [guyvitelson@gmail.com](mailto:guyvitelson@gmail.com)
 
