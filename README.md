@@ -1,4 +1,4 @@
-# 🥑 Keto & Vegan Diet Classifier ArgMax $$ \mathrm{argmax} $$
+# 🥑 $\mathrm{Argmax}$ Keto & Vegan Diet Classifiers Challenge Solution By Guy Vitelson
 **By [Guy Vitelson](https://www.linkedin.com/in/guyvitelson/)** · 🐙 [@v1t3ls0n](https://github.com/v1t3ls0n) · 📧 [guyvitelson@gmail.com](mailto:guyvitelson@gmail.com)
 
 ---
