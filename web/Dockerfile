@@ -44,6 +44,10 @@ RUN curl -L \
        /app/data/usda/ && \
     rm -rf /tmp/fdc.zip /tmp/FoodData_Central_foundation_food_csv_2025-04-24
 
+RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/allrecipes.parquet \
+    -o /app/data/allrecipes.parquet && \
+    curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/ground_truth_sample.csv \
+    -o /app/data/ground_truth_sample.csv
 # ──────────────────────────────────────────────────────────────────────────
 # 4. Python deps
 # ──────────────────────────────────────────────────────────────────────────

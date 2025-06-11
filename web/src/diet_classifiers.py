@@ -164,17 +164,13 @@ log = logging.getLogger("PIPE")
 
 @dataclass(frozen=True)
 class Config:
-    data_dir: Path = Path("dataset/arg_max")
-    usda_dir: Path = Path("/app/data/usda")
+    data_dir: Path = Path("/app/data")
+    usda_dir: Path  = Path("/app/data/usda")           # ← add
     url_map: Mapping[str, str] = field(default_factory=lambda: {
-        "allrecipes.parquet":
-        "https://argmax.nyc3.digitaloceanspaces.com/recipes/allrecipes.parquet",
-        "ground_truth_sample.csv":
-        "https://argmax.nyc3.digitaloceanspaces.com/recipes/ground_truth_sample.csv",
+        "allrecipes.parquet": "/app/data/allrecipes.parquet",
+        "ground_truth_sample.csv": "/app/data/ground_truth_sample.csv",
     })
-    vec_kwargs: Dict[str, Any] = field(default_factory=lambda: dict(
-        min_df=2, ngram_range=(1, 3), max_features=50000, sublinear_tf=True))
-    image_dir: Path = Path("dataset/arg_max/images")
+
 CFG = Config()
 def _load_usda_carb_table() -> pd.DataFrame:
     """ 
@@ -1327,7 +1323,9 @@ def load_datasets() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     log.info(f"   ├─ USDA Carb Tbl:  {len(carb_df):,} rows × {len(carb_df.columns)} columns "
              f"({carb_df.memory_usage(deep=True).sum() / (1024**2):.1f} MB)")
     log.info(f"   └─ Ready for ML pipeline: ✅")
-
+    log.info(f"   ├─ Datasets loaded: 4 (recipes, ground_truth, silver, usda)")
+    total_used = total_memory + carb_df.memory_usage(deep=True).sum()/1_048_576
+    log.info(f"   ├─ Total memory usage: {total_used:.1f} MB")
     # Garbage collection for memory optimization
     import gc
     gc.collect()
@@ -2053,6 +2051,18 @@ class RuleModel(BaseEstimator, ClassifierMixin):
 
     def predict(self, X):
         return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
+
+# ============================================================================
+# SANITY CHECKS
+# ============================================================================
+
+assert is_ingredient_keto("almond flour")    # whitelist + 9 g carbs
+assert not is_ingredient_keto("white rice")  # numeric rule > 10 g
+
+rule = RuleModel("keto", None, None)
+assert rule._pos("banana") is False          # numeric rule via delegate
+print("all good")
+
 
 # ============================================================================
 # VERIFICATION LAYER
