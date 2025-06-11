@@ -967,10 +967,13 @@ def show_balance(df: pd.DataFrame, title: str) -> None:
     for lab in ("keto", "vegan"):
         for col in (f"label_{lab}", f"silver_{lab}"):
             if col in df.columns:
-                pos, tot = int(df[col].sum()), len(df)
+                tot = len(df)
+                if tot == 0:
+                    print(f"{lab:>5}: No data available (0 rows)")
+                    break
+                pos = int(df[col].sum())
                 print(f"{lab:>5}: {pos:6}/{tot} ({pos/tot:>5.1%})")
                 break
-
 # ============================================================================
 # MODEL REGISTRY
 # ============================================================================
@@ -1377,28 +1380,25 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
         force: Recompute image embeddings even if cached.
         sample_frac: Optional float (0 < x <= 1.0) to subsample silver set.
     """
-    # Load datasets
-    silver, gold, recipes = load_datasets_fixed()
+    # --- Load and label data ---
+    silver_txt, gold, recipes = load_datasets_fixed()
+    silver_txt = build_silver(silver_txt)  # pseudo-label for text models
 
-    # Pseudo-label silver for text tasks
-    silver = pseudo_label(silver)
-
-    # Optional subsample
+    # --- Derive image-compatible silver set from text-pseudo-labeled set ---
+    silver_img = filter_photo_rows(silver_txt)
     if sample_frac:
-        silver = silver.sample(frac=sample_frac, random_state=42).copy()
+        silver_img = silver_img.sample(frac=sample_frac, random_state=42).copy()
 
-    # Prepare silver subset with valid image URLs
-    img_silver_df = filter_photo_rows(silver)
     img_gold_df = filter_photo_rows(gold)
 
-    # Show balance
+    # --- Show balances ---
     show_balance(gold, "Gold")
-    show_balance(silver, "Silver (Text)")
-    show_balance(img_silver_df, "Silver (Image)")
+    show_balance(silver_txt, "Silver (Text)")
+    show_balance(silver_img, "Silver (Image)")
 
     # --- TEXT FEATURES ---
     vec = TfidfVectorizer(**CFG.vec_kwargs)
-    X_text_silver = vec.fit_transform(silver.clean)
+    X_text_silver = vec.fit_transform(silver_txt.clean)
     X_text_gold = vec.transform(gold.clean)
 
     Path("embeddings").mkdir(exist_ok=True)
@@ -1409,44 +1409,38 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
 
     # --- IMAGE FEATURES ---
     if mode in {"image", "both"}:
-        _download_images(img_silver_df, CFG.image_dir / "silver")
+        _download_images(silver_img, CFG.image_dir / "silver")
         _download_images(img_gold_df, CFG.image_dir / "gold")
 
-        img_silver = build_image_embeddings(
-            img_silver_df, "silver", force=force)
+        img_silver = build_image_embeddings(silver_img, "silver", force=force)
         img_gold = build_image_embeddings(img_gold_df, "gold", force=force)
 
         joblib.dump(img_gold, "embeddings/img_gold.pkl")
 
         idx_path = CFG.image_dir / "silver" / "used_indices.txt"
         idx_path.parent.mkdir(parents=True, exist_ok=True)
-        img_silver_df.index.to_series().to_csv(idx_path, index=False, header=False)
+        silver_img.index.to_series().to_csv(idx_path, index=False, header=False)
         log.info(f"Saved image index for reproducibility to: {idx_path}")
 
         X_img_silver = csr_matrix(img_silver)
         X_img_gold = csr_matrix(img_gold)
 
         res_img = run_mode_A(
-            X_img_silver, img_gold_df.clean, X_img_gold, img_silver_df, img_gold_df
+            X_img_silver, img_gold_df.clean, X_img_gold, silver_img, img_gold_df
         )
         results.extend(res_img)
 
     # --- TEXT-ONLY PIPELINE ---
     if mode in {"text", "both"}:
-        res_text = run_mode_A(X_text_silver, gold.clean,
-                              X_text_gold, silver, gold)
+        res_text = run_mode_A(X_text_silver, gold.clean, X_text_gold, silver_txt, gold)
         results.extend(res_text)
 
     # --- TEXT+IMAGE ENSEMBLE ---
     if mode == "both" and res_text and res_img:
         ensemble_results = []
         for task in ["keto", "vegan"]:
-            best_text = max(
-                (r for r in res_text if r["task"] == task), key=lambda r: r["F1"]
-            )
-            best_img = max(
-                (r for r in res_img if r["task"] == task), key=lambda r: r["F1"]
-            )
+            best_text = max((r for r in res_text if r["task"] == task), key=lambda r: r["F1"])
+            best_img = max((r for r in res_img if r["task"] == task), key=lambda r: r["F1"])
             avg_prob = (best_text["prob"] + best_img["prob"]) / 2
             ensemble_result = pack(gold[f"label_{task}"].values, avg_prob) | {
                 "model": "TxtImg",
@@ -1459,23 +1453,26 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
     # --- FINAL EVALUATION ---
     if mode == "text":
         X_silver, X_gold = X_text_silver, X_text_gold
+        silver_used = silver_txt
     elif mode == "image":
         X_silver, X_gold = csr_matrix(img_silver), csr_matrix(img_gold)
+        silver_used = silver_img
     else:
         X_silver = combine_features(X_text_silver, img_silver)
         X_gold = combine_features(X_text_gold, img_gold)
+        silver_used = silver_img  # matching image rows only
 
-    res = run_mode_A(X_silver, gold.clean, X_gold, silver, gold)
+    res = run_mode_A(X_silver, gold.clean, X_gold, silver_used, gold)
     results.extend(res)
 
     res_ens = [
-        best_ensemble("keto", res, X_silver, gold.clean, X_gold, silver, gold),
-        best_ensemble("vegan", res, X_silver,
-                      gold.clean, X_gold, silver, gold),
+        best_ensemble("keto", res, X_silver, gold.clean, X_gold, silver_used, gold),
+        best_ensemble("vegan", res, X_silver, gold.clean, X_gold, silver_used, gold),
     ]
     table("MODE A Ensemble (Best)", res_ens)
     results.extend(res_ens)
 
+    # --- METRIC PLOTS ---
     Path("plots").mkdir(exist_ok=True)
     rows = []
 
@@ -1531,10 +1528,9 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
     log.info("Saved evaluation results to evaluation_results.csv")
 
     with open("best_params.json", "w") as fp:
-        json.dump({k: v.get_params()
-                  for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
+        json.dump({k: v.get_params() for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
 
-    return vec, silver, gold, results
+    return vec, silver_txt, gold, results
 
 
 # ============================================================================
