@@ -4200,7 +4200,7 @@ def run_full_pipeline(mode: str = "both",
                 log.info(f"      ├─ {task}: Text={bt['model']} (F1={bt['F1']:.3f}), "
                         f"Image={bi['model']} (F1={bi['F1']:.3f})")
 
-                # Align predictions by index
+                # Align predictions by index - USE COMMON GOLD INDICES
                 s_txt = pd.Series(bt["prob"], index=gold.index)
                 s_img = pd.Series(bi["prob"], index=img_gold_df.index)
                 common = s_txt.index.intersection(s_img.index)
@@ -4230,26 +4230,42 @@ def run_full_pipeline(mode: str = "both",
                 results.extend(ensemble_results)
             train_pbar.update(1)
 
-        # FINAL COMBINED MODEL TRAINING
+        # FINAL COMBINED MODEL TRAINING - FIXED DIMENSION ALIGNMENT
         if mode == "both" and img_silver.size > 0:
             train_pbar.set_description("   ├─ Final Combined Models")
             log.info(f"   🔄 Training final combined models...")
             
-            # Align features by common indices
-            common_idx = img_silver_df.index
-            if len(common_idx) > 0:
-                X_text_silver_algn = vec.transform(silver_txt.loc[common_idx].clean)
+            # CRITICAL FIX: Align both silver and gold to common image indices
+            common_silver_idx = img_silver_df.index
+            common_gold_idx = img_gold_df.index
+            
+            if len(common_silver_idx) > 0 and len(common_gold_idx) > 0:
+                # Align silver features
+                X_text_silver_algn = vec.transform(silver_txt.loc[common_silver_idx].clean)
                 X_silver = combine_features(X_text_silver_algn, img_silver)
-                X_gold = combine_features(X_text_gold, img_gold)
-                silver_eval = silver_txt.loc[common_idx]
+                
+                # Align gold features - ONLY use rows that have images
+                X_text_gold_algn = vec.transform(gold.loc[common_gold_idx].clean)
+                X_gold = combine_features(X_text_gold_algn, img_gold)
+                
+                silver_eval = silver_txt.loc[common_silver_idx]
+                gold_eval = gold.loc[common_gold_idx]
                 
                 log.info(f"      ├─ Combined silver features: {X_silver.shape}")
                 log.info(f"      ├─ Combined gold features: {X_gold.shape}")
-                log.info(f"      └─ Aligned samples: {len(silver_eval):,}")
+                log.info(f"      ├─ Silver samples: {len(silver_eval):,}")
+                log.info(f"      └─ Gold samples: {len(gold_eval):,}")
+                
+                # Run combined training
+                res_combined = run_mode_A(
+                    X_silver, gold_eval.clean, X_gold,
+                    silver_eval, gold_eval,
+                    domain="both", apply_smote=True
+                )
+                results.extend(res_combined)
+                log.info(f"      ✅ Combined models: {len(res_combined)} results")
             else:
                 log.warning(f"      ⚠️  No common indices for combined features, skipping")
-                X_silver, X_gold = X_text_silver, X_text_gold
-                silver_eval = silver_txt
                 
         elif mode == "text":
             X_silver, X_gold = X_text_silver, X_text_gold
@@ -4263,15 +4279,16 @@ def run_full_pipeline(mode: str = "both",
             X_silver, X_gold = X_text_silver, X_text_gold
             silver_eval = silver_txt
 
-        # Run final training phase
-        if training_subtasks:  # Only if we have valid training tasks
-            log.info(f"   🎯 Running final mode-A training...")
+        # Run final training phase (text-only as fallback)
+        if not results:  # Only if no results yet
+            log.info(f"   🎯 Running fallback text-only training...")
             res_final = run_mode_A(X_text_silver, gold.clean, X_text_gold,
                                  silver_txt, gold, domain="text", apply_smote=True)
             results.extend(res_final)
             log.info(f"      ✅ Final models: {len(res_final)} results")
-            if mode == "both" and img_silver.size > 0:
-                train_pbar.update(1)
+            
+        if mode == "both" and img_silver.size > 0:
+            train_pbar.update(1)
 
     stage_time = time.time() - stage_start
     log.info(f"   ✅ Model training completed in {stage_time:.1f}s")
@@ -4452,6 +4469,137 @@ def run_full_pipeline(mode: str = "both",
     return vec, silver_txt, gold, results
 
 
+def main():
+    """Main function for command line usage with better error handling."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Diet Classifier')
+    parser.add_argument('--ground_truth', type=str,
+                        help='Path to ground truth CSV')
+    parser.add_argument('--train', action='store_true',
+                        help='Run full training pipeline')
+    parser.add_argument('--ingredients', type=str,
+                        help='Comma separated ingredients to classify')
+    parser.add_argument('--mode', choices=['text', 'image', 'both'],
+                        default='both', help='Feature mode for training')
+    parser.add_argument('--force', action='store_true',
+                        help='Recompute image embeddings')
+    parser.add_argument('--sample_frac', type=float,
+                        default=None, help="Fraction of silver set to sample.")
+
+    args = parser.parse_args()
+
+    try:
+        if args.ingredients:
+            if args.ingredients.startswith('['):
+                ingredients = json.loads(args.ingredients)
+            else:
+                ingredients = [i.strip()
+                               for i in args.ingredients.split(',') if i.strip()]
+
+            keto = is_keto(ingredients)
+            vegan = is_vegan(ingredients)
+            print(json.dumps({'keto': keto, 'vegan': vegan}))
+            return
+
+        elif args.train:
+            # SINGLE PIPELINE RUN - No restarts
+            log.info(f"🧠 Starting training pipeline with sample_frac={args.sample_frac}")
+            
+            vec, silver, gold, res = run_full_pipeline(
+                mode=args.mode, force=args.force, sample_frac=args.sample_frac)
+
+            if not res:
+                log.error("❌ Pipeline produced no results!")
+                return
+
+            try:
+                import pickle
+                CFG.data_dir.mkdir(parents=True, exist_ok=True)
+
+                with open(CFG.data_dir / "vectorizer.pkl", 'wb') as f:
+                    pickle.dump(vec, f)
+
+                best_models = {}
+                for task in ['keto', 'vegan']:
+                    task_res = [r for r in res if r['task'] == task]
+                    if task_res:
+                        best = max(task_res, key=lambda x: x['F1'])
+                        model_name = best['model']
+
+                        if model_name in BEST:
+                            best_models[task] = BEST[model_name]
+                        else:
+                            best_models[task] = build_models(task)[model_name]
+
+                with open(CFG.data_dir / "models.pkl", 'wb') as f:
+                    pickle.dump(best_models, f)
+
+                log.info("✅ Saved trained models to %s", CFG.data_dir)
+
+            except Exception as e:
+                log.error("❌ Could not save models: %s", e)
+
+        elif args.ground_truth:
+            try:
+                df = pd.read_csv(args.ground_truth)
+                df = filter_photo_rows(df)
+
+                keto_col = next(
+                    (col for col in df.columns if 'keto' in col.lower()), None)
+                vegan_col = next(
+                    (col for col in df.columns if 'vegan' in col.lower()), None)
+
+                if 'ingredients' not in df.columns:
+                    print("Error: 'ingredients' column required")
+                    return
+
+                correct_keto = 0
+                correct_vegan = 0
+
+                for idx, row in df.iterrows():
+                    if isinstance(row['ingredients'], str) and row['ingredients'].startswith('['):
+                        import ast
+                        ingredients = ast.literal_eval(row['ingredients'])
+                    else:
+                        ingredients = [i.strip()
+                                       for i in str(row['ingredients']).split(',')]
+
+                    pred_keto = all(is_ingredient_keto(ing) for ing in ingredients)
+                    pred_vegan = all(is_ingredient_vegan(ing)
+                                     for ing in ingredients)
+
+                    if keto_col and pred_keto == bool(row[keto_col]):
+                        correct_keto += 1
+                    if vegan_col and pred_vegan == bool(row[vegan_col]):
+                        correct_vegan += 1
+
+                total = len(df)
+                print("\n=== Evaluation Results ===")
+                if keto_col:
+                    print(
+                        f"Keto:  {correct_keto}/{total} ({correct_keto/total:.1%})")
+                if vegan_col:
+                    print(
+                        f"Vegan: {correct_vegan}/{total} ({correct_vegan/total:.1%})")
+
+            except Exception as e:
+                print(f"Error: {e}")
+                import traceback
+                traceback.print_exc()
+
+        else:
+            # SINGLE PIPELINE RUN - No restarts
+            log.info(f"🧠 Starting default pipeline with sample_frac={args.sample_frac}")
+            
+            run_full_pipeline(mode=args.mode, force=args.force,
+                              sample_frac=args.sample_frac)
+
+    except Exception as e:
+        log.error(f"❌ Pipeline failed with error: {e}")
+        import traceback
+        log.error(f"Full traceback:\n{traceback.format_exc()}")
+        raise
 # ============================================================================
 # SIMPLE INTERFACE FOR ASSESSMENT (Required functions)
 # ============================================================================
