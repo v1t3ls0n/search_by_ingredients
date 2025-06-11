@@ -33,6 +33,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from scipy.sparse import hstack, csr_matrix
+import psutil
 
 # --- NLTK (used for lemmatization) ---
 import nltk
@@ -760,6 +761,32 @@ def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarr
 # DATA I/O
 # ============================================================================
 
+def filter_low_quality_images(img_dir: Path, embeddings: np.ndarray, indices: list) -> tuple:
+    """Filter out low-quality images that hurt model performance."""
+    if embeddings.shape[0] == 0:
+        return embeddings, indices
+    
+    # Calculate embedding statistics
+    variances = np.var(embeddings, axis=1)
+    means = np.mean(embeddings, axis=1)
+    
+    # Remove embeddings with very low variance (likely blank/corrupted images)
+    variance_threshold = np.percentile(variances, 10)  # Bottom 10%
+    
+    # Remove embeddings that are too similar to the mean (likely generic/placeholder images)
+    mean_threshold = np.percentile(means, 90)  # Top 10% of means
+    
+    quality_mask = (variances > variance_threshold) & (means < mean_threshold)
+    
+    if quality_mask.sum() > embeddings.shape[0] * 0.5:  # Keep at least 50%
+        filtered_embeddings = embeddings[quality_mask]
+        filtered_indices = [idx for i, idx in enumerate(indices) if quality_mask[i]]
+        
+        log.info(f"      ├─ Quality filtering: {len(filtered_indices)}/{len(indices)} images kept")
+        return filtered_embeddings, filtered_indices
+    else:
+        log.info(f"      ├─ Quality filtering: Keeping all images (filter too aggressive)")
+        return embeddings, indices
 
 def load_datasets_fixed() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
@@ -1271,6 +1298,94 @@ def load_datasets_fixed() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     gc.collect()
     
     return silver, ground_truth, recipes
+
+
+def handle_memory_crisis():
+    """Emergency memory cleanup when usage is critical."""
+    log.warning("🚨 MEMORY CRISIS - Applying emergency cleanup")
+    
+    # Multiple garbage collection passes
+    for i in range(3):
+        collected = gc.collect()
+        log.info(f"   ├─ GC pass {i+1}: {collected} objects")
+    
+    # Clear all possible caches
+    if torch and torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+    
+    # Force memory compaction (Python 3.9+)
+    try:
+        gc.collect()
+        gc.set_debug(0)  # Disable debug to save memory
+    except:
+        pass
+    
+    memory = psutil.virtual_memory()
+    log.info(f"   └─ After crisis cleanup: {memory.percent:.1f}% used")
+    
+    return memory.percent
+
+
+def optimize_memory_usage(stage_name=""):
+    """Optimize memory usage during training with crisis handling."""
+    import gc
+    import psutil
+    
+    # Get memory before cleanup
+    memory_before = psutil.virtual_memory()
+    
+    # Force garbage collection
+    collected = gc.collect()
+    
+    # Clear GPU cache if available
+    gpu_freed = 0
+    if torch and torch.cuda.is_available():
+        try:
+            gpu_before = torch.cuda.memory_allocated() / (1024**2)
+            torch.cuda.empty_cache()
+            gpu_after = torch.cuda.memory_allocated() / (1024**2)
+            gpu_freed = gpu_before - gpu_after
+        except Exception as e:
+            log.debug(f"GPU memory cleanup failed: {e}")
+    
+    # Get memory after cleanup
+    memory_after = psutil.virtual_memory()
+    memory_freed = (memory_before.used - memory_after.used) / (1024**2)
+    
+    # Log results
+    stage_prefix = f"{stage_name}: " if stage_name else ""
+    log.info(f"   🧹 {stage_prefix}Memory cleanup")
+    log.info(f"      ├─ RAM: {memory_after.percent:.1f}% used")
+    
+    if memory_freed > 1:
+        log.info(f"      ├─ RAM freed: {memory_freed:.1f} MB")
+    
+    # CRISIS HANDLING - ADD THIS SECTION
+    if memory_after.percent > 90:  # Crisis threshold
+        log.warning("🚨 MEMORY CRISIS DETECTED - Applying emergency cleanup")
+        final_percent = handle_memory_crisis()
+        
+        if final_percent > 85:
+            log.error("❌ Memory crisis not resolved!")
+            log.error("   Recommendations:")
+            log.error("   ├─ Reduce --sample_frac (try 0.05 or 0.1)")
+            log.error("   ├─ Use --mode text (skip image processing)")
+            log.error("   └─ Close other applications")
+            return "crisis"
+        else:
+            log.info(f"✅ Crisis resolved: {final_percent:.1f}% memory used")
+    
+    # Normal warnings
+    elif memory_after.percent > 80:
+        log.warning(f"      ⚠️  High memory usage: {memory_after.percent:.1f}%")
+        return "high"
+    elif memory_after.percent > 70:
+        log.warning(f"      ⚠️  Moderate memory usage: {memory_after.percent:.1f}%")
+        return "moderate"
+    else:
+        log.info(f"      ✅ Memory usage normal: {memory_after.percent:.1f}%")
+        return "normal"
 
 
 def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> list[int]:
@@ -2122,6 +2237,7 @@ def build_image_embeddings(df: pd.DataFrame,
             # Periodic memory cleanup
             if i % 1000 == 0 and i > 0:
                 gc.collect()
+                optimize_memory_usage("Batch Processing")
                 if device_info['cuda_available']:
                     torch.cuda.empty_cache()
 
@@ -2250,6 +2366,11 @@ def build_image_embeddings(df: pd.DataFrame,
     log.info(f"   ├─ Throughput: {processing_stats['success']/extraction_time:.1f} images/s")
     log.info(f"   └─ Files saved: Primary + Backup + Metadata")
 
+    # Apply quality filtering
+    if arr.shape[0] > 10:  # Only filter if we have enough images
+        arr, valid_indices = filter_low_quality_images(img_dir, arr, list(df.index))
+        if len(valid_indices) != len(df):
+            log.info(f"   📊 Quality filtering reduced images from {len(df)} to {len(valid_indices)}")
     return arr
 
 
@@ -2268,29 +2389,33 @@ def filter_photo_rows(df: pd.DataFrame) -> pd.DataFrame:
     mask &= df['photo_url'].astype(bool)
     return df.loc[mask].copy()
 
-
 def apply_smote(X, y, max_dense_size: int = int(5e7)):
     """Apply SMOTE when classes are imbalanced (<40% minority).
+    FIXED: Proper sparse matrix and boolean handling."""
+    try:
+        counts = np.bincount(y)
+        if len(counts) < 2:
+            return X, y
+            
+        ratio = counts.min() / counts.sum()
+        if ratio < 0.4:
+            if hasattr(X, "toarray"):  # Check if sparse
+                elements = X.shape[0] * X.shape[1]
+                if elements > max_dense_size:
+                    ros = RandomOverSampler(random_state=42)
+                    return ros.fit_resample(X, y)
+                else:
+                    X_dense = X.toarray()  # FIXED: Actually call the method
+                    smote = SMOTE(sampling_strategy=0.3, random_state=42)
+                    return smote.fit_resample(X_dense, y)
+            else:
+                smote = SMOTE(sampling_strategy=0.3, random_state=42)
+                return smote.fit_resample(X, y)
+        return X, y
+    except Exception as e:
+        log.warning(f"SMOTE failed: {e}. Using original data.")
+        return X, y
 
-    For very large sparse matrices converting to dense can exhaust
-    memory.  In such cases we fall back to ``RandomOverSampler`` which
-    operates directly on sparse matrices without densifying them.
-    ``max_dense_size`` controls the threshold (in number of elements)
-    above which the fallback is used.
-    """
-
-    counts = np.bincount(y)
-    ratio = counts.min() / counts.sum()
-    if ratio < 0.4:
-        if hasattr(X, "toarray"):
-            elements = X.shape[0] * X.shape[1]
-            if elements > max_dense_size:
-                ros = RandomOverSampler(random_state=42)
-                return ros.fit_resample(X, y)
-            X = X.toarray()
-        smote = SMOTE(sampling_strategy=0.3, random_state=42)
-        return smote.fit_resample(X, y)
-    return X, y
 
 
 # ============================================================================
@@ -2334,32 +2459,11 @@ def show_balance(df: pd.DataFrame, title: str) -> None:
 # ============================================================================
 
 
-def build_models(
-    task: str,
-    domain: str = "text"        # 'text' | 'image' | 'both'
-) -> Dict[str, BaseEstimator]:
-    """
-    Return a dictionary {model_name: estimator} tailored to the feature domain.
-
-    Parameters
-    ----------
-    task   : 'keto' or 'vegan'
-        Used only to select the correct rule-based blacklist / whitelist.
-    domain : str
-        'text'  – models that work well on TF-IDF or other text features.
-        'image' – models that work on CNN or other dense image embeddings.
-        'both'  – union of the two sets.
-
-    Notes
-    -----
-    * RuleModel is only included if the domain includes 'text'.
-    * Extend or prune the `text_family` and `image_family` dictionaries
-      to fit your own experimentation.
-    """
-
+def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
+    """FIXED: Better model configurations, especially for image domain."""
     models: Dict[str, BaseEstimator] = {}
 
-    # --- add rule-based model only if text features are involved ---
+    # Add rule-based model only if text features are involved
     if domain in ("text", "both"):
         models["Rule"] = (
             RuleModel("keto", RX_KETO, RX_WL_KETO)
@@ -2367,45 +2471,53 @@ def build_models(
             else RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN)
         )
 
-    # --- text-oriented classifiers ---
+    # Text-oriented classifiers
     text_family: Dict[str, BaseEstimator] = {
-        "NB":     MultinomialNB(),
+        "NB": MultinomialNB(),
         "Softmax": LogisticRegression(
-            solver="lbfgs",
-            max_iter=1000,
-            class_weight="balanced",
-            random_state=42,
+            solver="lbfgs", max_iter=2000, class_weight="balanced", random_state=42,
         ),
         "Ridge": RidgeClassifier(class_weight="balanced", random_state=42),
-        "PA":    PassiveAggressiveClassifier(
+        "PA": PassiveAggressiveClassifier(
             max_iter=1000, class_weight="balanced", random_state=42
         ),
-        "SGD":   SGDClassifier(
+        "SGD": SGDClassifier(
             loss="log_loss", max_iter=1000, tol=1e-3,
             class_weight="balanced", n_jobs=-1, random_state=42
         ),
     }
 
-    # --- image-oriented classifiers ---
+    # FIXED: Improved image-oriented classifiers
     image_family: Dict[str, BaseEstimator] = {
         "SVM_RBF": SVC(
-            kernel="rbf", probability=True,
-            class_weight="balanced", random_state=42
+            kernel="rbf", probability=True, C=1.0, gamma='scale',
+            class_weight="balanced", random_state=42, max_iter=1000
         ),
         "MLP": MLPClassifier(
-            hidden_layer_sizes=(80,), max_iter=300, random_state=42
+            hidden_layer_sizes=(512, 128), activation='relu', solver='adam',
+            alpha=0.001, learning_rate='adaptive', max_iter=500,
+            early_stopping=True, validation_fraction=0.1, n_iter_no_change=10,
+            random_state=42
         ),
     }
 
-    # include LightGBM if available
-    if lgb:
-        image_family["LGBM"] = lgb.LGBMClassifier(
-            num_leaves=31, learning_rate=0.15, n_estimators=120,
-            subsample=0.7, colsample_bytree=0.7, objective="binary",
-            random_state=42, n_jobs=-1, verbose=-1, force_col_wise=True
+    # Add Random Forest for robustness
+    if domain in ("image", "both"):
+        from sklearn.ensemble import RandomForestClassifier
+        image_family["RF"] = RandomForestClassifier(
+            n_estimators=100, max_depth=10, min_samples_split=10,
+            min_samples_leaf=5, class_weight="balanced", random_state=42, n_jobs=-1
         )
 
-    # --- assemble by requested domain ---
+    # FIXED: Better LightGBM configuration for images
+    if lgb and domain in ("image", "both"):
+        image_family["LGBM"] = lgb.LGBMClassifier(
+            num_leaves=63, learning_rate=0.1, n_estimators=200,
+            subsample=0.8, colsample_bytree=0.8, min_child_samples=20,
+            objective="binary", random_state=42, n_jobs=-1, verbose=-1, force_col_wise=True
+        )
+
+    # Assemble by requested domain
     if domain == "text":
         models.update(text_family)
     elif domain == "image":
@@ -2413,36 +2525,55 @@ def build_models(
     elif domain == "both":
         models.update(text_family)
         models.update(image_family)
-    else:
-        raise ValueError(
-            f"Unknown domain '{domain}'. Expected 'text', 'image', or 'both'."
-        )
 
     return models
 
 
+# 3. UPDATE the HYPER dictionary with better parameters:
+
 HYPER = {
     "LR": {"C": [0.2, 1, 5], "class_weight": [None, "balanced"]},
-    "SGD": {"alpha": [1e-4, 1e-3]},
+    "SGD": {"alpha": [1e-4, 1e-3], "loss": ["log_loss", "modified_huber"]},
     "MLP": {
-        "hidden_layer_sizes": [(40,), (80,), (80, 40)],
-        "alpha": [1e-4, 1e-3],
+        "hidden_layer_sizes": [(256,), (512, 128), (1024, 256)],
+        "alpha": [0.0001, 0.001, 0.01],
+        "learning_rate_init": [0.001, 0.01],
     },
     "LGBM": {
-        "learning_rate": [0.05, 0.1],
-        "num_leaves": [31, 63],
-        "n_estimators": [200, 400],
+        "learning_rate": [0.05, 0.1, 0.15],
+        "num_leaves": [31, 63, 127],
+        "n_estimators": [100, 200, 300],
+        "min_child_samples": [10, 20, 30],
     },
     "PA": {"C": [0.1, 0.5, 1.0]},
     "Ridge": {"alpha": [0.1, 1.0, 10.0]},
     "NB": {},
-    # "NB": {"alpha": [0.5, 1.0, 1.5]},
-    "Softmax": {"C": [0.05, 0.2, 1, 5, 10]},
+    "Softmax": {"C": [0.01, 0.1, 1, 10, 100], "max_iter": [1000, 2000]},
     "SVM_RBF": {
-        "C": [0.5, 1, 5],
-        "gamma": ["scale", 0.01, 0.001],
+        "C": [0.1, 1, 10],
+        "gamma": ["scale", "auto", 0.001, 0.01],
+    },
+    "RF": {
+        "n_estimators": [50, 100, 200],
+        "max_depth": [5, 10, 15],
+        "min_samples_split": [5, 10, 20],
     },
 }
+
+
+def ensure_predict_proba(estimator, X_train, y_train):
+    """Ensure estimator has predict_proba method by wrapping with calibration if needed."""
+    if not hasattr(estimator, "predict_proba"):
+        log.info(f"Adding probability calibration to {estimator.__class__.__name__}")
+        try:
+            from sklearn.calibration import CalibratedClassifierCV
+            calibrated = CalibratedClassifierCV(estimator, cv=3, method='sigmoid')
+            calibrated.fit(X_train, y_train)
+            return calibrated
+        except Exception as e:
+            log.error(f"Calibration failed: {e}")
+            return estimator
+    return estimator
 
 
 BEST: Dict[str, BaseEstimator] = {}
@@ -2929,40 +3060,45 @@ def run_mode_A(
         if apply_smote:
             smote_start = time.time()
             original_size = len(y_train)
-            minority_ratio = min(np.bincount(y_train)) / len(y_train)
-
-            log.info(f"   Minority class ratio: {minority_ratio:.1%}")
-
-            if minority_ratio < 0.4:
-                log.info(f"   🔄 Applying SMOTE (minority < 40%)...")
-                try:
-                    with tqdm(total=1, desc="   ├─ SMOTE Processing",
-                              position=1, leave=False,
-                              bar_format="   ├─ {desc}: {percentage:3.0f}%|{bar}| [{elapsed}]") as smote_pbar:
-                        X_train, y_train = apply_smote(X_silver, y_train)
-                        smote_pbar.update(1)
-
-                    smote_time = time.time() - smote_start
-                    new_size = len(y_train)
-                    new_ratio = min(np.bincount(y_train)) / len(y_train)
-
-                    log.info(f"   ✅ SMOTE completed in {smote_time:.1f}s")
-                    log.info(
-                        f"   ├─ Size: {original_size:,} → {new_size:,} ({new_size/original_size:.1f}x)")
-                    log.info(
-                        f"   └─ Minority ratio: {minority_ratio:.1%} → {new_ratio:.1%}")
-
-                except Exception as e:
-                    log.warning(f"   ❌ SMOTE failed for {task}: {e}")
-                    log.info(f"   └─ Falling back to original data")
-                    X_train = X_silver
-            else:
-                log.info(f"   ✅ Classes already balanced, skipping SMOTE")
+            
+            # Check if we have both classes
+            unique_classes = np.unique(y_train)
+            if len(unique_classes) < 2:
+                log.warning(f"   ⚠️  Only one class present in {task} training data, skipping SMOTE")
                 X_train = X_silver
+            else:
+                minority_ratio = min(np.bincount(y_train)) / len(y_train)
+                log.info(f"   Minority class ratio: {minority_ratio:.1%}")
+
+                if minority_ratio < 0.4:
+                    log.info(f"   🔄 Applying SMOTE (minority < 40%)...")
+                    try:
+                        with tqdm(total=1, desc="   ├─ SMOTE Processing",
+                                position=1, leave=False,
+                                bar_format="   ├─ {desc}: {percentage:3.0f}%|{bar}| [{elapsed}]") as smote_pbar:
+                            
+                            # FIXED: Use the corrected apply_smote function
+                            X_train, y_train = apply_smote(X_silver, y_train)
+                            smote_pbar.update(1)
+
+                        smote_time = time.time() - smote_start
+                        new_size = len(y_train)
+                        new_ratio = min(np.bincount(y_train)) / len(y_train)
+
+                        log.info(f"   ✅ SMOTE completed in {smote_time:.1f}s")
+                        log.info(f"   ├─ Size: {original_size:,} → {new_size:,} ({new_size/original_size:.1f}x)")
+                        log.info(f"   └─ Minority ratio: {minority_ratio:.1%} → {new_ratio:.1%}")
+
+                    except Exception as e:
+                        log.warning(f"   ❌ SMOTE failed for {task}: {str(e)[:60]}...")
+                        log.info(f"   └─ Falling back to original data")
+                        X_train = X_silver
+                else:
+                    log.info(f"   ✅ Classes already balanced, skipping SMOTE")
+                    X_train = X_silver
         else:
             log.info(f"   ⏭️  SMOTE disabled, using original data")
             X_train = X_silver
-
         # ------------------------------------------------------------------
         # Model training and evaluation with explicit domain naming
         # ------------------------------------------------------------------
@@ -2987,21 +3123,50 @@ def run_mode_A(
             model_progress.set_description(f"   ├─ Training {name}")
 
             try:
-                # Model training phase
-                with tqdm(total=3, desc=f"      ├─ {name}", position=2, leave=False,
-                          bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as model_pbar:
+                # Check for single-class case
+                if len(np.unique(y_train)) < 2:
+                    log.warning(f"      ⚠️  {name}: Only one class in training data, skipping")
+                    continue
+
+                # Model training phase with better error handling
+                with tqdm(total=4, desc=f"      ├─ {name}", position=2, leave=False,
+                        bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as model_pbar:
 
                     # Step 1: Model fitting
                     model_pbar.set_description(f"      ├─ {name}: Fitting")
-                    model = clone(base).fit(X_train, y_train)
+                    model = clone(base)
+                    
+                    # Handle sparse matrices for memory efficiency
+                    if hasattr(X_train, "toarray") and X_train.shape[1] > 10000:
+                        log.debug(f"         ├─ {name}: Processing large sparse matrix")
+                    
+                    model.fit(X_train, y_train)
                     model_pbar.update(1)
 
-                    # Step 2: Prediction
+                    # Step 2: Ensure probabilistic predictions
+                    model_pbar.set_description(f"      ├─ {name}: Configuring")
+                    model = ensure_predict_proba(model, X_train, y_train)
+                    model_pbar.update(1)
+
+                    # Step 3: Prediction with error handling
                     model_pbar.set_description(f"      ├─ {name}: Predicting")
-                    prob = model.predict_proba(X_gold)[:, 1]
+                    try:
+                        if hasattr(model, "predict_proba"):
+                            prob = model.predict_proba(X_gold)[:, 1]
+                        elif hasattr(model, "decision_function"):
+                            scores = model.decision_function(X_gold)
+                            prob = 1 / (1 + np.exp(-scores))  # Sigmoid
+                        else:
+                            # Fallback to binary predictions
+                            pred_binary = model.predict(X_gold)
+                            prob = pred_binary.astype(float)
+                            log.warning(f"      ⚠️  {name}: Using binary predictions (suboptimal)")
+                    except Exception as pred_error:
+                        log.error(f"      ❌ {name}: Prediction failed - {str(pred_error)[:40]}...")
+                        continue
                     model_pbar.update(1)
 
-                    # Step 3: Verification
+                    # Step 4: Verification
                     model_pbar.set_description(f"      ├─ {name}: Verifying")
                     prob = verify_with_rules(task, gold_clean, prob)
                     pred = (prob >= 0.5).astype(int)
@@ -3009,13 +3174,11 @@ def run_mode_A(
 
                 # Calculate metrics with EXPLICIT DOMAIN NAMING
                 model_time = time.time() - model_start
-                
-                # CRITICAL FIX: Add domain suffix to model name for clarity
                 model_name_with_domain = f"{name}_{domain.upper()}"
                 
                 res = dict(
                     task=task,
-                    model=model_name_with_domain,  # NOW EXPLICIT: "Softmax_TEXT" vs "Softmax_IMAGE"
+                    model=model_name_with_domain,
                     ACC=accuracy_score(y_true, pred),
                     PREC=precision_score(y_true, pred, zero_division=0),
                     REC=recall_score(y_true, pred, zero_division=0),
@@ -3025,27 +3188,25 @@ def run_mode_A(
                     prob=prob,
                     pred=pred,
                     training_time=model_time,
-                    domain=domain  # Store domain for reference
+                    domain=domain
                 )
 
                 model_results.append(res)
 
                 # Log detailed model performance
                 log.info(f"      ✅ {model_name_with_domain:>12}: F1={res['F1']:.3f} | "
-                         f"ACC={res['ACC']:.3f} | PREC={res['PREC']:.3f} | "
-                         f"REC={res['REC']:.3f} | Time={model_time:.1f}s")
+                        f"ACC={res['ACC']:.3f} | PREC={res['PREC']:.3f} | "
+                        f"REC={res['REC']:.3f} | Time={model_time:.1f}s")
 
-                # Track best model
+                # Track best model - FIXED: Store with base name
                 if res["F1"] > best_f1:
                     best_f1, best_res = res["F1"], res
-                    BEST[task] = model
-                    log.info(
-                        f"      🏆 New best model for {task}: {model_name_with_domain} (F1={best_f1:.3f})")
+                    BEST[name] = model  # Store with base name, not domain suffix
+                    log.info(f"      🏆 New best model for {task}: {model_name_with_domain} (F1={best_f1:.3f})")
 
             except Exception as e:
                 model_time = time.time() - model_start
-                log.error(
-                    f"      ❌ {name:>8}: FAILED after {model_time:.1f}s - {str(e)[:50]}...")
+                log.error(f"      ❌ {name:>8}: FAILED after {model_time:.1f}s - {str(e)[:50]}...")
 
                 # Log detailed error for debugging
                 if log.level <= logging.DEBUG:
@@ -4108,6 +4269,9 @@ def run_full_pipeline(mode: str = "both",
     log.info(f"   ✅ Data loading completed in {stage_time:.1f}s")
     log_memory_usage("Data Loading")
     pipeline_progress.update(1)
+    optimize_memory_usage("Data Loading")
+    if psutil.virtual_memory() > 70:
+        log.warning(f"High memory usage after data loading: {psutil.virtual_memory():.1f}%")
 
     # ------------------------------------------------------------------
     # 2. TEXT FEATURE PROCESSING
@@ -4149,6 +4313,7 @@ def run_full_pipeline(mode: str = "both",
     stage_time = time.time() - stage_start
     log.info(f"   ✅ Text processing completed in {stage_time:.1f}s")
     log_memory_usage("Text Processing")
+    optimize_memory_usage("Text Processing") 
     pipeline_progress.update(1)
 
     # Initialize result containers
@@ -4258,6 +4423,9 @@ def run_full_pipeline(mode: str = "both",
         stage_time = time.time() - stage_start
         log.info(f"   ✅ Image processing completed in {stage_time:.1f}s")
         log_memory_usage("Image Processing")
+        optimize_memory_usage("Image Processing")
+        pipeline_progress.update(1)
+
     else:
         log.info("\n⏭️  STAGE 3: SKIPPED (Image processing not requested)")
     
@@ -4300,6 +4468,7 @@ def run_full_pipeline(mode: str = "both",
             
             results.extend(res_img)
             log.info(f"      ✅ Image models: {len(res_img)} results")
+            optimize_memory_usage("Image Models")
             train_pbar.update(1)
 
         # TEXT MODELS
@@ -4315,52 +4484,69 @@ def run_full_pipeline(mode: str = "both",
             
             results.extend(res_text)
             log.info(f"      ✅ Text models: {len(res_text)} results")
+            optimize_memory_usage("Text Models")
             train_pbar.update(1)
 
         # TEXT+IMAGE ENSEMBLE
-        if mode == "both" and res_text and res_img and img_silver.size > 0:
+        if mode == "both" and len(res_text) > 0 and len(res_img) > 0:
             train_pbar.set_description("   ├─ Text+Image Ensemble")
             log.info(f"   🤝 Creating text+image ensemble...")
             
             ensemble_results = []
             for task in ("keto", "vegan"):
-                # Find best models for each modality
-                bt = max((r for r in res_text if r["task"] == task), 
-                        key=lambda r: r["F1"])
-                bi = max((r for r in res_img if r["task"] == task), 
-                        key=lambda r: r["F1"])
+                try:
+                    # Find best models for each modality
+                    text_models = [r for r in res_text if r["task"] == task]
+                    image_models = [r for r in res_img if r["task"] == task]
+                    
+                    if not text_models or not image_models:
+                        log.warning(f"      ⚠️  No models available for {task} ensemble")
+                        continue
+                        
+                    bt = max(text_models, key=lambda r: r["F1"])
+                    bi = max(image_models, key=lambda r: r["F1"])
 
-                log.info(f"      ├─ {task}: Text={bt['model']} (F1={bt['F1']:.3f}), "
-                        f"Image={bi['model']} (F1={bi['F1']:.3f})")
+                    log.info(f"      ├─ {task}: Text={bt['model']} (F1={bt['F1']:.3f}), "
+                            f"Image={bi['model']} (F1={bi['F1']:.3f})")
 
-                # Align predictions by index - USE COMMON GOLD INDICES
-                s_txt = pd.Series(bt["prob"], index=gold.index)
-                s_img = pd.Series(bi["prob"], index=img_gold_df.index)
-                common = s_txt.index.intersection(s_img.index)
-                
-                log.info(f"      ├─ Alignment: {len(s_txt)} text + {len(s_img)} image = {len(common)} common")
-                
-                if len(common) == 0:
-                    log.warning(f"      ⚠️  No common samples for {task} ensemble, skipping")
-                    continue
-                
-                # Average predictions
-                avg = (s_txt.loc[common] + s_img.loc[common]) / 2
+                    # FIXED: Better alignment handling
+                    if len(bt["prob"]) == len(gold) and len(bi["prob"]) == len(img_gold_df):
+                        # Create series for alignment
+                        s_txt = pd.Series(bt["prob"], index=gold.index)
+                        s_img = pd.Series(bi["prob"], index=img_gold_df.index)
+                        common = s_txt.index.intersection(s_img.index)
+                        
+                        log.info(f"      ├─ Alignment: {len(s_txt)} text + {len(s_img)} image = {len(common)} common")
+                        
+                        if len(common) >= 10:  # Need minimum samples for meaningful ensemble
+                            # Average predictions
+                            avg = (s_txt.loc[common] + s_img.loc[common]) / 2
 
-                ensemble_result = pack(gold.loc[common, f"label_{task}"].values, avg.values) | {
-                    "model": "TxtImg", "task": task,
-                    "prob": avg.values, "pred": (avg.values >= .5).astype(int),
-                    "text_model": bt['model'],
-                    "image_model": bi['model'],
-                    "common_samples": len(common)
-                }
-                ensemble_results.append(ensemble_result)
-                
-                log.info(f"      ✅ {task} ensemble: F1={ensemble_result['F1']:.3f}")
+                            ensemble_result = pack(gold.loc[common, f"label_{task}"].values, avg.values) | {
+                                "model": "TxtImg", "task": task,
+                                "prob": avg.values, "pred": (avg.values >= .5).astype(int),
+                                "text_model": bt['model'],
+                                "image_model": bi['model'],
+                                "common_samples": len(common)
+                            }
+                            ensemble_results.append(ensemble_result)
+                            
+                            log.info(f"      ✅ {task} ensemble: F1={ensemble_result['F1']:.3f}")
+                        else:
+                            log.warning(f"      ⚠️  Too few common samples ({len(common)}) for {task} ensemble")
+                    else:
+                        log.warning(f"      ⚠️  Dimension mismatch for {task}: text={len(bt['prob'])}, image={len(bi['prob'])}")
+                        
+                except Exception as e:
+                    log.error(f"      ❌ {task} ensemble creation failed: {str(e)[:50]}...")
 
             if ensemble_results:
                 table("Ensemble Text+Image", ensemble_results)
                 results.extend(ensemble_results)
+                log.info(f"      ✅ Created {len(ensemble_results)} ensembles")
+            else:
+                log.warning(f"      ⚠️  No successful ensembles created")
+                
             train_pbar.update(1)
 
         # FINAL COMBINED MODEL TRAINING - FIXED DIMENSION ALIGNMENT
@@ -4397,6 +4583,8 @@ def run_full_pipeline(mode: str = "both",
                 )
                 results.extend(res_combined)
                 log.info(f"      ✅ Combined models: {len(res_combined)} results")
+                optimize_memory_usage() 
+
             else:
                 log.warning(f"      ⚠️  No common indices for combined features, skipping")
                 
@@ -4650,28 +4838,54 @@ def main():
                 import pickle
                 CFG.data_dir.mkdir(parents=True, exist_ok=True)
 
+                # Save vectorizer
                 with open(CFG.data_dir / "vectorizer.pkl", 'wb') as f:
                     pickle.dump(vec, f)
 
+                # FIXED: Save best models with proper name handling
                 best_models = {}
                 for task in ['keto', 'vegan']:
                     task_res = [r for r in res if r['task'] == task]
                     if task_res:
                         best = max(task_res, key=lambda x: x['F1'])
                         model_name = best['model']
-
-                        if model_name in BEST:
-                            best_models[task] = BEST[model_name]
+                        
+                        # Extract base name (remove domain suffix)
+                        base_name = model_name.split('_')[0]  # "Softmax_TEXT" -> "Softmax"
+                        
+                        # Try multiple lookup strategies
+                        saved_model = None
+                        
+                        if base_name in BEST:
+                            saved_model = BEST[base_name]
+                            log.info(f"✅ Found model {base_name} for {task}")
+                        elif model_name in BEST:
+                            saved_model = BEST[model_name]
+                            log.info(f"✅ Found exact model {model_name} for {task}")
                         else:
-                            best_models[task] = build_models(task)[model_name]
+                            log.warning(f"⚠️  Could not find model {base_name} in BEST dict")
+                            # Try to rebuild
+                            try:
+                                models_dict = build_models(task, domain="text")
+                                if base_name in models_dict:
+                                    saved_model = models_dict[base_name]
+                                    log.info(f"✅ Rebuilt model {base_name} for {task}")
+                            except Exception as rebuild_error:
+                                log.error(f"❌ Could not rebuild {base_name}: {rebuild_error}")
 
-                with open(CFG.data_dir / "models.pkl", 'wb') as f:
-                    pickle.dump(best_models, f)
+                        if saved_model:
+                            best_models[task] = saved_model
+                            log.info(f"✅ Saved {task} model: {type(saved_model).__name__}")
 
-                log.info("✅ Saved trained models to %s", CFG.data_dir)
+                if best_models:
+                    with open(CFG.data_dir / "models.pkl", 'wb') as f:
+                        pickle.dump(best_models, f)
+                    log.info(f"✅ Saved {len(best_models)} models to {CFG.data_dir}")
+                else:
+                    log.warning("⚠️  No models to save")
 
             except Exception as e:
-                log.error("❌ Could not save models: %s", e)
+                log.error(f"❌ Could not save models: {e}")
 
         elif args.ground_truth:
             try:
