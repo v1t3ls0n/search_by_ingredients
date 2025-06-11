@@ -841,17 +841,29 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
     return valid_indices
 
 
-def build_image_embeddings(df: pd.DataFrame, mode: str, force: bool = False) -> np.ndarray:
-    """Return or compute image embeddings for the given dataframe (skip missing/failed)."""
+def build_image_embeddings(df: pd.DataFrame,
+                           mode: str,
+                           force: bool = False) -> np.ndarray:
+    """
+    Load (or create) ResNet-50 embeddings for every index in *df*.
+
+    If a cached `.npy` file exists **but its first dimension != len(df)**
+    we automatically recompute to keep the row-order aligned.
+    """
     if not TORCH_AVAILABLE:
         log.warning("Torch not available — returning zero vectors.")
         return np.zeros((len(df), 2048), dtype=np.float32)
 
-    img_dir = CFG.image_dir / mode
+    img_dir    = CFG.image_dir / mode
     embed_path = img_dir / "embeddings.npy"
+
     if embed_path.exists() and not force:
-        log.info(f"Loading cached embeddings from {embed_path}")
-        return np.load(embed_path)
+        emb = np.load(embed_path)
+        if emb.shape[0] == len(df):               # ✅ perfect match
+            log.info(f"Loading cached embeddings from {embed_path}")
+            return emb
+        log.warning(f"Cached embeddings ({emb.shape[0]}) do not match "
+                    f"current dataframe ({len(df)}) — rebuilding…")
 
     log.info(f"Computing embeddings for {len(df)} images in '{mode}' mode...")
 
@@ -1561,32 +1573,49 @@ def run_full_pipeline(mode: str = "both",
         X_img_silver = csr_matrix(img_silver)
         X_img_gold   = csr_matrix(img_gold)
 
-        res_img = run_mode_A(X_img_silver, img_gold_df.clean, X_img_gold,
-                            img_silver_df, img_gold_df,
-                            domain="image", apply_smote=False)
+        # IMAGE branch in run_full_pipeline
+        res_img = run_mode_A(
+            X_img_silver,
+            img_gold_df.clean,
+            X_img_gold,
+            img_silver_df,
+            img_gold_df,
+            domain="image",          # ← key new argument
+            apply_smote=False
+        )
+
         results.extend(res_img)
 
     # 4. TEXT MODELS ----------------------------------------------------------
     if mode in {"text", "both"}:
-        res_text = run_mode_A(X_text_silver, gold.clean, X_text_gold,
-                            silver_txt, gold, domain="text", apply_smote=True)
+        res_text = run_mode_A(
+            X_text_silver, gold.clean, X_text_gold,
+            silver_txt, gold,
+            domain="text", apply_smote=True
+        )
         results.extend(res_text)
 
-    # 5. ENSEMBLE -------------------------------------------------------------
+    # --- TEXT+IMAGE ENSEMBLE (aligned) ---
     if mode == "both" and res_text and res_img:
-        ens = []
-        for task in ["keto", "vegan"]:
-            bt = max((r for r in res_text if r["task"] == task),
-                     key=lambda r: r["F1"])
-            bi = max((r for r in res_img if r["task"] == task),
-                     key=lambda r: r["F1"])
-            avg = (bt["prob"] + bi["prob"]) / 2
-            ens.append(
-                pack(gold[f"label_{task}"].values, avg) |
-                {"model": "TxtImg", "task": task}
+        ensemble_results = []
+        for task in ("keto", "vegan"):
+            bt = max((r for r in res_text if r["task"] == task), key=lambda r: r["F1"])
+            bi = max((r for r in res_img  if r["task"] == task), key=lambda r: r["F1"])
+
+            s_txt = pd.Series(bt["prob"], index=gold.index)         # 100 rows
+            s_img = pd.Series(bi["prob"], index=img_gold_df.index)  #  66 rows
+            common = s_txt.index.intersection(s_img.index)          #  66 rows
+            avg = (s_txt.loc[common] + s_img.loc[common]) / 2
+
+            ensemble_results.append(
+                pack(gold.loc[common, f"label_{task}"].values, avg.values) | {
+                    "model": "TxtImg", "task": task,
+                    "prob": avg.values, "pred": (avg.values >= .5).astype(int)
+                }
             )
-        table("Ensemble Text+Image", ens)
-        results.extend(ens)
+        table("Ensemble Text+Image", ensemble_results)
+        results.extend(ensemble_results)
+
 
     # 6. FINAL MODE-A  (align) ------------------------------------------------
     if mode   == "text":
