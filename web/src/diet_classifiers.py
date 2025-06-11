@@ -2024,59 +2024,32 @@ def is_vegan(ingredients: Iterable[str] | str) -> bool:
 class RuleModel(BaseEstimator, ClassifierMixin):
     def __init__(self, task: str, rx_black, rx_white=None,
                  pos_prob=0.98, neg_prob=0.02):
-        self.task, self.rx_black, self.rx_white = task, rx_black, rx_white
-        self.pos_prob, self.neg_prob = pos_prob, neg_prob
+        self.task      = task
+        self.rx_black  = rx_black
+        self.rx_white  = rx_white
+        self.pos_prob  = pos_prob
+        self.neg_prob  = neg_prob
 
-    def fit(self, X, y=None): return self
+    def fit(self, X, y=None):          # nothing to train
+        return self
 
+    # ─────────────────────────────────────────────────────────────────
+    # USE THE SAME LOGIC AS THE PUBLIC HELPERS
+    # ─────────────────────────────────────────────────────────────────
     def _pos(self, d: str) -> bool:
-        """
-        Return True if the ingredient string *d* should be considered
-        positive (keto-friendly or vegan-friendly) by this rule model.
-        """
-        # ── Keto branch ────────────────────────────────────────────────
         if self.task == "keto":
-            # 0. normalise once
-            norm = normalise(d)
+            return is_ingredient_keto(d)
+        else:  # vegan
+            return is_ingredient_vegan(d)
 
-            # 1. whitelist → instant pass
-            if RX_WL_KETO.search(norm):
-                return True
-
-            # 2. numeric carb rule (≤ 10 g / 100 g) – overrides blacklist
-            carbs = carbs_per_100g(norm)
-            if carbs is not None and carbs > 10.0:
-                return False
-
-            # token-level numeric fallback (rare)
-            if carbs is None:
-                for tok in tokenize_ingredient(norm):
-                    if carbs_per_100g(tok, fuzzy=True) not in (None, 0) and \
-                       carbs_per_100g(tok, fuzzy=True) > 10.0:
-                        return False
-
-            # 3. regex blacklist (still useful for speed)
-            if self.rx_black.search(norm):
-                return False
-
-            # 4. token blacklist
-            if not is_keto_ingredient_list(tokenize_ingredient(norm)):
-                return False
-
-            # otherwise treat as keto-friendly
-            return True
-
-        # ── Vegan branch (unchanged logic) ────────────────────────────
-        else:  # self.task == "vegan"
-            return (
-                not bool(self.rx_black.search(d))
-                or bool(self.rx_white and self.rx_white.search(d))
-            )
-
+    # original predict / predict_proba stay unchanged
     def predict_proba(self, X):
-        p = np.fromiter((self.pos_prob if self._pos(d) else self.neg_prob
-                         for d in X), float, count=len(X))
-        return np.c_[1-p, p]
+        p = np.fromiter(
+            (self.pos_prob if self._pos(d) else self.neg_prob for d in X),
+            float,
+            count=len(X)
+        )
+        return np.c_[1 - p, p]
 
     def predict(self, X):
         return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
@@ -2873,16 +2846,28 @@ def filter_photo_rows(df: pd.DataFrame) -> pd.DataFrame:
 # SILVER LABELS GENERATION (TRAINING DATA GENERATION)
 # ============================================================================
 
-
 def build_silver(recipes: pd.DataFrame) -> pd.DataFrame:
-    """Generate silver (weak) labels in memory."""
+    """
+    Generate silver (weak) labels entirely in memory.
+    Uses the same helpers as runtime classification so that the
+    weak labels respect:
+        • whitelist / blacklist
+        • USDA ≤ 10-g carb rule
+        • token fallback
+    """
     df = recipes[["ingredients"]].copy()
-    df["clean"] = df.ingredients.fillna("").map(normalise)
+    df["clean"] = df["ingredients"].fillna("").map(normalise)
 
-    # Apply rule-based classification
-    df["silver_keto"] = (~df.clean.str.contains(RX_KETO)).astype(int)
-    bad = df.clean.str.contains(RX_VEGAN) & ~df.clean.str.contains(RX_WL_VEGAN)
-    df["silver_vegan"] = (~bad).astype(int)
+    # keto label
+    df["silver_keto"] = df["clean"].map(
+        lambda txt: int(is_ingredient_keto(txt))
+    )
+
+    # vegan label
+    df["silver_vegan"] = df["clean"].map(
+        lambda txt: int(is_ingredient_vegan(txt))
+    )
+
     return df
 
 
@@ -2993,11 +2978,11 @@ def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
     # ── 3. Image-/mixed-feature family ──────────────────────
     image_family: Dict[str, BaseEstimator] = {
         # RBF-SVM wrapped in CalibratedCV if you need probabilities later
-        "SVM_RBF": CalibratedClassifierCV(
-            estimator=svm_pipe,
-            method="sigmoid",
-            cv=3,
-            n_jobs=1),
+        # "SVM_RBF": CalibratedClassifierCV(
+        #     estimator=svm_pipe,
+        #     method="sigmoid",
+        #     cv=3,
+        #     n_jobs=1),
         "MLP": MLPClassifier(
             hidden_layer_sizes=(512, 128),
             activation="relu",
