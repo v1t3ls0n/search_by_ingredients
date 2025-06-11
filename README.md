@@ -1,7 +1,7 @@
 # 🥑 Search by Ingredients
 
 **AI-powered diet labeling from recipe ingredients and images**
-👤 By [Guy Vitelson](https://www.linkedin.com/in/guyvitelson/) · 🐙 [GitHub @v1t3ls0n](https://github.com/v1t3ls0n) · 📧 [guyvitelson@gmail.com](mailto:guyvitelson@gmail.com)
+👤 By [LinkedIn](https://www.linkedin.com/in/guyvitelson/) · 🐙 [GitHub](https://github.com/v1t3ls0n) · 📧 [Email](mailto:guyvitelson@gmail.com)
 
 ---
 
