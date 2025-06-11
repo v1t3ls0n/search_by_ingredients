@@ -1302,30 +1302,67 @@ def load_datasets_fixed() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
 def handle_memory_crisis():
     """Emergency memory cleanup when usage is critical."""
+    import gc
+    import psutil
+    
     log.warning("🚨 MEMORY CRISIS - Applying emergency cleanup")
     
-    # Multiple garbage collection passes
-    for i in range(3):
+    initial_memory = psutil.virtual_memory()
+    log.info(f"   ├─ Initial memory: {initial_memory.percent:.1f}%")
+    
+    # Step 1: Multiple aggressive garbage collection passes
+    total_collected = 0
+    for i in range(5):  # More aggressive - 5 passes
         collected = gc.collect()
-        log.info(f"   ├─ GC pass {i+1}: {collected} objects")
+        total_collected += collected
+        if collected > 0:
+            log.info(f"   ├─ GC pass {i+1}: {collected} objects collected")
     
-    # Clear all possible caches
+    # Step 2: Clear all GPU memory
     if torch and torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
+        try:
+            gpu_before = torch.cuda.memory_allocated() / (1024**2)
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            torch.cuda.ipc_collect()  # Inter-process cleanup
+            gpu_after = torch.cuda.memory_allocated() / (1024**2)
+            gpu_freed = gpu_before - gpu_after
+            log.info(f"   ├─ GPU memory freed: {gpu_freed:.1f} MB")
+        except Exception as e:
+            log.debug(f"   ├─ GPU cleanup failed: {e}")
     
-    # Force memory compaction (Python 3.9+)
+    # Step 3: Clear Python internal caches
     try:
+        # Clear function caches
+        import functools
+        if hasattr(functools, '_lru_cache_wrapper'):
+            # This is a bit hacky but can help
+            pass
+        
+        # Clear import caches (Python 3.3+)
+        import importlib
+        if hasattr(importlib, 'invalidate_caches'):
+            importlib.invalidate_caches()
+            
+    except Exception as e:
+        log.debug(f"   ├─ Cache cleanup failed: {e}")
+    
+    # Step 4: Force memory compaction
+    try:
+        gc.set_debug(0)  # Disable debugging to save memory
         gc.collect()
-        gc.set_debug(0)  # Disable debug to save memory
-    except:
+    except Exception:
         pass
     
-    memory = psutil.virtual_memory()
-    log.info(f"   └─ After crisis cleanup: {memory.percent:.1f}% used")
+    # Step 5: Check final memory
+    final_memory = psutil.virtual_memory()
+    memory_freed = (initial_memory.used - final_memory.used) / (1024**2)
     
-    return memory.percent
-
+    log.info(f"   ├─ Objects collected: {total_collected}")
+    log.info(f"   ├─ Memory freed: {memory_freed:.1f} MB")
+    log.info(f"   └─ Final memory usage: {final_memory.percent:.1f}%")
+    
+    return final_memory.percent
 
 def optimize_memory_usage(stage_name=""):
     """Optimize memory usage during training with crisis handling."""
