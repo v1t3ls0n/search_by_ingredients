@@ -4283,7 +4283,7 @@ def run_full_pipeline(mode: str = "both",
         gold_img = filter_photo_rows(gold)
         load_pbar.update(1)
 
-    # Apply sampling BEFORE image processing (FIXED!)
+    # Apply sampling BEFORE image processing 
     if sample_frac:
         original_txt_size = len(silver_txt)
         original_img_size = len(silver_img)
