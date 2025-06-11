@@ -220,7 +220,6 @@ def text_image_ensemble(text_probs, image_probs, common_indices):
 ```
 
 
-
 ## 🛡️ Robustness, Fallbacks & Recovery
 
 ### Multi-Layered Fallback Logic
@@ -248,10 +247,10 @@ Every core operation is instrumented with structured logs:
 
 ### Backup & Caching System
 
-* **All artifacts (embeddings, models, hyperparameters)** are saved in both primary and backup files
-* **Auto-repair**: If the cache is corrupted or mismatched in shape, the backup is loaded or regenerated
-* **Metadata tracking**: Each model and embedding is saved with versioned config and timestamp
-
+* **Embeddings** are saved with both a primary `.npy` file and a backup copy, alongside detailed metadata in `.json` for recovery and inspection
+* **Models and vectorizers** are currently saved to single `.pkl` files without backup duplication or metadata tracking
+* **Auto-repair for embeddings**: If the main cache is missing or corrupted, the backup file is automatically loaded or regenerated
+* **Planned Improvements**: For full redundancy, the same dual-save and metadata strategy may be extended to trained models and vectorizers in future versions
 
 
 ## 📊 Evaluation Framework
