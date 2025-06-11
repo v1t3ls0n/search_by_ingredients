@@ -170,7 +170,10 @@ class Config:
     url_map: Mapping[str, str] = field(default_factory=lambda: {
         "allrecipes.parquet": "/app/data/allrecipes.parquet",
         "ground_truth_sample.csv": "/app/data/ground_truth_sample.csv",
-    })
+    }),
+    vec_kwargs: Dict[str, Any] = field(default_factory=lambda: dict(
+        min_df=2, ngram_range=(1, 3), max_features=50000, sublinear_tf=True))
+    image_dir: Path = Path("dataset/arg_max/images")
 
 CFG = Config()
 def _load_usda_carb_table() -> pd.DataFrame:
