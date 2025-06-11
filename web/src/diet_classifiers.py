@@ -1350,7 +1350,7 @@ def get_datasets(sample_frac: float | None = None):
             silver, gt, recipes, carb = _DATASETS
             silver = silver.sample(frac=sample_frac, random_state=42)
             recipes = recipes.loc[silver.index]           # keep alignment
-            _DATASETS = (silver, gt, recipes, carb)
+            _DATASETS = (silver, gt, recipes)
     return _DATASETS
 
 
