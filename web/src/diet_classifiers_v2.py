@@ -1129,66 +1129,80 @@ def table(title, rows):
 # MODE A - TRAIN ON SILVER, EVALUATE ON GOLD
 # ============================================================================
 
+# ========================================================================
+# MODE A – train on silver, evaluate on gold
+# ========================================================================
 
-def run_mode_A(X_vec, gold_clean, X_gold, silver_df, gold_df, apply_smote=True):
-    """Run classification for both tasks (keto, vegan) using given feature matrix."""
-    results = []
+def run_mode_A(
+    X_silver,
+    gold_clean: pd.Series,
+    X_gold,
+    silver_df: pd.DataFrame,
+    gold_df:   pd.DataFrame,
+    *,
+    domain: str = "text",
+    apply_smote: bool = True,
+) -> list[dict]:
+    results: list[dict] = []
 
-    for task in ["keto", "vegan"]:
-        ys = silver_df[f"silver_{task}"].values
-        yt = gold_df[f"label_{task}"].values
+    for task in ("keto", "vegan"):
+        y_train = silver_df[f"silver_{task}"].values
+        y_true  = gold_df  [f"label_{task}"].values
 
+        # ---------------- class balance ----------------
         if apply_smote:
             try:
-                X_os, y_os = apply_smote(X_vec, ys)
+                X_train, y_train = apply_smote(X_silver, y_train)
             except Exception as e:
-                log.warning(f"SMOTE failed for task '{task}': {e}. Using raw data.")
-                X_os, y_os = X_vec, ys
+                log.warning(f"SMOTE skipped for {task}: {e}")
+                X_train = X_silver
         else:
-            X_os, y_os = X_vec, ys
+            X_train = X_silver
 
-        best_model = None
-        best_f1 = -1
-        best_result = None
+        best_f1, best_res = -1.0, None
 
-        for name, model in build_models(task).items():
+        for name, base in build_models(task, domain).items():
             try:
-                model.fit(X_os, y_os)
-                prob = model.predict_proba(X_gold)[:, 1]
+                if name == "Rule":
+                    # RuleModel doesn’t use numeric features
+                    prob = base.predict_proba(gold_clean)[:, 1]
+                else:
+                    mdl  = clone(base).fit(X_train, y_train)
+                    prob = mdl.predict_proba(X_gold)[:, 1]
+
+                prob = verify_with_rules(task, gold_clean, prob)
                 pred = (prob >= 0.5).astype(int)
 
-                acc = accuracy_score(yt, pred)
-                prec = precision_score(yt, pred, zero_division=0)
-                rec = recall_score(yt, pred, zero_division=0)
-                f1 = f1_score(yt, pred, zero_division=0)
+                res = dict(
+                    task  = task, model = name,
+                    ACC   = accuracy_score(y_true, pred),
+                    PREC  = precision_score(y_true, pred, zero_division=0),
+                    REC   = recall_score(y_true, pred, zero_division=0),
+                    F1    = f1_score   (y_true, pred, zero_division=0),
+                    ROC   = roc_auc_score(y_true, prob),
+                    PR    = average_precision_score(y_true, prob),
+                    prob  = prob, pred = pred,
+                )
 
-                result = {
-                    "task": task,
-                    "model": name,
-                    "accuracy": acc,
-                    "precision": prec,
-                    "recall": rec,
-                    "F1": f1,
-                    "prob": prob,
-                    "pred": pred,
-                }
-
-                if f1 > best_f1:
-                    best_f1 = f1
-                    best_model = model
-                    best_result = result
+                if res["F1"] > best_f1:
+                    best_f1, best_res = res["F1"], res
+                    if name != "Rule":
+                        BEST[task] = mdl        # keep trained estimator
 
             except Exception as e:
-                log.warning(f"Model '{name}' failed for task '{task}': {e}")
+                log.warning(f"{name} failed on {task}: {e}")
 
-        if best_model:
-            BEST[task] = best_model
-            results.append(best_result)
-        else:
-            log.warning(f"No working model found for task '{task}'")
+        if best_res is None:                       # ultimate safety-net
+            rule = build_models(task, "text")["Rule"]
+            prob = rule.predict_proba(gold_clean)[:, 1]
+            best_res = pack(y_true, prob) | dict(task=task, model="Rule",
+                                                 prob=prob, pred=(prob >= 0.5))
+            BEST[task] = rule
 
+        results.append(best_res)
+
+    table("MODE A  (silver → gold)", results)
     return results
-
 
 # ============================================================================
 # FALSE PREDICTION LOGGING
@@ -1507,21 +1521,32 @@ def run_full_pipeline(mode: str = "both",
                               apply_smote_flag=True)
         results.extend(res_text)
 
-    # 5. ENSEMBLE -------------------------------------------------------------
+    # --- TEXT+IMAGE ENSEMBLE (needs aligned indices) ---
     if mode == "both" and res_text and res_img:
-        ens = []
-        for task in ["keto", "vegan"]:
+        ensemble_results = []
+        for task in ("keto", "vegan"):
             bt = max((r for r in res_text if r["task"] == task),
-                     key=lambda r: r["F1"])
-            bi = max((r for r in res_img if r["task"] == task),
-                     key=lambda r: r["F1"])
-            avg = (bt["prob"] + bi["prob"]) / 2
-            ens.append(
-                pack(gold[f"label_{task}"].values, avg) |
-                {"model": "TxtImg", "task": task}
-            )
-        table("Ensemble Text+Image", ens)
-        results.extend(ens)
+                    key=lambda r: r["F1"])
+            bi = max((r for r in res_img  if r["task"] == task),
+                    key=lambda r: r["F1"])
+
+            # turn both probability arrays into Series so we can align on index
+            s_text = pd.Series(bt["prob"], index=gold.index)          # 100 rows
+            s_img  = pd.Series(bi["prob"], index=img_gold_df.index)   # 66 rows
+
+            common = s_text.index.intersection(s_img.index)           # 66 rows
+            avg    = (s_text.loc[common] + s_img.loc[common]) / 2
+
+            result = pack(gold.loc[common, f"label_{task}"].values, avg.values) | {
+                "model": "TxtImg",
+                "task":  task,
+                "prob":  avg.values,
+                "pred":  (avg.values >= 0.5).astype(int),
+            }
+            ensemble_results.append(result)
+
+        table("Ensemble Text+Image", ensemble_results)
+        results.extend(ensemble_results)
 
     # 6. FINAL MODE-A  (align) ------------------------------------------------
     if mode   == "text":
