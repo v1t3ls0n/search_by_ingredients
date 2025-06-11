@@ -44,9 +44,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/usr/src/data
-      - ./data/ground_truth_sample.csv:/usr/src/data/ground_truth_sample.csv:ro
-
+      - ./data:/usr/src/data  # single bind mount handles everything
     networks:
       - argmax
     depends_on:
