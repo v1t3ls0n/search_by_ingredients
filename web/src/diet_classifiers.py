@@ -1933,7 +1933,7 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
 
 def build_image_embeddings(df: pd.DataFrame,
                            mode: str,
-                           force: bool = False) -> np.ndarray:
+                           force: bool = False) -> Tuple[np.ndarray, List[int]]:    
     """
     Extract ResNet-50 embeddings for images with comprehensive logging and progress tracking.
     
@@ -1976,7 +1976,7 @@ def build_image_embeddings(df: pd.DataFrame,
     if not TORCH_AVAILABLE:
         log.warning("   ❌ PyTorch not available - returning zero vectors")
         log.info(f"   └─ Zero vector shape: ({len(df)}, 2048)")
-        return np.zeros((len(df), 2048), dtype=np.float32)
+        return np.zeros((len(df), 2048), dtype=np.float32), list(df.index)  
 
     # Check GPU availability and setup
     device_info = {
@@ -2045,14 +2045,17 @@ def build_image_embeddings(df: pd.DataFrame,
                                 except Exception as e:
                                     log.debug(f"      └─ Metadata load failed: {e}")
                             
-                            return emb
+                            return emb, list(df.index)   
                             
                         else:
                             log.warning(f"      ⚠️  {cache_name} size mismatch: {emb.shape[0]} != {len(df)}")
                             
+                            # ──────────────────────────────────────────────────────────────
+                            # 4️⃣  Primary / backup-cache: truncate oversize cache
+                            # ──────────────────────────────────────────────────────────────
                             if emb.shape[0] > len(df):
                                 log.info(f"      ├─ Truncating cache from {emb.shape[0]} to {len(df)}")
-                                return emb[:len(df)]
+                                return emb[:len(df)], list(df.index)               
                                 
                     except Exception as e:
                         log.error(f"      ❌ {cache_name} load failed: {str(e)[:60]}...")
