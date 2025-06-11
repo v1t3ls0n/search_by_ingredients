@@ -92,19 +92,105 @@ Then, a dynamic ensemble (`top_n`) builds the optimal blend of models for each t
 
 ## 🎯 Evaluation Results
 
-**Text-only ensemble (best):**
 
-| Task  | Accuracy | Precision | Recall | F1 Score | ROC AUC | PR AUC |
-|-------|----------|-----------|--------|----------|---------|--------|
-| Keto  | 0.97     | 0.95      | 0.97   | **0.96** | 0.99    | 0.98   |
-| Vegan | 0.98     | 0.97      | 0.97   | **0.97** | 0.99    | 0.98   |
+* 🏆 `RF_IMAGE` reaching **F1 = 1.00** on vegan classification
+* 📝 `Softmax_TEXT` achieving **F1 = 0.963–0.975** across tasks
+* 🔀 Final `TxtImg` ensemble hitting **F1 = 0.95–1.00**, with perfect metrics on vegan
 
-**Multimodal (text + image):**
 
-| Task  | F1 Score Range |
-|-------|----------------|
-| Keto  | 0.88 – 0.92     |
-| Vegan | Lower (image coverage sparse) |
+
+## 🖼️ **Image-based Models**
+
+### 🥑 KETO
+
+| Model           | F1    | ACC   | PREC  | REC   | Time            |
+| --------------- | ----- | ----- | ----- | ----- | --------------- |
+| **MLP\_IMAGE**  | 0.698 | 0.750 | 0.938 | 0.556 | 119.8s / 148.8s |
+| **RF\_IMAGE**   | 0.945 | 0.942 | 0.929 | 0.963 | 111.5s / 105.0s |
+| **LGBM\_IMAGE** | 0.906 | 0.904 | 0.923 | 0.889 | 87.7s / 46.9s   |
+
+🔝 **Best**: `RF_IMAGE` (F1 = 0.945)
+
+---
+
+### 🥕 VEGAN
+
+| Model           | F1    | ACC   | PREC  | REC   | Time           |
+| --------------- | ----- | ----- | ----- | ----- | -------------- |
+| **MLP\_IMAGE**  | 0.400 | 0.596 | 1.000 | 0.250 | 100.6s / 92.4s |
+| **RF\_IMAGE**   | 1.000 | 1.000 | 1.000 | 1.000 | 77.6s / 75.7s  |
+| **LGBM\_IMAGE** | 0.963 | 0.962 | 1.000 | 0.929 | 54.3s / 50.2s  |
+
+🔝 **Best**: `RF_IMAGE` (F1 = 1.000)
+
+---
+
+## 📝 **Text-based Models**
+
+### 🥑 KETO
+
+| Model             | F1    | ACC   | PREC  | REC   | Time  |
+| ----------------- | ----- | ----- | ----- | ----- | ----- |
+| **NB\_TEXT**      | 0.950 | 0.960 | 0.950 | 0.950 | 0.3s  |
+| **Softmax\_TEXT** | 0.963 | 0.970 | 0.951 | 0.975 | 3.6s  |
+| **Ridge\_TEXT**   | 0.963 | 0.970 | 0.951 | 0.975 | 12.4s |
+| **PA\_TEXT**      | 0.963 | 0.970 | 0.951 | 0.975 | 4.2s  |
+| **SGD\_TEXT**     | 0.963 | 0.970 | 0.951 | 0.975 | 0.6s  |
+
+🔝 **Best**: `Softmax_TEXT` (F1 = 0.963)
+
+---
+
+### 🥕 VEGAN
+
+| Model             | F1    | ACC   | PREC  | REC   | Time  |
+| ----------------- | ----- | ----- | ----- | ----- | ----- |
+| **NB\_TEXT**      | 0.949 | 0.960 | 0.974 | 0.925 | 0.1s  |
+| **Softmax\_TEXT** | 0.975 | 0.980 | 0.975 | 0.975 | 1.6s  |
+| **Ridge\_TEXT**   | 0.962 | 0.970 | 0.974 | 0.950 | 12.2s |
+| **PA\_TEXT**      | 0.975 | 0.980 | 0.975 | 0.975 | 4.5s  |
+| **SGD\_TEXT**     | 0.962 | 0.970 | 0.974 | 0.950 | 0.6s  |
+
+🔝 **Best**: `Softmax_TEXT` (F1 = 0.975)
+
+---
+
+## 🧠 **Combined Text+Image Models**
+
+### 🥑 KETO
+
+| Model             | F1    | ACC   | PREC  | REC   | Time   |
+| ----------------- | ----- | ----- | ----- | ----- | ------ |
+| **NB\_BOTH**      | 0.857 | 0.865 | 0.955 | 0.778 | 0.2s   |
+| **Softmax\_BOTH** | 0.945 | 0.942 | 0.929 | 0.963 | 85.8s  |
+| **LGBM\_BOTH**    | 0.945 | 0.942 | 0.929 | 0.963 | 109.1s |
+
+🔝 **Best**: `Softmax_BOTH` (F1 = 0.945)
+
+---
+
+### 🥕 VEGAN
+
+| Model             | F1    | ACC   | PREC  | REC   | Time   |
+| ----------------- | ----- | ----- | ----- | ----- | ------ |
+| **NB\_BOTH**      | 0.756 | 0.788 | 1.000 | 0.607 | 0.2s   |
+| **Softmax\_BOTH** | 1.000 | 1.000 | 1.000 | 1.000 | 73.2s  |
+| **Ridge\_BOTH**   | 0.982 | 0.981 | 1.000 | 0.964 | 462.9s |
+| **PA\_BOTH**      | 0.982 | 0.981 | 1.000 | 0.964 | 25.9s  |
+| **SGD\_BOTH**     | 0.902 | 0.904 | 1.000 | 0.821 | 6.0s   |
+
+🔝 **Best**: `Softmax_BOTH` (F1 = 1.000)
+
+---
+
+## 🤝 **Ensemble Results (Text + Image)**
+
+| Model      | Task  | ACC  | PREC | REC  | F1   | ROC  | PR   |
+| ---------- | ----- | ---- | ---- | ---- | ---- | ---- | ---- |
+| **TxtImg** | Keto  | 0.94 | 0.93 | 0.96 | 0.95 | 0.96 | 0.96 |
+| **TxtImg** | Vegan | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 |
+
+
 
 ---
 
