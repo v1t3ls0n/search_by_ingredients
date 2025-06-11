@@ -1,26 +1,20 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-set -e
-
-echo "🛠️ Building Docker containers..."
+echo "🛠️  Building Docker images..."
 docker compose build
 
-echo "🚀 Starting containers in detached mode..."
-docker compose up -d
+echo "🐳 Launching a one-off container to run the pipeline..."
+docker compose run --rm web bash -c '
+    set -euo pipefail
+    echo "📦 Ensuring Python deps are present (image should already have them)..."
+    pip install -r requirements.txt --quiet || true
 
-echo "⏳ Waiting for 'web' service to be ready..."
-sleep 10
-
-echo "🐳 Entering container and running pipeline on ground truth..."
-docker compose exec web bash -c "
-    echo '📦 Installing dependencies (if needed)...'
-    pip install -r requirements.txt >/dev/null 2>&1 || true
-
-    echo '🧠 Training and testing using both image and text classifiers...'
+    echo "🧠 Training & testing on both image and text classifiers (sample 10%)..."
     python web/diet_classifiers.py --train --mode both --sample_frac 0.1
 
-    echo '🧪 Evaluating on provided gold set...'
-    python web/diet_classifiers.py --ground_truth /usr/src/data/ground_truth_sample.csv
-"
+    echo "🧪 Evaluating on provided gold set..."
+    python web/diet_classifiers.py --ground_truth /app/data/ground_truth_sample.csv
+'
 
-echo "✅ Done!"
+echo "✅  All done!"

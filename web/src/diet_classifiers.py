@@ -1828,6 +1828,8 @@ _LEMM = WordNetLemmatizer() if wnl else None
 _UNITS = re.compile(r"\b(?:g|gram|kg|oz|ml|l|cup|cups|tsp|tbsp|teaspoon|"
                     r"tablespoon|pound|lb|slice|slices|small|large|medium)\b")
 
+def tokenize_ingredient(text: str) -> list[str]:
+    return re.findall(r"\b\w[\w-]*\b", text.lower())
 def normalise(t: str | list | tuple | np.ndarray) -> str:
     """Normalize ingredient text for consistent matching.
 
