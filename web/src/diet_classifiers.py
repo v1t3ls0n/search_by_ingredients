@@ -4227,6 +4227,7 @@ def run_full_pipeline(mode: str = "both",
     import psutil
     import gc
     from datetime import datetime
+    train_pbar = tqdm(total=0, desc="")  
     
     # Initialize pipeline tracking
     pipeline_start = time.time()
@@ -4528,7 +4529,6 @@ def run_full_pipeline(mode: str = "both",
         log.info("\n⏭️  STAGE 3: SKIPPED (Image processing not requested)")
         
     pipeline_progress.update(1)
-
 
     # IMAGE MODELS
     if mode in {"image", "both"} and img_silver.size > 0:
