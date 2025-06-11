@@ -41,6 +41,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
+      - recipe-data:/usr/src/data
       - ./web/src:/app/web
     networks:
       - argmax
@@ -58,6 +59,7 @@ services:
       - "8888:8888"
     volumes:
       - ./nb/src:/usr/src/app
+      - recipe-data:/usr/src/data 
     networks:
       - argmax
     depends_on:
@@ -66,7 +68,7 @@ services:
 
 volumes:
   opensearch-data:
-
+  recipe-data:   
 networks:
   argmax:
     driver: bridge
