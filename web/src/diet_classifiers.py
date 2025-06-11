@@ -920,7 +920,13 @@ def load_datasets_fixed() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         quality_stats = {
             'total_rows': len(recipes),
             'null_ingredients': recipes['ingredients'].isnull().sum(),
-            'empty_ingredients': (recipes['ingredients'] == '').sum() if 'ingredients' in recipes.columns else 0,
+            'empty_ingredients': (
+                    recipes['ingredients']           # keep the original Series
+                        .astype(str)              # lists/None → string form
+                        .str.strip()              # remove surrounding whitespace
+                        .eq('')                   # test for genuine empties
+                        .sum()                    # count them
+                ) if 'ingredients' in recipes.columns else 0,
             'null_titles': recipes['title'].isnull().sum() if 'title' in recipes.columns else 0,
             'has_photo_url': 'photo_url' in recipes.columns,
             'photo_url_count': (~recipes['photo_url'].isnull()).sum() if 'photo_url' in recipes.columns else 0
