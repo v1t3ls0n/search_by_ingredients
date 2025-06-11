@@ -3158,7 +3158,6 @@ def tune_threshold(y_true, probs):
     optimal_idx = np.argmax(f1)
     return thresholds[optimal_idx] if optimal_idx < len(thresholds) else 0.5
 
-
 def best_ensemble(task, res, X_vec, clean, X_gold, silver, gold, weights=None):
     """
     Find best ensemble size by trying n=1 to max available models.

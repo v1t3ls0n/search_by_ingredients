@@ -171,7 +171,16 @@ def verify_with_rules(task: str, clean_text: pd.Series, ml_probabilities: np.nda
     return adjusted_probs
 ```
 
-### 5. **Ensemble Strategy**
+### 5. **🧠 Ensemble Strategy**
+
+To construct the most effective ensemble, we:
+
+1. Train multiple classifiers on the silver-labeled dataset.
+2. For each model, compute a **composite score** by summing all key validation metrics (e.g., F1, precision, recall, ROC AUC).
+3. Sort models by this total score and evaluate soft-voting ensembles formed by the top‑`k` models, for all values of `k` from 1 to `n`.
+4. Select the ensemble that achieves the best overall validation performance.
+
+This **metric-sum ranking strategy** allows us to balance different aspects of model quality and automatically select the most synergistic subset of models for final prediction.
 
 #### Dynamic Model Selection
 ```python
