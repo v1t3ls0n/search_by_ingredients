@@ -90,9 +90,6 @@ Then, a dynamic ensemble (`top_n`) builds the optimal blend of models for each t
 
 ---
 
-## 🎯 Evaluation Results
-
-
 ## 🧪 Model Evaluation Results (Sorted by Task → F1 Score)
 **Image models trained on ~70K images, all models evaluated on the gold set (ground_truth data)**
 ### 🥑 Keto Models
@@ -134,6 +131,20 @@ Then, a dynamic ensemble (`top_n`) builds the optimal blend of models for each t
 | 🦠 NB_TEXT       | vegan  | 0.960       | 0.974        | 0.925     | 0.949       | 0.1         |
 | 🐍 NB_BOTH       | vegan  | 0.788       | 1.000        | 0.607     | 0.756       | 0.2         |
 | 🧠 MLP_IMAGE     | vegan  | 0.596       | 1.000        | 0.250     | 0.400       | 100.6       |
+
+
+## 🧠 Key Takeaways from Results
+
+These results demonstrate **exceptionally strong performance**, especially considering:
+
+* The **entire training pipeline is weakly supervised** (no ground-truth labels were available during training).
+* The **evaluation set is small** (100 samples, of which only 66 have images), meaning scores can fluctuate due to variance.
+* Image-based models were trained on **up to 70,000 images**, yielding significant gains over prior experiments with 700 or 7,000 samples — proving the benefit of scale in weak visual learning.
+* Text-only models continue to dominate due to high signal in ingredient names, with F1-scores reaching **0.96+**.
+* **Vegan models reached perfect classification (F1 = 1.0)** when using image+text ensembles — a rare result, highlighting alignment between rules, training data, and real-world gold labels.
+
+⚠️ **Important Note:**
+All the results above were achieved **before** enabling **dynamic per-row ensemble weight optimization**. The current ensemble logic uses static weightings, yet still delivers top-tier metrics. This strongly suggests that adding dynamic weights based on image/text availability could yield even higher confidence and class-specific reliability.
 
 ---
 
@@ -233,10 +244,15 @@ Or via Docker:
 
 ## 🛠️ Future Improvements
 
-* 💡 Net-carb detection (subtract fiber, sugar alcohol)
-* 💡 Active learning to resolve USDA ambiguity
-* 💡 UI for human feedback verification loop
-* 💡 Auto-generated model cards and ONNX export
+| Feature                                       | Status | Notes                                                                                                                  |
+| --------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------- |
+| 💡 **Dynamic Ensemble Weighting (per-row)**   | 🔜     | Logic is implemented, pending evaluation. Will allow better fusion of text/image-only rows using adaptive soft voting. |
+| 💡 Net-carb detection (fiber, sugar alcohol)  | ❌      | Enhance numeric validation by subtracting fiber/sugar alcohol from carb totals.                                        |
+| 💡 Active learning to resolve USDA ambiguity  | ❌      | Use model uncertainty to suggest human verification.                                                                   |
+| 💡 UI for human feedback verification loop    | ❌      | Let users refine silver labels over time.                                                                              |
+| 💡 Auto-generated model cards and ONNX export | ❌      | For transparency and deployment readiness.                                                                             |
+
+> ✅ "Dynamic voting is now supported by the ensemble system but **has not yet been used to generate the above results**. An updated run with this optimization is scheduled next."
 
 ---
 
