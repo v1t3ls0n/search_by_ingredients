@@ -9,19 +9,19 @@ RUN apt-get update && apt-get install -y \
     dos2unix \
     && rm -rf /var/lib/apt/lists/*
 
-# Create data directory
-RUN mkdir -p /app/data
+# Create a clean data directory
+RUN mkdir -p /app/data && rm -rf /app/data/ground_truth_sample.csv
 
-# Download the parquet (silver) and gold CSV data
+# Download the datasets
 RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/allrecipes.parquet -o /app/data/allrecipes.parquet \
  && curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/ground_truth_sample.csv -o /app/data/ground_truth_sample.csv
 
-# Copy requirements and install Python deps
+# Copy and install Python requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Expose app port
 EXPOSE 8080
 
-# Run init script inside the container
+# Entry point script
 CMD ["sh", "-c", "dos2unix web/init.sh && chmod +x web/init.sh && ./web/init.sh"]
