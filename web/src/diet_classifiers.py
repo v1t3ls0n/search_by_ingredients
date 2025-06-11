@@ -47,6 +47,8 @@ except:
 
 # --- Optional: scikit-learn ---
 try:
+    from sklearn.preprocessing import StandardScaler, MaxAbsScaler
+    from sklearn.pipeline import make_pipeline
     from sklearn.base import BaseEstimator, ClassifierMixin, clone
     from sklearn.model_selection import cross_val_score
     from sklearn.calibration import CalibratedClassifierCV
@@ -2657,6 +2659,19 @@ def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
     """
     models: Dict[str, BaseEstimator] = {}
 
+    svm_pipe = make_pipeline(
+        MaxAbsScaler(copy=False),          # 0-1 range, keeps sparsity
+        SVC(kernel="rbf",
+            C=1.0,
+            gamma="scale",
+            cache_size=2048,               # 2 GB kernel cache
+            class_weight="balanced",
+            tol=1e-2,                      # looser tol → fewer iterations
+            max_iter=20000,                # give it breathing room
+            random_state=42)
+    )
+
+
     # ── 1. Rule-based (text only) ────────────────────────────
     if domain in ("text", "both"):
         models["Rule"] = (
@@ -2693,20 +2708,10 @@ def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
     image_family: Dict[str, BaseEstimator] = {
         # RBF-SVM wrapped in CalibratedCV if you need probabilities later
         "SVM_RBF": CalibratedClassifierCV(
-            estimator=SVC(
-                kernel="rbf",
-                probability=False,           # memory saver
-                C=1.0,
-                gamma="scale",
-                cache_size=2048,             # MB
-                class_weight="balanced",
-                random_state=42,
-                max_iter=5000,
-            ),
-            method="sigmoid",
-            cv=3,
-            n_jobs=1,                        # keep it single-proc
-        ),
+        estimator=svm_pipe,
+        method="sigmoid",
+        cv=3,
+        n_jobs=1),
         "MLP": MLPClassifier(
             hidden_layer_sizes=(512, 128),
             activation="relu",
@@ -2788,8 +2793,8 @@ HYPER = {
     },
     # For Calibrated SVM the params live under `estimator__`
     "SVM_RBF": {
-        "estimator__C": [0.5, 1, 2],
-        "estimator__gamma": ["scale", 0.001],
+    "estimator__svc__C":     [0.5, 1, 2],
+    "estimator__svc__gamma": ["scale", 0.001]
     },
 }
 
