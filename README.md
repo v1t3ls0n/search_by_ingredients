@@ -7,9 +7,8 @@
 **Pipeline Type:** Ingredient-based diet classification with rule-based and ML ensemble models
 **Interfaces:** Command-line (CLI), Docker containerized, optional API integration ready
 
----
 
-Let me know if you want a signature/footer version too (for a PDF or notebook format), or if you'd like the author details repeated at the bottom as well.
+
 
 
 ## 🧭 Project Overview
