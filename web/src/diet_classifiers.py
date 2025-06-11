@@ -986,44 +986,44 @@ def build_models(task: str) -> Dict[str, BaseEstimator]:
         "Rule": RuleModel("keto", RX_KETO, RX_WL_KETO) if task == "keto" else
         RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN),
 
-        # Text-suited models
-        "Softmax": LogisticRegression(
-            solver="lbfgs", max_iter=1000, class_weight="balanced", random_state=42
-        ),
+    #     # Text-suited models
+    #     "Softmax": LogisticRegression(
+    #         solver="lbfgs", max_iter=1000, class_weight="balanced", random_state=42
+    #     ),
         "NB": MultinomialNB(),
-        "PA": PassiveAggressiveClassifier(
-            max_iter=1000, class_weight="balanced", random_state=42
-        ),
-        "Ridge": RidgeClassifier(class_weight="balanced", random_state=42),
-        "LR": LogisticRegression(
-            solver="lbfgs", max_iter=1000, random_state=42
-        ),
-        "SGD": SGDClassifier(
-            loss="log_loss", max_iter=1000, tol=1e-3, class_weight="balanced", n_jobs=-1
-        ),
+    #     "PA": PassiveAggressiveClassifier(
+    #         max_iter=1000, class_weight="balanced", random_state=42
+    #     ),
+    #     "Ridge": RidgeClassifier(class_weight="balanced", random_state=42),
+    #     "LR": LogisticRegression(
+    #         solver="lbfgs", max_iter=1000, random_state=42
+    #     ),
+    #     "SGD": SGDClassifier(
+    #         loss="log_loss", max_iter=1000, tol=1e-3, class_weight="balanced", n_jobs=-1
+    #     ),
 
-        # Image-suited models
-        "SVM_RBF": SVC(
-            kernel="rbf", probability=True, class_weight="balanced", random_state=42
-        ),
-        "MLP": MLPClassifier(
-            hidden_layer_sizes=(80,), max_iter=300, random_state=42
-        ),
+    #     # Image-suited models
+    #     "SVM_RBF": SVC(
+    #         kernel="rbf", probability=True, class_weight="balanced", random_state=42
+    #     ),
+    #     "MLP": MLPClassifier(
+    #         hidden_layer_sizes=(80,), max_iter=300, random_state=42
+    #     ),
     }
 
-    if lgb:
-        m["LGBM"] = lgb.LGBMClassifier(
-            num_leaves=15,
-            learning_rate=0.3,
-            n_estimators=50,
-            subsample=0.7,
-            colsample_bytree=0.7,
-            objective="binary",
-            n_jobs=-1,
-            random_state=42,
-            verbose=-1,
-            force_col_wise=True,
-        )
+    # if lgb:
+    #     m["LGBM"] = lgb.LGBMClassifier(
+    #         num_leaves=15,
+    #         learning_rate=0.3,
+    #         n_estimators=50,
+    #         subsample=0.7,
+    #         colsample_bytree=0.7,
+    #         objective="binary",
+    #         n_jobs=-1,
+    #         random_state=42,
+    #         verbose=-1,
+    #         force_col_wise=True,
+    #     )
 
     return m
 
@@ -1042,7 +1042,8 @@ HYPER = {
     },
     "PA": {"C": [0.1, 0.5, 1.0]},
     "Ridge": {"alpha": [0.1, 1.0, 10.0]},
-    "NB": {"alpha": [0.5, 1.0, 1.5]},
+    "NB": {},
+    # "NB": {"alpha": [0.5, 1.0, 1.5]},
     "Softmax": {"C": [0.05, 0.2, 1, 5, 10]},
     "SVM_RBF": {
         "C": [0.5, 1, 5],
@@ -1371,6 +1372,7 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
 # ============================================================================
 
 
+
 def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: float = None):
     """
     Run the complete training and evaluation pipeline.
@@ -1380,27 +1382,27 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
         force: Recompute image embeddings even if cached.
         sample_frac: Optional float (0 < x <= 1.0) to subsample silver set.
     """
-    # --- Load and label data ---
-    silver_txt, gold, recipes = load_datasets_fixed()
-    silver_txt = build_silver(silver_txt)  # pseudo-label for text models
+    # Load datasets
+    silver, gold, recipes = load_datasets_fixed()
 
-    # --- Derive image-compatible silver set from text-pseudo-labeled set ---
-    silver_img = filter_photo_rows(silver_txt)
+    # Filter rows with usable photo URLs
+    silver = filter_photo_rows(silver)
+    gold = filter_photo_rows(gold)
+
+    # Optional subsample
     if sample_frac:
-        silver_img = silver_img.sample(frac=sample_frac, random_state=42).copy()
+        silver = silver.sample(frac=sample_frac, random_state=42).copy()
 
-    img_gold_df = filter_photo_rows(gold)
-
-    # --- Show balances ---
+    # Show balance
     show_balance(gold, "Gold")
-    show_balance(silver_txt, "Silver (Text)")
-    show_balance(silver_img, "Silver (Image)")
+    show_balance(silver, "Silver")
 
     # --- TEXT FEATURES ---
     vec = TfidfVectorizer(**CFG.vec_kwargs)
-    X_text_silver = vec.fit_transform(silver_txt.clean)
+    X_text_silver = vec.fit_transform(silver.clean)
     X_text_gold = vec.transform(gold.clean)
 
+    # Save text gold features
     Path("embeddings").mkdir(exist_ok=True)
     joblib.dump(X_text_gold, "embeddings/text_gold.pkl")
 
@@ -1409,42 +1411,50 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
 
     # --- IMAGE FEATURES ---
     if mode in {"image", "both"}:
-        _download_images(silver_img, CFG.image_dir / "silver")
-        _download_images(img_gold_df, CFG.image_dir / "gold")
+        _download_images(silver, CFG.image_dir / "silver")
+        _download_images(gold, CFG.image_dir / "gold")
 
-        img_silver = build_image_embeddings(silver_img, "silver", force=force)
+        img_silver_df = filter_silver_by_downloaded_images(
+            silver, CFG.image_dir)
+        img_gold_df = filter_photo_rows(gold)
+
+        img_silver = build_image_embeddings(
+            img_silver_df, "silver", force=force)
         img_gold = build_image_embeddings(img_gold_df, "gold", force=force)
 
         joblib.dump(img_gold, "embeddings/img_gold.pkl")
 
         idx_path = CFG.image_dir / "silver" / "used_indices.txt"
         idx_path.parent.mkdir(parents=True, exist_ok=True)
-        silver_img.index.to_series().to_csv(idx_path, index=False, header=False)
+        img_silver_df.index.to_series().to_csv(idx_path, index=False, header=False)
         log.info(f"Saved image index for reproducibility to: {idx_path}")
 
         X_img_silver = csr_matrix(img_silver)
         X_img_gold = csr_matrix(img_gold)
 
         res_img = run_mode_A(
-            X_img_silver, img_gold_df.clean, X_img_gold, silver_img, img_gold_df
+            X_img_silver, img_gold_df.clean, X_img_gold, img_silver_df, img_gold_df
         )
         results.extend(res_img)
 
     # --- TEXT-ONLY PIPELINE ---
     if mode in {"text", "both"}:
-        res_text = run_mode_A(X_text_silver, gold.clean, X_text_gold, silver_txt, gold)
+        res_text = run_mode_A(X_text_silver, gold.clean,
+                              X_text_gold, silver, gold)
         results.extend(res_text)
 
     # --- TEXT+IMAGE ENSEMBLE ---
     if mode == "both" and res_text and res_img:
         ensemble_results = []
         for task in ["keto", "vegan"]:
-            best_text = max((r for r in res_text if r["task"] == task), key=lambda r: r["F1"])
-            best_img = max((r for r in res_img if r["task"] == task), key=lambda r: r["F1"])
+            best_text = max(
+                (r for r in res_text if r["task"] == task), key=lambda r: r["F1"])
+            best_img = max(
+                (r for r in res_img if r["task"] == task), key=lambda r: r["F1"])
             avg_prob = (best_text["prob"] + best_img["prob"]) / 2
             ensemble_result = pack(gold[f"label_{task}"].values, avg_prob) | {
                 "model": "TxtImg",
-                "task": task,
+                "task": task
             }
             ensemble_results.append(ensemble_result)
         table("Ensemble Text+Image", ensemble_results)
@@ -1453,26 +1463,23 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
     # --- FINAL EVALUATION ---
     if mode == "text":
         X_silver, X_gold = X_text_silver, X_text_gold
-        silver_used = silver_txt
     elif mode == "image":
         X_silver, X_gold = csr_matrix(img_silver), csr_matrix(img_gold)
-        silver_used = silver_img
     else:
         X_silver = combine_features(X_text_silver, img_silver)
         X_gold = combine_features(X_text_gold, img_gold)
-        silver_used = silver_img  # matching image rows only
 
-    res = run_mode_A(X_silver, gold.clean, X_gold, silver_used, gold)
+    res = run_mode_A(X_silver, gold.clean, X_gold, silver, gold)
     results.extend(res)
 
     res_ens = [
-        best_ensemble("keto", res, X_silver, gold.clean, X_gold, silver_used, gold),
-        best_ensemble("vegan", res, X_silver, gold.clean, X_gold, silver_used, gold),
+        best_ensemble("keto", res, X_silver, gold.clean, X_gold, silver, gold),
+        best_ensemble("vegan", res, X_silver, gold.clean, X_gold, silver, gold)
     ]
     table("MODE A Ensemble (Best)", res_ens)
     results.extend(res_ens)
 
-    # --- METRIC PLOTS ---
+
     Path("plots").mkdir(exist_ok=True)
     rows = []
 
@@ -1483,6 +1490,7 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
         pred = r.get("pred")
         true = gold[f"label_{task}"].values
 
+        # inside your loop:
         row = {
             "model": model,
             "task": task,
@@ -1490,9 +1498,10 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
             "precision": None,
             "recall": None,
             "F1": None,
-            "AUC": None,
+            "AUC": None
         }
 
+        # Only compute if predictions are available
         if pred is not None:
             row["accuracy"] = accuracy_score(true, pred)
             row["precision"] = precision_score(true, pred, zero_division=0)
@@ -1506,6 +1515,8 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
             plt.savefig(f"plots/{model}_{task}_confusion.png")
             plt.close()
 
+
+        # Compute AUC + ROC if probs are available
         if prob is not None and hasattr(prob, "__len__"):
             try:
                 auc = roc_auc_score(true, prob)
@@ -1521,16 +1532,19 @@ def run_full_pipeline(mode: str = "both", force: bool = False, sample_frac: floa
             except Exception as e:
                 print(f"[Warning] Failed ROC/AUC for {model} {task}: {e}")
 
+
         rows.append(row)
 
+    # Export all results to CSV
     df_eval = pd.DataFrame(rows)
     df_eval.to_csv("evaluation_results.csv", index=False)
     log.info("Saved evaluation results to evaluation_results.csv")
 
+    # --- Save Best Model Params ---
     with open("best_params.json", "w") as fp:
         json.dump({k: v.get_params() for k, v in BEST.items() if k != "Rule"}, fp, indent=2)
 
-    return vec, silver_txt, gold, results
+    return vec, silver, gold, results
 
 
 # ============================================================================
