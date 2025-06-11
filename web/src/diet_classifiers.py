@@ -3979,6 +3979,44 @@ def best_two_domains(
     }
 
 
+def dynamic_ensemble(estimators, X_gold, gold, task: str):
+    """
+    Returns optimized ensemble predictions based on model domain availability.
+
+    If an image-based model is unavailable for a given row,
+    its vote is zeroed for that row. Remaining weights are normalized.
+    """
+
+    # Collect individual predictions
+    preds = []
+    for name, model in estimators:
+        if not hasattr(model, "predict_proba"):
+            raise ValueError(f"{name} lacks predict_proba")
+        preds.append(model.predict_proba(X_gold)[:, 1])
+
+    probs = np.array(preds)  # shape: (n_models, n_samples)
+
+    # Detect text-only rows (e.g., no image available)
+    text_only_mask = gold.get("has_image", np.ones(len(X_gold), dtype=bool)) == False
+
+    # Compute dynamic weights: zero image models where no image, renormalize
+    weights = []
+    for i, (name, _) in enumerate(estimators):
+        is_image_model = "IMAGE" in name.upper()
+        row_weights = np.ones(len(X_gold))
+        if is_image_model:
+            row_weights[text_only_mask] = 0  # suppress image models for text-only rows
+        weights.append(row_weights)
+
+    weights = np.array(weights)
+    weights_sum = weights.sum(axis=0)
+    weights_sum[weights_sum == 0] = 1  # prevent division by zero
+
+    normalized_weights = weights / weights_sum
+    final_probs = (normalized_weights * probs).sum(axis=0)
+
+    return final_probs
+
 def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=False, rule_weight=0):
     """
     Build an n-model ensemble based on combined performance metrics.
@@ -4222,7 +4260,10 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
             ens_pbar.update(1)
 
             ens_pbar.set_description("   ├─ Generating Predictions")
-            prob = ens.predict_proba(X_gold)[:, 1]
+            # Compute dynamically weighted soft-voting probabilities
+            prob = dynamic_ensemble(
+                estimators, X_gold, gold, task=task
+            )
             ens_pbar.update(1)
 
         ensemble_create_time = time.time() - ensemble_create_start
