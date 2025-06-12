@@ -4,7 +4,7 @@
 ##### Ping me via 🔗 **[Linkedin](https://www.linkedin.com/in/guyvitelson/)**  🐙 **[GitHub](https://github.com/v1t3ls0n)**  ✉️ **[Mail](mailto:guyvitelson@gmail.com)**
 ---
 
-🧭 Project Overview
+## 🧭 Project Overview
 
 This pipeline implements two independent binary classification tasks for recipes:
 
