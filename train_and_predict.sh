@@ -10,7 +10,7 @@ docker compose run --rm web bash -c '
     echo "📦 Ensuring Python deps are present (image should already have them)..."
     pip install -r requirements.txt --quiet || true
 
-    echo "🧠 Training & testing on both image and text classifiers (sample 10%)..."
+    echo "🧠 Training & testing on both image and text classifiers..."
     python web/diet_classifiers.py --train --mode both
 
     echo "🧪 Evaluating on provided gold set..."
