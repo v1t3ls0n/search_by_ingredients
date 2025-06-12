@@ -165,6 +165,7 @@ log = logging.getLogger("PIPE")
 
 @dataclass(frozen=True)
 class Config:
+    artifacts_dir: Path = Path("/app/artifacts")
     data_dir: Path = Path("/app/data")
     usda_dir: Path  = Path("/app/data/usda")           # ← add
     url_map: Mapping[str, str] = field(default_factory=lambda: {
@@ -5648,8 +5649,8 @@ def _ensure_pipeline():
     if _pipeline_state['initialized']:
         return
 
-    vec_path    = CFG.data_dir / "vectorizer.pkl"
-    models_path = CFG.data_dir / "models.pkl"
+    vec_path    = CFG.artifacts_dir / "vectorizer.pkl"
+    models_path = CFG.artifacts_dir / "models.pkl"
 
     try:
         # ──────────────────────────────────────────────
@@ -5660,7 +5661,7 @@ def _ensure_pipeline():
                 _pipeline_state['vectorizer'] = pickle.load(f)
             with open(models_path, 'rb') as f:
                 _pipeline_state['models'] = pickle.load(f)
-            log.info("Loaded vectorizer + models from %s", CFG.data_dir)
+            log.info("Loaded vectorizer + models from %s", CFG.artifacts_dir)
 
         # ──────────────────────────────────────────────
         # 2️⃣ first run – no artefacts, train on the fly
@@ -5678,13 +5679,13 @@ def _ensure_pipeline():
                 base_name = best["model"].split('_')[0]  # strip _TEXT/_BOTH
                 best_models[task] = BEST[base_name]
 
-            CFG.data_dir.mkdir(parents=True, exist_ok=True)
+            CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
             with open(vec_path, 'wb')     as f: pickle.dump(vec, f)
             with open(models_path, 'wb')  as f: pickle.dump(best_models, f)
 
             _pipeline_state['vectorizer'] = vec
             _pipeline_state['models']     = best_models
-            log.info("Fresh artefacts saved to %s", CFG.data_dir)
+            log.info("Fresh artefacts saved to %s", CFG.artifacts_dir)
 
     except Exception as e:
         # ──────────────────────────────────────────────
@@ -5765,10 +5766,10 @@ def main():
                 # Try to save models - but don't crash if it fails
                 try:
                     import pickle
-                    CFG.data_dir.mkdir(parents=True, exist_ok=True)
+                    CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
 
                     # Save vectorizer
-                    with open(CFG.data_dir / "vectorizer.pkl", 'wb') as f:
+                    with open(CFG.artifacts_dir / "vectorizer.pkl", 'wb') as f:
                         pickle.dump(vec, f)
                     log.info("✅ Saved vectorizer")
 
@@ -5793,10 +5794,10 @@ def main():
                                     f"⚠️  Could not find model {base_name} in BEST dict")
 
                     if best_models:
-                        with open(CFG.data_dir / "models.pkl", 'wb') as f:
+                        with open(CFG.artifacts_dir / "models.pkl", 'wb') as f:
                             pickle.dump(best_models, f)
                         log.info(
-                            f"✅ Saved {len(best_models)} models to {CFG.data_dir}")
+                            f"✅ Saved {len(best_models)} models to {CFG.artifacts_dir}")
                     else:
                         log.warning("⚠️  No models to save")
 
