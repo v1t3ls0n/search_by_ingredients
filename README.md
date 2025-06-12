@@ -2,7 +2,7 @@
 
 ---
 ### 📫 How to Reach Me
-🔗 **[Linkedin](https://www.linkedin.com/in/guyvitelson/)** | 🐙 **[@v1t3ls0n](https://github.com/v1t3ls0n)** | ✉️ **[Mail](mailto:guyvitelson@gmail.com)**
+🔗 **[Linkedin](https://www.linkedin.com/in/guyvitelson/)**  🐙 **[@v1t3ls0n](https://github.com/v1t3ls0n)**  ✉️ **[Mail](mailto:guyvitelson@gmail.com)**
 
 ---
 
