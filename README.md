@@ -39,7 +39,7 @@ Model Training (Text / Image / Hybrid)
 ▼
 Top-N Ensemble + Rule Verification
 ▼
-Export: Metrics, Plots, Artefacts
+Export: Metrics, Plots, Artifacts 
 
 ````
 
