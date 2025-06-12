@@ -62,30 +62,44 @@ Our system produces training labels (silver labels) via a **6-stage heuristic**:
 
 ---
 
+
 ## 🧠 ML Models and Ensemble
 
-Text classifiers:
+### Text-only classifiers
 
-- Logistic Regression (Softmax)
-- Naive Bayes
-- RidgeClassifier
-- SGDClassifier
-- Passive-Aggressive
+* **Softmax\_TEXT** (Logistic Regression)
+* **Ridge\_TEXT** (RidgeClassifier)
+* **PA\_TEXT** (Passive-Aggressive Classifier)
+* **SGD\_TEXT** (SGDClassifier)
+* **NB\_TEXT** (Multinomial Naive Bayes)
 
-Optional image support:
+### Image-only classifiers
 
-- Download photos from recipe URLs
-- Run ResNet-50 embedding extraction
-- Merge with text features for multimodal classification
+* **RF\_IMAGE** (Random Forest on ResNet-50 embeddings)
+* **LGBM\_IMAGE** (LightGBM on ResNet-50 embeddings)
+* **MLP\_IMAGE** (Multi-layer Perceptron on ResNet-50 embeddings)
 
-We tune, score, and rank each model across metrics:
+### Hybrid (Text + Image) classifiers
 
-- Accuracy
-- Precision, Recall
-- F1 Score
-- ROC AUC, PR AUC
+* **Softmax\_BOTH** (Logistic Regression on concatenated TF-IDF + image embeddings)
+* **Ridge\_BOTH** (RidgeClassifier on concatenated features)
+* **PA\_BOTH** (Passive-Aggressive on concatenated features)
+* **RF\_BOTH** (Random Forest on concatenated features)
+* **LGBM\_BOTH** (LightGBM on concatenated features)
+* **NB\_BOTH** (Naive Bayes on concatenated features)
+* **MLP\_BOTH** (MLP on concatenated features)
+* **TxtImg** (custom text–image fusion model)
 
-Then, a dynamic ensemble (`top_n`) builds the optimal blend of models for each task, using weighted soft voting and rule verification.
+---
+
+We train & evaluate **all** of these on both the silver set and the gold ground-truth, scoring them by:
+
+* **Accuracy**
+* **Precision / Recall**
+* **F1 Score**
+* **ROC AUC** & **PR AUC**
+
+Then our **dynamic top-N ensemble** greedily picks the best subset of these predictors for each task (keto vs. vegan), with a final rule-based override to guarantee dietary correctness.
 
 ---
 
