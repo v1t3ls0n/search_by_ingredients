@@ -1,7 +1,7 @@
 ## 🥑 Solution For Argmax's Search By Ingredients Challenge By **Guy Vitelson**
 
 ---
-##### Send me a ping via 🔗 **[Linkedin](https://www.linkedin.com/in/guyvitelson/)**  🐙 **[GitHub](https://github.com/v1t3ls0n)**  ✉️ **[Mail](mailto:guyvitelson@gmail.com)**
+##### Ping me via 🔗 **[Linkedin](https://www.linkedin.com/in/guyvitelson/)**  🐙 **[GitHub](https://github.com/v1t3ls0n)**  ✉️ **[Mail](mailto:guyvitelson@gmail.com)**
 ---
 
 ## 🧭 Project Overview
