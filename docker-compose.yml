@@ -43,6 +43,7 @@ services:
     volumes:
       - recipe-data:/usr/src/data
       - ./web/src:/app/web
+      - ./data:/app/data 
     networks:
       - argmax
     depends_on:
