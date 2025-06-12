@@ -223,6 +223,34 @@ Or via Docker:
 └── README.md
 ```
 
+## 🔖 Artifacts Directory
+
+Trained models and vectorizer are persisted here via the host-mounted  
+`./artifacts` folder (inside the container at `/app/artifacts`).
+
+After running the training pipeline, you’ll find:
+
+```
+
+artifacts/
+├── vectorizer.pkl
+└── models.pkl
+
+````
+
+Ensure your `docker-compose.yml` maps it:
+
+```yaml
+services:
+  web:
+    …
+    volumes:
+      - ./artifacts:/app/artifacts
+      - recipe-data:/usr/src/data
+      - ./web/src:/app/web
+````
+
+
 ---
 
 ## ✅ Feature Matrix
