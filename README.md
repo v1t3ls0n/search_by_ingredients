@@ -1,5 +1,5 @@
 ## 🥑 Solution For Argmax's Search By Ingredients Challenge 
-**$$ \arg\max_{r} \ \mathrm{score}(r) \quad \text{subject to } I(r) = \text{@v1t3ls0n} $$**
+**$$ \arg\max_{r \in \mathcal{G}} \ \mathrm{score}(r) \quad \text{subject to } I(r) = \text{@v1t3ls0n} $$**
 
 **By [Guy Vitelson](https://www.linkedin.com/in/guyvitelson/)** · 🐙 [@v1t3ls0n](https://github.com/v1t3ls0n) · 📧 [guyvitelson@gmail.com](mailto:guyvitelson@gmail.com)
 
