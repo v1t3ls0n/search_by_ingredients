@@ -4,12 +4,15 @@
 ##### Ping me via 🔗 **[Linkedin](https://www.linkedin.com/in/guyvitelson/)**  🐙 **[GitHub](https://github.com/v1t3ls0n)**  ✉️ **[Mail](mailto:guyvitelson@gmail.com)**
 ---
 
-## 🧭 Project Overview
+🧭 Project Overview
 
-This project classifies recipes as either:
+This pipeline implements two independent binary classification tasks for recipes:
 
-- **Keto-Friendly** (≤10g net carbs per 100g)
-- **Vegan** (strictly plant-based)
+Keto-Friendly: ≤ 10 g net carbohydrates per 100 g serving
+
+Vegan: no animal-derived ingredients (strictly plant-based)
+
+
 
 We assume **no labeled data is available**, and solve the task using weak supervision, rule-based logic, and machine learning. We go beyond requirements by integrating:
 
