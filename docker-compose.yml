@@ -44,6 +44,7 @@ services:
       - recipe-data:/usr/src/data
       - ./web/src:/app/web
       - ./artifacts:/app/artifacts
+      - ./pretrained_models:/app/pretrained_models
     networks:
       - argmax
     depends_on:

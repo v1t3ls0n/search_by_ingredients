@@ -241,6 +241,7 @@ class Config:
         vec_kwargs: Parameters for TF-IDF vectorizer
         image_dir: Directory for storing downloaded recipe images
     """
+    pretrained_models_dir: Path = Path("/app/pretrained_models")
     artifacts_dir: Path = Path("/app/artifacts")
     data_dir: Path = Path("/app/data")
     usda_dir: Path  = Path("/app/data/usda")
@@ -6176,9 +6177,18 @@ def main():
                 df = pd.read_csv(args.ground_truth)
                 log.info(f"✅ Loaded ground truth with {len(df)} rows")
 
-                # Load models and vectorizer
+                # Resolve model/vectorizer paths with fallback logic
                 model_path = CFG.artifacts_dir / "models.pkl"
                 vec_path = CFG.artifacts_dir / "vectorizer.pkl"
+
+                if not (model_path.exists() and vec_path.exists()):
+                    log.warning("⚠️ Models not found in artifacts/ — trying pretrained_models/ fallback...")
+                    model_path = CFG.pretrained_models_dir / "models.pkl"
+                    vec_path = CFG.pretrained_models_dir / "vectorizer.pkl"
+
+                if not (model_path.exists() and vec_path.exists()):
+                    log.error("❌ No trained models found in artifacts/ or pretrained_models/.")
+                    sys.exit(1)
 
                 with open(vec_path, 'rb') as f:
                     vectorizer = pickle.load(f)
@@ -6245,6 +6255,11 @@ def main():
                 metrics_path = CFG.artifacts_dir / "eval_metrics.csv"
                 metrics_df.to_csv(metrics_path, index=False)
                 log.info(f"📈 Saved evaluation metrics to {metrics_path}")
+
+            except Exception as e:
+                log.error(f"❌ Ground truth evaluation failed: {e}")
+                sys.exit(1)
+
 
             except Exception as e:
                 log.error(f"❌ Ground truth evaluation failed: {e}")

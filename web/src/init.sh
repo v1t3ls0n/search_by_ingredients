@@ -1,14 +1,12 @@
 #!/bin/bash
 
-echo "📦 Checking for models.zip in artifacts..."
+echo "📦 Extract pretrained models (models.zip in pretrained_models)..."
 
-if [ -f /app/artifacts/models.zip ]; then
+if [ -f /app/pretrained_models/models.zip ]; then
     echo "🔓 Extracting models.zip..."
-    unzip -o /app/artifacts/models.zip -d /app/artifacts
-    echo "🧹 Deleting models.zip..."
-    rm /app/artifacts/models.zip
+    unzip -o /app/pretrained_models/models.zip -d /app/pretrained_models
 else
-    echo "✅ No models.zip found, skipping extraction."
+    echo "✅ Did not find any pretrained models, skipping extraction."
 fi
 
 # Check if indexing has been done

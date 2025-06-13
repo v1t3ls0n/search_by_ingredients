@@ -1,4 +1,18 @@
 #!/usr/bin/env bash
+
+# ───────────────────────────────────────────────────────────────
+# 🎯 End-to-End ML Pipeline Runner (inside Docker)
+# By Guy Vitelson
+#
+# - Builds Docker containers
+# - Trains models on silver labels
+# - Evaluates on gold-standard CSV
+# - Classifies a test ingredient list
+#
+# Usage:
+#   ./run_full_pipeline.sh
+# ───────────────────────────────────────────────────────────────
+
 set -euo pipefail
 
 echo "🛠️  Building Docker images..."

@@ -18,6 +18,6 @@ docker ps | grep v1t3ls0n
 
 echo "🧠 Running prediction on gold set (ground_truth)..."
 docker exec -it search_by_ingredients_v1t3ls0n-web-1 \
-    python3 web/diet_classifiers.py --ground_truth /usr/src/data/gold_sample.csv
+    python3 web/diet_classifiers.py --ground_truth /usr/src/data/ground_truth_sample.csv
 
 echo "✅ Done. Check logs above for prediction results."

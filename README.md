@@ -120,44 +120,50 @@ Then our **dynamic top-N ensemble** greedily picks the best subset of these pred
 **Image models trained on ~70K images, all models evaluated on the gold set (ground_truth data)**
 ### 🥑 Keto Models
 
-| 🧠 Model         | 🎯 Task | ✅ Accuracy | 🎯 Precision | 🔁 Recall | 🏆 F1-Score | ⏱️ Time (s) |
-|------------------|--------|-------------|--------------|-----------|-------------|-------------|
-| 🤖 Softmax_TEXT  | keto   | 0.970       | 0.951        | 0.975     | **0.963**   | 3.6         |
-| 🧠 Ridge_TEXT    | keto   | 0.970       | 0.951        | 0.975     | **0.963**   | 12.4        |
-| ⚔️ PA_TEXT       | keto   | 0.970       | 0.951        | 0.975     | **0.963**   | 4.2         |
-| 🧪 SGD_TEXT      | keto   | 0.970       | 0.951        | 0.975     | **0.963**   | 0.6         |
-| 🌲 RF_IMAGE      | keto   | 0.942       | 0.929        | 0.963     | 0.945       | 111.5       |
-| 🧬 Softmax_BOTH  | keto   | 0.942       | 0.929        | 0.963     | 0.945       | 85.8        |
-| 🌟 LGBM_BOTH     | keto   | 0.942       | 0.929        | 0.963     | 0.945       | 109.1       |
-| 🧠 TxtImg        | keto   | 0.940       | 0.930        | 0.960     | 0.950       | –           |
-| 🦠 NB_TEXT       | keto   | 0.960       | 0.950        | 0.950     | 0.950       | 0.3         |
-| ⚡ LGBM_IMAGE     | keto   | 0.904       | 0.923        | 0.889     | 0.906       | 87.7        |
-| 🐍 NB_BOTH       | keto   | 0.865       | 0.955        | 0.778     | 0.857       | 0.2         |
-| 🧠 MLP_IMAGE     | keto   | 0.750       | 0.938        | 0.556     | 0.698       | 119.8       |
 
 ---
 
-### 🌱 Vegan Models
+### 🥑 **Keto Models** (Sorted by F1)
 
 | 🧠 Model         | 🎯 Task | ✅ Accuracy | 🎯 Precision | 🔁 Recall | 🏆 F1-Score | ⏱️ Time (s) |
-|------------------|--------|-------------|--------------|-----------|-------------|-------------|
-| 🤖 Softmax_TEXT  | vegan  | 0.980       | 0.975        | 0.975     | **0.975**   | 1.6         |
-| ⚔️ PA_TEXT       | vegan  | 0.980       | 0.975        | 0.975     | **0.975**   | 4.5         |
-| 🧠 Ridge_BOTH    | vegan  | 0.981       | 1.000        | 0.964     | **0.982**   | 462.9       |
-| ⚔️ PA_BOTH       | vegan  | 0.981       | 1.000        | 0.964     | **0.982**   | 25.9        |
-| 🌲 RF_IMAGE      | vegan  | 1.000       | 1.000        | 1.000     | **1.000**   | 77.6        |
-| 🧬 Softmax_BOTH  | vegan  | 1.000       | 1.000        | 1.000     | **1.000**   | 73.2        |
-| 🌲 RF_BOTH       | vegan  | 1.000       | 1.000        | 1.000     | **1.000**   | 29.0        |
-| 🌟 LGBM_BOTH     | vegan  | 1.000       | 1.000        | 1.000     | **1.000**   | 127.9       |
-| 🧠 TxtImg        | vegan  | 1.000       | 1.000        | 1.000     | **1.000**   | –           |
-| 🧠 MLP_BOTH      | vegan  | 0.962       | 1.000        | 0.929     | 0.963       | 2515.7      |
-| ⚡ LGBM_IMAGE     | vegan  | 0.962       | 1.000        | 0.929     | 0.963       | 54.3        |
-| 🧠 Ridge_TEXT    | vegan  | 0.970       | 0.974        | 0.950     | 0.962       | 12.2        |
-| 🧪 SGD_TEXT      | vegan  | 0.970       | 0.974        | 0.950     | 0.962       | 0.6         |
-| 🦠 NB_TEXT       | vegan  | 0.960       | 0.974        | 0.925     | 0.949       | 0.1         |
-| 🐍 NB_BOTH       | vegan  | 0.788       | 1.000        | 0.607     | 0.756       | 0.2         |
-| 🧠 MLP_IMAGE     | vegan  | 0.596       | 1.000        | 0.250     | 0.400       | 100.6       |
+| ---------------- | ------- | ---------- | ------------ | --------- | ----------- | ----------- |
+| 🤖 Softmax\_TEXT | keto    | 0.970      | 0.951        | 0.975     | **0.963**   | 3.6         |
+| 🧠 Ridge\_TEXT   | keto    | 0.970      | 0.951        | 0.975     | **0.963**   | 12.4        |
+| ⚔️ PA\_TEXT      | keto    | 0.970      | 0.951        | 0.975     | **0.963**   | 4.2         |
+| 🧪 SGD\_TEXT     | keto    | 0.970      | 0.951        | 0.975     | **0.963**   | 0.6         |
+| 🧠 TxtImg        | keto    | 0.940      | 0.930        | 0.960     | 0.950       | –           |
+| 🦠 NB\_TEXT      | keto    | 0.960      | 0.950        | 0.950     | 0.950       | 0.3         |
+| 🌲 RF\_IMAGE     | keto    | 0.942      | 0.929        | 0.963     | 0.945       | 111.5       |
+| 🧬 Softmax\_BOTH | keto    | 0.942      | 0.929        | 0.963     | 0.945       | 85.8        |
+| 🌟 LGBM\_BOTH    | keto    | 0.942      | 0.929        | 0.963     | 0.945       | 109.1       |
+| ⚡ LGBM\_IMAGE    | keto    | 0.904      | 0.923        | 0.889     | 0.906       | 87.7        |
+| 🐍 NB\_BOTH      | keto    | 0.865      | 0.955        | 0.778     | 0.857       | 0.2         |
+| 🧠 MLP\_IMAGE    | keto    | 0.750      | 0.938        | 0.556     | 0.698       | 119.8       |
 
+---
+
+### 🌱 **Vegan Models** (Sorted by F1)
+
+| 🧠 Model         | 🎯 Task | ✅ Accuracy | 🎯 Precision | 🔁 Recall | 🏆 F1-Score | ⏱️ Time (s) |
+| ---------------- | ------- | ---------- | ------------ | --------- | ----------- | ----------- |
+| 🌲 RF\_IMAGE     | vegan   | 1.000      | 1.000        | 1.000     | **1.000**   | 77.6        |
+| 🧬 Softmax\_BOTH | vegan   | 1.000      | 1.000        | 1.000     | **1.000**   | 73.2        |
+| 🌲 RF\_BOTH      | vegan   | 1.000      | 1.000        | 1.000     | **1.000**   | 29.0        |
+| 🌟 LGBM\_BOTH    | vegan   | 1.000      | 1.000        | 1.000     | **1.000**   | 127.9       |
+| 🧠 TxtImg        | vegan   | 1.000      | 1.000        | 1.000     | **1.000**   | –           |
+| 🧠 Ridge\_BOTH   | vegan   | 0.981      | 1.000        | 0.964     | **0.982**   | 462.9       |
+| ⚔️ PA\_BOTH      | vegan   | 0.981      | 1.000        | 0.964     | **0.982**   | 25.9        |
+| 🤖 Softmax\_TEXT | vegan   | 0.980      | 0.975        | 0.975     | **0.975**   | 1.6         |
+| ⚔️ PA\_TEXT      | vegan   | 0.980      | 0.975        | 0.975     | **0.975**   | 4.5         |
+| 🧠 MLP\_BOTH     | vegan   | 0.962      | 1.000        | 0.929     | 0.963       | 2515.7      |
+| ⚡ LGBM\_IMAGE    | vegan   | 0.962      | 1.000        | 0.929     | 0.963       | 54.3        |
+| 🧠 Ridge\_TEXT   | vegan   | 0.970      | 0.974        | 0.950     | 0.962       | 12.2        |
+| 🧪 SGD\_TEXT     | vegan   | 0.970      | 0.974        | 0.950     | 0.962       | 0.6         |
+| 🦠 NB\_TEXT      | vegan   | 0.960      | 0.974        | 0.925     | 0.949       | 0.1         |
+| 🐍 NB\_BOTH      | vegan   | 0.788      | 1.000        | 0.607     | 0.756       | 0.2         |
+| 🧠 MLP\_IMAGE    | vegan   | 0.596      | 1.000        | 0.250     | 0.400       | 100.6       |
+
+---
 
 ## 🧠 Key Takeaways from Results
 
@@ -172,77 +178,6 @@ These results demonstrate **exceptionally strong performance**, especially consi
 ⚠️ **Important Note:**
 All the results above were achieved **before** enabling **dynamic per-row ensemble weight optimization**. The current ensemble logic uses static weightings, yet still delivers top-tier metrics. This strongly suggests that adding dynamic weights based on image/text availability could yield even higher confidence and class-specific reliability.
 
----
-Here are your updated and integrated outputs:
-
----
-
-### ✅ Updated Docstring for `diet_classifiers.py`
-
-```python
-"""
-================================================================================
-DIET CLASSIFIER PIPELINE - MULTI-MODAL MACHINE LEARNING FOR INGREDIENT ANALYSIS
-================================================================================
-
-This comprehensive machine learning pipeline classifies recipes as keto-friendly 
-or vegan based on their ingredients using a multi-modal approach combining:
-
-1. TEXT FEATURES: TF-IDF vectorization of normalized ingredient lists
-2. IMAGE FEATURES: ResNet-50 embeddings from recipe photos
-3. RULE-BASED VERIFICATION: Domain-specific heuristics and USDA nutritional data
-
-KEY COMPONENTS:
----------------
-- SILVER LABEL GENERATION: Creates weak labels from unlabeled data using multi-stage
-  rule-based heuristics simulating expert knowledge:
-    • Token normalization + lemmatization
-    • Regex-based blacklist/whitelist
-    • USDA-based carbohydrate filtering (≤10g carbs/100g → keto-safe)
-    • Phrase-level disqualifications (e.g., "chicken broth")
-    • Whitelist override of verified-safe ingredients (e.g., "almond flour")
-    • Soft ML fallback + rule-based priority merging
-    • Photo sanity filtering: excludes rows with URLs like 'nophoto', 'nopic', 'nopicture'
-
-- MODEL TRAINING: Trains diverse ML models (Logistic Regression, SVM, MLP, Random Forest, etc.)
-- ENSEMBLE METHODS: Combines multiple classifiers using top-N voting and rule-based overrides
-- CACHING & RESTORE: Saves and reuses models, vectorizers, image embeddings
-- LOGGING: Logs to both console and `artifacts/pipeline.log`
-- FULL EVALUATION: Saves gold-test predictions and per-class metrics to CSV
-
-ARCHITECTURE OVERVIEW:
-----------------------
-1. Data Loading:
-   - Loads silver (unlabeled) and gold (labeled) recipes
-   - Uses USDA nutritional DB for rule-based classification
-   - Input can be CSV or Parquet
-
-2. Feature Extraction:
-   - Text: TF-IDF vectorization after custom normalization
-   - Image: ResNet-50 feature extraction from downloaded photos
-   - Merges modalities where appropriate
-
-3. Model Training:
-   - Silver-labeled data → supervised classifiers
-   - Supports `--mode text`, `--mode image`, `--mode both`
-
-4. Prediction & Evaluation:
-   - Supports ingredient inference or full CSV evaluation
-   - Computes Accuracy, F1, Precision, Recall
-   - Exports predictions and metrics to artifacts directory
-
-USAGE MODES:
-------------
-1. Training: `--train` to trigger full silver model training pipeline
-2. Inference: `--ingredients` for direct classification from command line
-3. Evaluation: `--ground_truth` for benchmarking against labeled CSV
-
-Robust against partial data, broken images, or failed downloads.
-Supports interactive development, Docker builds, and production use.
-
-Author: Guy Vitelson (aka @v1t3ls0n on GitHub)
-"""
-```
 
 ---
 
@@ -277,6 +212,48 @@ Or run via Docker for full automation:
 ```bash
 ./run_pipeline.sh       # Build, train, and test in one go
 ```
+
+
+---
+
+### 🧠 Ground Truth Evaluation Pipeline
+
+When running:
+
+```bash
+python diet_classifiers.py --ground_truth /path/to/labeled_recipes.csv
+```
+
+The pipeline will:
+
+1. **Load and verify the ground truth CSV** file.
+
+2. **Automatically locate trained models**:
+
+   * Prefer models from `artifacts/models.pkl` and `vectorizer.pkl`.
+   * If missing, fall back to `pretrained_models/models.pkl` and `vectorizer.pkl`.
+   * Logs each decision clearly.
+
+3. **Vectorize ingredients** using the loaded vectorizer.
+
+4. **Predict both vegan and keto labels** per row using the appropriate models.
+
+5. **Save predictions** to:
+
+   ```
+   artifacts/ground_truth_predictions.csv
+   ```
+
+6. **Compute evaluation metrics** (accuracy, precision, recall, F1).
+
+7. **Save metrics summary** to:
+
+   ```
+   artifacts/eval_metrics.csv
+   ```
+
+📦 *Models can be preloaded by placing `models.zip` (containing `models.pkl`, `vectorizer.pkl`) inside `pretrained_models/`. This zip will be auto-extracted by `init.sh`.*
+
 
 
 
@@ -324,14 +301,16 @@ Or run via Docker for full automation:
 │   ├── Dockerfile
 │   └── requirements.txt
 
-├── data/                          # 📊 Raw and generated files
-│   ├── usda/                      # USDA CSVs
-│   └── gold_sample.csv            # 100-row hand-labeled test set
-
 ├── docker-compose.yml             # Multi-container runner
-├── run_pipeline.sh                # One-click script
-├── .gitignore
-└── README.md
+├── README.md                      # Project overview and usage
+├── .gitattributes                 # Git LFS tracking config
+├── .gitignore                     # Ignore rules
+├── train.sh                       # Run training only
+├── eval_ground_truth.sh          # Evaluate on provided gold dataset
+├── eval_custom.sh                # Evaluate on a custom testset CSV
+├── run_full_pipeline.sh          # Build, train, evaluate, classify
+├── update_git.sh                 # Commit & push automation script
+
 ```
 
 ## 🔖 Artifacts Directory
