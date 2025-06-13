@@ -192,30 +192,231 @@ silver_txt.to_csv("artifacts/silver_extended.csv", index=False)
 
 ### Hierarchical Ensemble Pipeline
 
+The system implements a sophisticated 4-level hierarchical ensemble architecture that progressively combines models for optimal performance. Here's how the levels work conceptually and how they're actually implemented in the pipeline:
+
 ```python
-# Level 1: Individual Model Results (shown in results tables below)
-individual_models = train_all_models()
+# Conceptual Architecture (available functions):
+# Level 1: Individual Model Training (run_mode_A)
+# Level 2: Domain-Specific Ensembles (top_n) - called within best_ensemble
+# Level 3: Cross-Domain Blending (best_two_domains)
+# Level 4: Global Optimization (best_ensemble)
 
-# Level 2: Domain-Specific Ensembles
-text_ensemble = top_n(task="keto", models=text_models, n=3)
-image_ensemble = top_n(task="keto", models=image_models, n=2)
+# Actual Pipeline Implementation:
+# Stage 4: Training & Initial Ensembles
+res_text = run_mode_A(...)  # Level 1
+res_img = run_mode_A(...)   # Level 1
+res_combined = run_mode_A(..., domain="both")  # Level 1
+best_two_domains(...) with alpha optimization  # Level 3
 
-# Level 3: Cross-Domain Blending  
-blended_ensemble = best_two_domains(
-    text_results=text_ensemble,
-    image_results=image_ensemble,
-    alpha=0.6  # Optimal weight found via grid search
-)
+# Stage 5: Advanced Ensemble Optimization
+best_ensemble(...)  # Level 4 (internally calls Level 2 top_n)
+best_ensemble(..., image_res=res_img)  # Level 4 with cross-domain
+```
 
-# Level 4: Global Optimization
-final_ensemble = best_ensemble(
-    task="keto",
-    ensemble_sizes=[1,2,3,4,5],
-    alpha_values=[0.25, 0.5, 0.75]
+### Implementation Details
+
+#### **Level 1: Individual Model Training (`run_mode_A`)**
+The pipeline trains diverse models across three domains:
+
+1. **Text Models** (when `mode` in {"text", "both"}):
+   - Trained on TF-IDF features from text data
+   - Uses SMOTE for class imbalance handling
+   - Models: Logistic Regression, SGD, Ridge, Passive-Aggressive, etc.
+
+2. **Image Models** (when `mode` in {"image", "both"}):
+   - Trained on pre-extracted image features (4096-dim)
+   - No SMOTE (images already balanced)
+   - Models: MLP, Random Forest, LightGBM, etc.
+
+3. **Combined Models** (when `mode` == "both"):
+   - Concatenates text and image features
+   - Trains on samples with both modalities
+   - Uses SMOTE for balance
+
+```python
+# Actual code from run_full_pipeline Stage 4:
+# IMAGE MODELS
+if mode in {"image", "both"} and img_silver and img_silver.size > 0:
+    res_img = run_mode_A(X_img_silver, img_gold_df.clean, X_img_gold,
+                         img_silver_df, img_gold_df, domain="image", apply_smote=False)
+    results.extend(res_img)
+
+# TEXT MODELS
+if mode in {"text", "both"}:
+    res_text = run_mode_A(X_text_silver, gold.clean, X_text_gold,
+                          silver_txt, gold, domain="text", apply_smote=True)
+    results.extend(res_text)
+
+# COMBINED MODELS (both text and image features)
+if mode == "both" and img_silver and img_silver.size > 0:
+    res_combined = run_mode_A(X_silver, gold_eval.clean, X_gold,
+                              silver_eval, gold_eval, domain="both", apply_smote=True)
+    results.extend(res_combined)
+```
+
+#### **Level 2: Domain-Specific Ensembles (`top_n`)**
+
+The `top_n` function creates optimized ensembles within each domain. While not called directly in the pipeline, it's used internally by `best_ensemble`:
+
+1. **Model Selection**:
+   - Ranks models by composite score (sum of 6 metrics)
+   - Selects top n models for ensemble
+
+2. **Model Preparation**:
+   - Reloads base models with `build_models()`
+   - Applies hyperparameter tuning or uses saved parameters
+   - Retrains on full training data
+   - Ensures probability predictions (adds calibration if needed)
+
+3. **Ensemble Creation**:
+   - Attempts soft voting with `VotingClassifier`
+   - Falls back to manual probability averaging if needed
+   - Uses `dynamic_ensemble()` for intelligent weighting
+
+4. **Post-Processing**:
+   - Applies rule-based verification
+   - Logs detailed performance metrics
+
+```python
+# Called internally by best_ensemble:
+# Select top models
+scored_models = []
+for r in available_models:
+    composite_score = (r["PREC"] + r["REC"] + r["ROC"] + 
+                       r["PR"] + r["F1"] + r["ACC"])
+    scored_models.append((r, composite_score))
+top_models = sorted(scored_models, key=lambda x: x[1], reverse=True)[:n]
+
+# Create ensemble with dynamic weighting
+prob = dynamic_ensemble(estimators, X_gold, gold, task=task)
+```
+
+#### **Level 3: Cross-Domain Blending (`best_two_domains`)**
+
+Used in Stage 4 to combine text and image models with optimized alpha blending:
+
+```python
+# Actual implementation in pipeline Stage 4:
+# Test different alpha values for optimal blending
+alpha_values = [0.25, 0.5, 0.75]
+
+for task in ("keto", "vegan"):
+    best_ensemble_result = None
+    best_f1 = -1
+    best_alpha = None
+    
+    for alpha in alpha_values:
+        result = best_two_domains(
+            task=task,
+            text_results=res_text,
+            image_results=res_img,
+            gold_df=img_gold_df,  # Use image gold df as it has the common indices
+            alpha=alpha
+        )
+        
+        if result and result['F1'] > best_f1:
+            best_f1 = result['F1']
+            best_alpha = alpha
+            best_ensemble_result = result
+```
+
+The function implements smart blending:
+- Finds best single model from each domain
+- Tests multiple alpha values (0.25, 0.5, 0.75)
+- Only blends for samples with both modalities
+- Applies rule verification
+
+#### **Level 4: Global Optimization (`best_ensemble`)**
+
+The most sophisticated ensemble method, used in Stage 5 in two ways:
+
+**1. Standard Ensemble Optimization** (for each domain):
+```python
+# From Stage 5 - finds optimal ensemble size within domain
+best_ens = best_ensemble(task, results, ens_X_silver, gold.clean,
+                         ens_X_gold, ens_silver_eval, gold)
+```
+
+**2. Cross-Domain Smart Blending** (when mode=="both"):
+```python
+# From Stage 5 - sophisticated text+image blending
+cross_result = best_ensemble(
+    task=task,
+    res=res_text,  # Text results as primary
+    X_vec=X_text_silver,
+    clean=gold.clean,
+    X_gold=X_text_gold,
+    silver=silver_txt,
+    gold=gold,
+    image_res=res_img,  # This enables smart text+image blending
+    alphas=(0.25, 0.5, 0.75)  # Alpha values for blending optimization
 )
 ```
 
-### Advanced Model Training Pipeline
+Key features:
+- **Exhaustive Size Search**: Tests ensemble sizes from 1 to max available models
+- **Smart Text+Image Handling**: When `image_res` provided, recursively optimizes both domains
+- **Composite Scoring**: Uses weighted average of 6 metrics for optimization
+- **Dynamic Feature Selection**: Uses appropriate features based on mode
+
+### Dynamic Weighting Strategy
+
+The `dynamic_ensemble` function (used within `top_n`) implements per-row adaptive weighting:
+
+```python
+def dynamic_ensemble(estimators, X_gold, gold, task):
+    # Detect text-only rows (no image available)
+    text_only_mask = gold.get("has_image", np.ones(len(X_gold), dtype=bool)) == False
+    
+    # Zero out image model weights for text-only rows
+    for i, (name, _) in enumerate(estimators):
+        is_image_model = "IMAGE" in name.upper()
+        row_weights = np.ones(len(X_gold))
+        if is_image_model:
+            row_weights[text_only_mask] = 0
+        weights.append(row_weights)
+    
+    # Normalize and compute weighted average
+    normalized_weights = weights / weights.sum(axis=0)
+    final_probs = (normalized_weights * probs).sum(axis=0)
+```
+
+### Actual Execution Flow in Pipeline
+
+The pipeline executes the hierarchical architecture across two main stages:
+
+#### **Stage 4: Model Training & Initial Ensembles**
+```python
+# 1. Train individual models (Level 1)
+if mode in {"image", "both"}: 
+    res_img = run_mode_A(..., domain="image")
+if mode in {"text", "both"}: 
+    res_text = run_mode_A(..., domain="text")
+
+# 2. Train combined models for "both" mode (Level 1)
+if mode == "both": 
+    res_combined = run_mode_A(..., domain="both")
+
+# 3. Create text+image ensemble with alpha optimization (Level 3)
+if mode == "both" and len(res_text) > 0 and len(res_img) > 0:
+    for alpha in [0.25, 0.5, 0.75]:
+        result = best_two_domains(task, res_text, res_img, img_gold_df, alpha)
+```
+
+#### **Stage 5: Advanced Ensemble Optimization**
+```python
+# 1. Standard ensemble optimization (Level 4, internally uses Level 2)
+for task in ["keto", "vegan"]:
+    best_ens = best_ensemble(task, results, X_silver, gold.clean,
+                             X_gold, silver_eval, gold)
+
+# 2. Cross-domain optimization for "both" mode (Level 4 with image_res)
+if mode == "both" and 'res_text' in locals() and 'res_img' in locals():
+    cross_result = best_ensemble(task, res=res_text, ..., 
+                                 image_res=res_img, alphas=(0.25, 0.5, 0.75))
+```
+
+### Advanced Training Pipeline Features
 
 The system implements **sophisticated ML training** with production-grade features:
 
@@ -279,47 +480,6 @@ HYPER = {
 - **Model-Specific Grids**: Optimized parameters per algorithm type
 - **Fallback Handling**: Graceful degradation to default parameters
 
-### Dynamic Ensemble Features
-
-The ensemble system implements a **4-level hierarchical architecture** with sophisticated optimizations:
-
-#### **Level 1: Individual Model Training**
-- 15+ diverse models across text/image/hybrid domains
-- Automatic probability calibration via `ensure_predict_proba()`
-- Cross-validation and composite metric scoring
-
-#### **Level 2: Domain-Specific Ensembles** 
-- **`top_n()`**: Creates optimal ensembles within each domain (text/image)
-- **Soft voting classifier** with fallback to manual probability averaging
-- **Composite scoring**: Weighted combination of 6 metrics (F1, Precision, Recall, ROC-AUC, PR-AUC, Accuracy)
-- **Greedy ensemble building**: Tests ensemble sizes 1→N for optimal configuration
-
-#### **Level 3: Cross-Domain Blending**
-- **`best_two_domains()`**: Blends best text ensemble with best image ensemble
-- **Alpha optimization**: Grid search over blending weights (0.25, 0.5, 0.75)
-- **Per-row dynamic weighting**: Image models get zero weight for text-only rows
-
-#### **Level 4: Global Optimization**
-- **`best_ensemble()`**: Exhaustive search across ensemble configurations
-- **Multi-objective optimization**: Balances performance vs complexity
-- **Intelligent fallbacks**: Handles missing modalities gracefully
-
-### Dynamic Weighting Strategy
-
-**Per-Row Adaptation:**
-```python
-def dynamic_ensemble(estimators, X_gold, gold, task):
-    # For each row individually:
-    if row.has_text and row.has_image:
-        weights = [0.6, 0.4]  # text_ensemble, image_ensemble
-    elif row.has_text_only:
-        weights = [1.0, 0.0]  # text_ensemble only
-    elif row.has_image_only:
-        weights = [0.0, 1.0]  # image_ensemble only
-    
-    return weighted_prediction(weights, ensembles)
-```
-
 ### Composite Scoring System
 
 Models ranked using weighted combination of 6 metrics:
@@ -333,6 +493,23 @@ Models ranked using weighted combination of 6 metrics:
 ```python
 composite_score = (F1 + Precision + Recall + ROC_AUC + PR_AUC + Accuracy) / 6
 ```
+
+### Performance Characteristics
+
+- **Level 1**: Trains 15+ diverse models across domains
+- **Level 2**: Creates optimized ensembles of top 3-5 models per domain
+- **Level 3**: Finds optimal text/image blending weight (typically improves F1 by 2-5%)
+- **Level 4**: Exhaustively searches ensemble configurations for global optimum
+
+### Advanced Features
+
+- **Intelligent Class Balancing**: SMOTE applied selectively based on imbalance ratio
+- **Probability Calibration**: Automatic addition of `CalibratedClassifierCV` when needed
+- **Rule Verification**: Post-processing with `verify_with_rules()` for domain constraints
+- **Alpha Optimization**: Grid search over blending weights for text+image combinations
+- **Comprehensive Logging**: Detailed progress tracking and performance metrics
+- **Memory Optimization**: Calls to `optimize_memory_usage()` between stages
+- **Fallback Handling**: Graceful degradation when models fail or data is missing
 
 ---
 
