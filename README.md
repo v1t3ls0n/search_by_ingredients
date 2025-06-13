@@ -32,12 +32,12 @@ cd search_by_ingredients_v1t3ls0n
 docker-compose up -d
 
 # 2. Test via CLI (classifiers are in the web container)
-docker exec -it search_by_ingredients_v1t3ls0n-web-1 python3 /app/web/diet_classifiers.py --ingredients "almond flour, eggs, butter"
+docker-compose exec web python3 /app/web/diet_classifiers.py --ingredients "almond flour, eggs, butter"
 
 # 3. View web interface  
 Open http://localhost:8080 in your browser
 
-# 4. The trained models are already included - no training needed!
+# 4. The trained models are already included - no training required!
 ```
 
 ---
