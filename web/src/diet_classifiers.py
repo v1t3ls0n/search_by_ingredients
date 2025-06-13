@@ -111,6 +111,7 @@ from rapidfuzz import process
 import pickle
 import os
 from pathlib import Path
+import time
 
 # --- Third-party: core ---
 import joblib
@@ -305,6 +306,19 @@ file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
 file_handler.setFormatter(formatter)
 log.addHandler(file_handler)
 
+# =============================================================================
+# GENERAL UTILITY FUNCTIONS
+# =============================================================================
+def safe_array_check(arr, condition_func):
+    """Safely check array conditions to avoid ambiguous truth value errors."""
+    try:
+        arr = np.asarray(arr)
+        return condition_func(arr)
+    except ValueError as e:
+        if "ambiguous" in str(e).lower():
+            log.warning(f"Array ambiguity detected, using element-wise check")
+            return condition_func(arr).any() if arr.size > 1 else condition_func(arr)
+        raise
 
 # =============================================================================
 # DATA LOADING AND DATASET MANAGEMENT
@@ -436,7 +450,7 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
         >>> valid_indices = _download_images(recipes_df, Path('./images'), max_workers=8)
         >>> print(f"Downloaded {len(valid_indices)} images")
     """
-    import time
+    
     import hashlib
     from collections import defaultdict, Counter
     from urllib.parse import urlparse
@@ -1001,11 +1015,9 @@ def load_datasets() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFr
         ValueError: If data validation fails
         RuntimeError: If critical errors occur during loading
     """
-    import time
+    
     import requests
-    from urllib.parse import urlparse
-    import warnings
-    from collections import Counter
+
 
     load_start = time.time()
 
@@ -2989,8 +3001,19 @@ def apply_smote(X, y, max_dense_size: int = int(5e7)):
         Tuple of (X_resampled, y_resampled)
     """
     try:
+        # Ensure y is a proper numpy array
+        y = np.asarray(y)
+        
+        # Get unique classes instead of bincount for length check
+        unique_classes = np.unique(y)
+
+        if len(unique_classes) < 2:
+            return X, y
+
         counts = np.bincount(y)
-        if len(counts) < 2:
+        ratio = float(counts.min()) / float(counts.sum())  # Explicit float conversion
+
+        if ratio < 2:
             return X, y
 
         ratio = counts.min() / counts.sum()
@@ -3253,7 +3276,7 @@ def tune(name: str, base: BaseEstimator, X, y, cv: int = CV) -> BaseEstimator:
     Returns:
         Fitted estimator with optimized hyperparameters
     """
-    import time
+    
     from itertools import product
 
     tune_start = time.time()
@@ -3467,7 +3490,7 @@ def tune_with_early_stopping(name: str,
         patience: Number of iterations without improvement before stopping
         min_improvement: Minimum improvement required to reset patience counter
     """
-    import time
+    
     from sklearn.model_selection import ParameterGrid
 
     if name in BEST:
@@ -3588,8 +3611,13 @@ def run_mode_A(
     Returns:
         List of result dictionaries with metrics and predictions
     """
-    import time
-    from datetime import datetime
+    
+    warnings.filterwarnings('ignore', message='.*truth value of an array.*')
+
+    # Ensure all arrays are properly formatted
+    if hasattr(X_silver, 'toarray'):
+        X_silver = X_silver.toarray() if X_silver.nnz < 1e6 else X_silver  # Keep sparse if large
+    
 
     # Initialize results and timing
     results: list[dict] = []
@@ -3641,9 +3669,10 @@ def run_mode_A(
                 log.warning(f"   ⚠️  Only one class present in {task} training data, skipping SMOTE")
                 X_train = X_silver
             else:
-                minority_ratio = min(np.bincount(y_train)) / len(y_train)
+                # Safe calculation of minority ratio
+                counts = np.bincount(y_train)
+                minority_ratio = float(np.min(counts)) / float(len(y_train))  # ✅ Fixed
                 log.info(f"   Minority class ratio: {minority_ratio:.1%}")
-
                 if minority_ratio < 0.4:
                     log.info(f"   🔄 Applying SMOTE (minority < 40%)...")
                     try:
@@ -3696,7 +3725,8 @@ def run_mode_A(
 
             try:
                 # Check for single-class case
-                if len(np.unique(y_train)) < 2:
+                unique_labels = np.unique(y_train)
+                if len(unique_labels) < 2:
                     log.warning(f"      ⚠️  {name}: Only one class in training data, skipping")
                     continue
 
@@ -3974,7 +4004,7 @@ def build_image_embeddings(df: pd.DataFrame,
         The function returns both embeddings and indices to maintain
         alignment with the original dataset after filtering.
     """
-    import time
+    
     import os
     from collections import defaultdict, Counter
     from PIL import ImageStat
@@ -4636,7 +4666,7 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
     Returns:
         Dictionary with ensemble results and metadata
     """
-    import time
+    
     import json
     import os
     from collections import defaultdict
@@ -5021,7 +5051,7 @@ def best_ensemble(
     Returns:
         Best ensemble configuration with results
     """
-    import time
+    
     from collections import Counter
 
     ensemble_start = time.time()
@@ -5416,7 +5446,7 @@ def run_full_pipeline(mode: str = "both",
     The function includes comprehensive error handling, memory optimization,
     and detailed progress tracking throughout all stages.
     """
-    import time
+    
     import gc
     from datetime import datetime
 
