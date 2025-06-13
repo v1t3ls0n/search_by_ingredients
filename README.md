@@ -121,8 +121,6 @@ Then our **dynamic top-N ensemble** greedily picks the best subset of these pred
 ### 🥑 Keto Models
 
 
----
-
 ### 🥑 **Keto Models** (Sorted by F1)
 
 | 🧠 Model         | 🎯 Task | ✅ Accuracy | 🎯 Precision | 🔁 Recall | 🏆 F1-Score | ⏱️ Time (s) |
@@ -140,7 +138,6 @@ Then our **dynamic top-N ensemble** greedily picks the best subset of these pred
 | 🐍 NB\_BOTH      | keto    | 0.865      | 0.955        | 0.778     | 0.857       | 0.2         |
 | 🧠 MLP\_IMAGE    | keto    | 0.750      | 0.938        | 0.556     | 0.698       | 119.8       |
 
----
 
 ### 🌱 **Vegan Models** (Sorted by F1)
 
@@ -163,7 +160,7 @@ Then our **dynamic top-N ensemble** greedily picks the best subset of these pred
 | 🐍 NB\_BOTH      | vegan   | 0.788      | 1.000        | 0.607     | 0.756       | 0.2         |
 | 🧠 MLP\_IMAGE    | vegan   | 0.596      | 1.000        | 0.250     | 0.400       | 100.6       |
 
----
+
 
 ## 🧠 Key Takeaways from Results
 
