@@ -1,5 +1,3 @@
-Here's the corrected README with only the features that are actually implemented in the code:
-
 # 🥑 Solution For Argmax's Search By Ingredients Challenge By **Guy Vitelson**
 
 ---
