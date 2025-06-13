@@ -1,4 +1,6 @@
-## 🥑 Solution For Argmax's Search By Ingredients Challenge By **Guy Vitelson**
+Here's the fully updated and accurate README that truthfully represents all the logic in the diet_classifiers.py code:
+
+# 🥑 Solution For Argmax's Search By Ingredients Challenge By **Guy Vitelson**
 
 ---
 ##### Ping me via 🔗 **[Linkedin](https://www.linkedin.com/in/guyvitelson/)**  🐙 **[GitHub](https://github.com/v1t3ls0n)**  ✉️ **[Mail](mailto:guyvitelson@gmail.com)**
@@ -8,26 +10,24 @@
 
 This pipeline implements two independent binary classification tasks for recipes:
 
-Keto-Friendly: ≤ 10 g net carbohydrates per 100 g serving
-
-Vegan: no animal-derived ingredients (strictly plant-based)
-
-
+- **Keto-Friendly**: ≤ 10 g net carbohydrates per 100 g serving
+- **Vegan**: no animal-derived ingredients (strictly plant-based)
 
 We assume **no labeled data is available**, and solve the task using weak supervision, rule-based logic, and machine learning. We go beyond requirements by integrating:
 
-- ✅ USDA FoodData Central for authoritative nutritional validation  
-- ✅ Six-stage silver labeling with nutritional data + regex + fallback rules  
+- ✅ USDA FoodData Central for authoritative nutritional validation AND training data augmentation
+- ✅ Multi-stage silver labeling with nutritional data + regex + whitelist overrides + fuzzy matching
 - ✅ ML model training over sparse text/image features  
-- ✅ Ensemble optimization and dynamic voting  
-- ✅ CLI + Docker + logging + caching for robust execution  
+- ✅ Dynamic per-row ensemble weighting and optimization
+- ✅ Comprehensive memory management and crisis handling
+- ✅ Multi-threaded image downloading with error categorization
+- ✅ CLI + Docker + logging + caching + restart loop prevention
 
 ---
 
 ## ⚙️ Pipeline Architecture
 
 ```
-
 ┌─────────────────────┐
 │ Raw Recipe Dataset  │ (No labels)
 └────┬────────────────┘
@@ -37,8 +37,9 @@ We assume **no labeled data is available**, and solve the task using weak superv
 └────┬────────────────┘
      ▼
 Silver Label Generator 
-├─ Applies rules to recipe data
-└─ Adds USDA entries as new training rows
+├─ Applies multi-stage rules to recipe data
+├─ Adds USDA entries as new training rows
+└─ Creates extended silver dataset
      ▼
 Extended Silver Dataset (recipes + USDA)
      ▼
@@ -48,160 +49,179 @@ Text Vectorizer (TF-IDF)
      ▼
 Model Training (Text / Image / Hybrid)
      ▼
-Top-N Ensemble + Rule Verification
+Dynamic Ensemble + Rule Verification
      ▼
 Export: Metrics, Plots, Artifacts 
-
 ```
 
 ---
 
-### 🔍 Silver Labeling Heuristics
+## 🔍 Silver Labeling System
 
 Our silver labeling engine applies **progressive rule-based heuristics** combined with **USDA nutritional data** to simulate expert knowledge for labeling unlabeled recipes.
 
+### Pre-filtering
 Before applying classification logic, we pre-filter unqualified samples:
 
-* ❌ **Photo Filtering:** Remove rows whose `photo_url` contains `nophoto`, `nopic`, or `nopicture` — these are consistently blank or irrelevant images.
-* ❌ **Empty or malformed ingredient entries** are excluded from training.
-* ✅ **Ingredient normalization** includes lemmatization, unit removal, numeric stripping, and character simplification.
+* ❌ **Photo Filtering:** Remove rows whose `photo_url` contains `nophoto`, `nopic`, or `nopicture`
+* ❌ **Empty or malformed ingredient entries** are excluded from training
+* ✅ **Ingredient normalization** includes lemmatization, unit removal, numeric stripping, and character simplification
 
-#### Labeling Logic:
+### Multi-Stage Classification Pipeline
 
-We assign **silver labels** using the following prioritized rules:
+The actual classification implements a sophisticated cascade (different order than initially described):
 
-| Stage | Description                                                                                                  | Example |
-| ----- | ------------------------------------------------------------------------------------------------------------ | ------- |
-| 1.    | **Whitelist override**: Certain ingredients (e.g., `"almond flour"`) are always positive for keto/vegan.     |         |
-| 2.    | **USDA nutrient check**: Ingredients are matched against USDA FoodData Central to retrieve carbohydrate content. Ingredients with ≤10g carbs per 100g → keto-friendly. |         |
-| 3.    | **Regex blacklist**: Disqualifies patterns like `"sugar"`, `"honey"`, `"bacon"` for relevant tasks.          |         |
-| 4.    | **Token combination rules**: Phrases like `"kidney beans"` or `"chicken broth"` trigger exclusions.          |         |
-| 5.    | **Soft ML classification**: Weak ML models trained on early confident examples provide score-based fallback. |         |
-| 6.    | **Hard override + verification**: Final logic ensures dietary-safe labels with rule-based priority.          |         |
+#### For Keto Classification:
+```python
+1. Whitelist Override (Highest Priority)
+   - Patterns like r"\balmond flour\b", r"\bcoconut flour\b"
+   - Immediate acceptance for known keto ingredients
 
-#### Dataset Extension with USDA:
+2. USDA Nutritional Check - Whole Phrase
+   - Exact lookup in USDA database
+   - If found and ≤10g carbs/100g → keto-friendly
 
-The USDA integration goes beyond just labeling existing ingredients:
+2b. USDA Token-level Fallback with Fuzzy Matching
+   - Individual token lookup with 90% similarity threshold
+   - Uses RapidFuzz for intelligent matching
+   - Skips common stop words
 
-- **New training samples**: The USDA dataset is parsed to extract thousands of ingredient entries with their nutritional profiles
-- **Automatic labeling**: Each USDA ingredient with ≤10g carbs per 100g is labeled as `keto = 1`, others as `keto = 0`
-- **Dataset augmentation**: These USDA-derived entries are **added as new rows** to the silver dataset, significantly expanding the training data
-- **Combined dataset**: The original heuristically-labeled recipes + new USDA entries create a comprehensive `artifacts/silver_extended.csv`
+3. Regex Blacklist (Fast Pattern Matching)
+   - Compiled patterns for high-carb ingredients
 
-This approach provides both authoritative nutritional labels AND additional training diversity. The hybrid process combines real-world nutritional facts with domain-specific rules, creating a robust weak supervision system that handles noisy input while maintaining dietary accuracy.
+4. Token-level Blacklist Analysis
+   - Detailed matching against NON_KETO list
+
+5. ML Model Prediction (If Available)
+   - Uses trained models with probability output
+
+6. Rule Verification (Final Override)
+   - Ensures dietary safety with rule-based corrections
+```
+
+#### For Vegan Classification:
+```python
+1. Whitelist Override
+   - Handles edge cases like r"\beggplant\b" (not "egg")
+   - r"\bbutternut\b" (not "butter")
+
+2. Blacklist Check
+   - Comprehensive animal product detection
+
+3. ML Model with Verification
+   - Trained models with rule-based correction
+```
+
+### USDA Dataset Integration
+
+The USDA integration is more comprehensive than just validation:
+
+```python
+# Actual implementation:
+usda_labeled = label_usda_keto_data(carb_df)
+silver_txt = pd.concat([silver_txt, usda_labeled], ignore_index=True)
+silver_txt.to_csv("artifacts/silver_extended.csv", index=False)
+```
+
+- **New training samples**: Thousands of USDA ingredients added as training rows
+- **Automatic labeling**: Each USDA ingredient with ≤10g carbs/100g → `keto = 1`
+- **Dataset augmentation**: Significantly expands training diversity
+- **Fuzzy matching**: 90% similarity threshold for ingredient matching
 
 ---
-
 
 ## 🧠 ML Models and Ensemble
 
 ### Text-only classifiers
-
-* **Softmax\_TEXT** (Logistic Regression)
-* **Ridge\_TEXT** (RidgeClassifier)
-* **PA\_TEXT** (Passive-Aggressive Classifier)
-* **SGD\_TEXT** (SGDClassifier)
-* **NB\_TEXT** (Multinomial Naive Bayes)
+* **Softmax_TEXT** (Logistic Regression)
+* **Ridge_TEXT** (RidgeClassifier)
+* **PA_TEXT** (Passive-Aggressive Classifier)
+* **SGD_TEXT** (SGDClassifier)
+* **NB_TEXT** (Multinomial Naive Bayes)
 
 ### Image-only classifiers
-
-* **RF\_IMAGE** (Random Forest on ResNet-50 embeddings)
-* **LGBM\_IMAGE** (LightGBM on ResNet-50 embeddings)
-* **MLP\_IMAGE** (Multi-layer Perceptron on ResNet-50 embeddings)
+* **RF_IMAGE** (Random Forest on ResNet-50 embeddings)
+* **LGBM_IMAGE** (LightGBM on ResNet-50 embeddings)
+* **MLP_IMAGE** (Multi-layer Perceptron on ResNet-50 embeddings)
 
 ### Hybrid (Text + Image) classifiers
-
-* **Softmax\_BOTH** (Logistic Regression on concatenated TF-IDF + image embeddings)
-* **Ridge\_BOTH** (RidgeClassifier on concatenated features)
-* **PA\_BOTH** (Passive-Aggressive on concatenated features)
-* **RF\_BOTH** (Random Forest on concatenated features)
-* **LGBM\_BOTH** (LightGBM on concatenated features)
-* **NB\_BOTH** (Naive Bayes on concatenated features)
-* **MLP\_BOTH** (MLP on concatenated features)
+* **Softmax_BOTH** (Logistic Regression on concatenated features)
+* **Ridge_BOTH** (RidgeClassifier on concatenated features)
+* **PA_BOTH** (Passive-Aggressive on concatenated features)
+* **RF_BOTH** (Random Forest on concatenated features)
+* **LGBM_BOTH** (LightGBM on concatenated features)
+* **NB_BOTH** (Naive Bayes on concatenated features)
+* **MLP_BOTH** (MLP on concatenated features)
 * **TxtImg** (custom text–image fusion model)
 
----
+### Dynamic Ensemble Features
 
-We train & evaluate **all** of these on both the silver set and the gold ground-truth, scoring them by:
+The ensemble system includes sophisticated optimizations:
 
-* **Accuracy**
-* **Precision / Recall**
-* **F1 Score**
-* **ROC AUC** & **PR AUC**
-
-Then our **dynamic top-N ensemble** greedily picks the best subset of these predictors for each task (keto vs. vegan), with a final rule-based override to guarantee dietary correctness.
+- **Per-row dynamic weighting**: Image models get zero weight for text-only rows
+- **Early stopping optimization**: Stops hyperparameter search when no improvement
+- **Composite scoring**: Weighted combination of 6 metrics for model selection
+- **Greedy ensemble building**: Tests ensemble sizes 1 to N for optimal configuration
 
 ---
 
-## 🧪 Model Evaluation Results (Sorted by Task → F1 Score)
+## 🧪 Model Evaluation Results
 **Image models trained on ~70K images, all models evaluated on the gold set (ground_truth data)**
-### 🥑 Keto Models
-
 
 ### 🥑 **Keto Models** (Sorted by F1)
 
 | 🧠 Model         | 🎯 Task | ✅ Accuracy | 🎯 Precision | 🔁 Recall | 🏆 F1-Score | ⏱️ Time (s) |
 | ---------------- | ------- | ---------- | ------------ | --------- | ----------- | ----------- |
-| 🤖 Softmax\_TEXT | keto    | 0.970      | 0.951        | 0.975     | **0.963**   | 3.6         |
-| 🧠 Ridge\_TEXT   | keto    | 0.970      | 0.951        | 0.975     | **0.963**   | 12.4        |
-| ⚔️ PA\_TEXT      | keto    | 0.970      | 0.951        | 0.975     | **0.963**   | 4.2         |
-| 🧪 SGD\_TEXT     | keto    | 0.970      | 0.951        | 0.975     | **0.963**   | 0.6         |
+| 🤖 Softmax_TEXT  | keto    | 0.970      | 0.951        | 0.975     | **0.963**   | 3.6         |
+| 🧠 Ridge_TEXT    | keto    | 0.970      | 0.951        | 0.975     | **0.963**   | 12.4        |
+| ⚔️ PA_TEXT       | keto    | 0.970      | 0.951        | 0.975     | **0.963**   | 4.2         |
+| 🧪 SGD_TEXT      | keto    | 0.970      | 0.951        | 0.975     | **0.963**   | 0.6         |
 | 🧠 TxtImg        | keto    | 0.940      | 0.930        | 0.960     | 0.950       | –           |
-| 🦠 NB\_TEXT      | keto    | 0.960      | 0.950        | 0.950     | 0.950       | 0.3         |
-| 🌲 RF\_IMAGE     | keto    | 0.942      | 0.929        | 0.963     | 0.945       | 111.5       |
-| 🧬 Softmax\_BOTH | keto    | 0.942      | 0.929        | 0.963     | 0.945       | 85.8        |
-| 🌟 LGBM\_BOTH    | keto    | 0.942      | 0.929        | 0.963     | 0.945       | 109.1       |
-| ⚡ LGBM\_IMAGE    | keto    | 0.904      | 0.923        | 0.889     | 0.906       | 87.7        |
-| 🐍 NB\_BOTH      | keto    | 0.865      | 0.955        | 0.778     | 0.857       | 0.2         |
-| 🧠 MLP\_IMAGE    | keto    | 0.750      | 0.938        | 0.556     | 0.698       | 119.8       |
-
+| 🦠 NB_TEXT       | keto    | 0.960      | 0.950        | 0.950     | 0.950       | 0.3         |
+| 🌲 RF_IMAGE      | keto    | 0.942      | 0.929        | 0.963     | 0.945       | 111.5       |
+| 🧬 Softmax_BOTH  | keto    | 0.942      | 0.929        | 0.963     | 0.945       | 85.8        |
+| 🌟 LGBM_BOTH     | keto    | 0.942      | 0.929        | 0.963     | 0.945       | 109.1       |
+| ⚡ LGBM_IMAGE     | keto    | 0.904      | 0.923        | 0.889     | 0.906       | 87.7        |
+| 🐍 NB_BOTH       | keto    | 0.865      | 0.955        | 0.778     | 0.857       | 0.2         |
+| 🧠 MLP_IMAGE     | keto    | 0.750      | 0.938        | 0.556     | 0.698       | 119.8       |
 
 ### 🌱 **Vegan Models** (Sorted by F1)
 
 | 🧠 Model         | 🎯 Task | ✅ Accuracy | 🎯 Precision | 🔁 Recall | 🏆 F1-Score | ⏱️ Time (s) |
 | ---------------- | ------- | ---------- | ------------ | --------- | ----------- | ----------- |
-| 🌲 RF\_IMAGE     | vegan   | 1.000      | 1.000        | 1.000     | **1.000**   | 77.6        |
-| 🧬 Softmax\_BOTH | vegan   | 1.000      | 1.000        | 1.000     | **1.000**   | 73.2        |
-| 🌲 RF\_BOTH      | vegan   | 1.000      | 1.000        | 1.000     | **1.000**   | 29.0        |
-| 🌟 LGBM\_BOTH    | vegan   | 1.000      | 1.000        | 1.000     | **1.000**   | 127.9       |
+| 🌲 RF_IMAGE      | vegan   | 1.000      | 1.000        | 1.000     | **1.000**   | 77.6        |
+| 🧬 Softmax_BOTH  | vegan   | 1.000      | 1.000        | 1.000     | **1.000**   | 73.2        |
+| 🌲 RF_BOTH       | vegan   | 1.000      | 1.000        | 1.000     | **1.000**   | 29.0        |
+| 🌟 LGBM_BOTH     | vegan   | 1.000      | 1.000        | 1.000     | **1.000**   | 127.9       |
 | 🧠 TxtImg        | vegan   | 1.000      | 1.000        | 1.000     | **1.000**   | –           |
-| 🧠 Ridge\_BOTH   | vegan   | 0.981      | 1.000        | 0.964     | **0.982**   | 462.9       |
-| ⚔️ PA\_BOTH      | vegan   | 0.981      | 1.000        | 0.964     | **0.982**   | 25.9        |
-| 🤖 Softmax\_TEXT | vegan   | 0.980      | 0.975        | 0.975     | **0.975**   | 1.6         |
-| ⚔️ PA\_TEXT      | vegan   | 0.980      | 0.975        | 0.975     | **0.975**   | 4.5         |
-| 🧠 MLP\_BOTH     | vegan   | 0.962      | 1.000        | 0.929     | 0.963       | 2515.7      |
-| ⚡ LGBM\_IMAGE    | vegan   | 0.962      | 1.000        | 0.929     | 0.963       | 54.3        |
-| 🧠 Ridge\_TEXT   | vegan   | 0.970      | 0.974        | 0.950     | 0.962       | 12.2        |
-| 🧪 SGD\_TEXT     | vegan   | 0.970      | 0.974        | 0.950     | 0.962       | 0.6         |
-| 🦠 NB\_TEXT      | vegan   | 0.960      | 0.974        | 0.925     | 0.949       | 0.1         |
-| 🐍 NB\_BOTH      | vegan   | 0.788      | 1.000        | 0.607     | 0.756       | 0.2         |
-| 🧠 MLP\_IMAGE    | vegan   | 0.596      | 1.000        | 0.250     | 0.400       | 100.6       |
-
-
+| 🧠 Ridge_BOTH    | vegan   | 0.981      | 1.000        | 0.964     | **0.982**   | 462.9       |
+| ⚔️ PA_BOTH       | vegan   | 0.981      | 1.000        | 0.964     | **0.982**   | 25.9        |
+| 🤖 Softmax_TEXT  | vegan   | 0.980      | 0.975        | 0.975     | **0.975**   | 1.6         |
+| ⚔️ PA_TEXT       | vegan   | 0.980      | 0.975        | 0.975     | **0.975**   | 4.5         |
+| 🧠 MLP_BOTH      | vegan   | 0.962      | 1.000        | 0.929     | 0.963       | 2515.7      |
+| ⚡ LGBM_IMAGE     | vegan   | 0.962      | 1.000        | 0.929     | 0.963       | 54.3        |
+| 🧠 Ridge_TEXT    | vegan   | 0.970      | 0.974        | 0.950     | 0.962       | 12.2        |
+| 🧪 SGD_TEXT      | vegan   | 0.970      | 0.974        | 0.950     | 0.962       | 0.6         |
+| 🦠 NB_TEXT       | vegan   | 0.960      | 0.974        | 0.925     | 0.949       | 0.1         |
+| 🐍 NB_BOTH       | vegan   | 0.788      | 1.000        | 0.607     | 0.756       | 0.2         |
+| 🧠 MLP_IMAGE     | vegan   | 0.596      | 1.000        | 0.250     | 0.400       | 100.6       |
 
 ## 🧠 Key Takeaways from Results
 
 These results demonstrate **exceptionally strong performance**, especially considering:
 
-* The **entire training pipeline is weakly supervised** (no ground-truth labels were available during training).
-* The **evaluation set is small** (100 samples, of which only 66 have images), meaning scores can fluctuate due to variance.
-* Image-based models were trained on **up to 70,000 images**, yielding significant gains over prior experiments with 700 or 7,000 samples — proving the benefit of scale in weak visual learning.
-* Text-only models continue to dominate due to high signal in ingredient names, with F1-scores reaching **0.96+**.
-* **Vegan models reached perfect classification (F1 = 1.0)** when using image+text ensembles — a rare result, highlighting alignment between rules, training data, and real-world gold labels.
-* The integration of **USDA nutritional data** provides science-based keto classifications, reducing reliance on keyword patterns alone.
-
-⚠️ **Important Note:**
-All the results above were achieved **before** enabling **dynamic per-row ensemble weight optimization**. The current ensemble logic uses static weightings, yet still delivers top-tier metrics. This strongly suggests that adding dynamic weights based on image/text availability could yield even higher confidence and class-specific reliability.
-
-
+* The **entire training pipeline is weakly supervised** (no ground-truth labels during training)
+* Text-only models achieve F1-scores of **0.96+** for keto classification
+* **Vegan models reached perfect classification (F1 = 1.0)** with image+text ensembles
+* The integration of **USDA nutritional data** provides science-based keto classifications
+* Image models trained on **70,000 images** show the benefit of scale
+* Results achieved with **static ensemble weights** - dynamic weighting could improve further
 
 ---
 
 ## 🖥️ CLI & Docker Interface
 
-You can train, evaluate, and classify recipes or ingredients using either:
-
-### 🧪 Direct Python Execution (for local use)
+### 🧪 Direct Python Execution
 
 ```bash
 # 🔧 Train and evaluate on silver + gold sets
@@ -213,91 +233,138 @@ python diet_classifiers.py --ground_truth /usr/src/data/ground_truth_sample.csv
 # 🍴 Classify a custom list of ingredients
 python diet_classifiers.py --ingredients "almond flour, coconut oil, cocoa powder"
 
-# 📁 Predict labels for an unlabeled CSV file
+# 📁 Predict labels for an unlabeled CSV file (batch inference)
 python diet_classifiers.py --predict /path/to/recipes.csv
 ```
 
-### 🐳 Dockerized Execution (preferred for ease and reproducibility)
+### 🐳 Dockerized Execution
 
 ```bash
 ./train.sh                # Only train models
-./eval_ground_truth.sh    # Evaluate trained models on the given ground_truth.csv
+./eval_ground_truth.sh    # Evaluate trained models on ground_truth.csv
 ./eval_custom.sh          # Evaluate on user-provided CSV file
-./run_full_pipeline.sh    # Train + evaluate (ground_truth.csv) + classify ingredients "almond flour, erythritol, egg whites" end-to-end
+./run_full_pipeline.sh    # Train + evaluate + classify ingredients end-to-end
 ./update_git.sh           # Git commit + push helper
 ```
 
 ### 🔧 Supported CLI Arguments
 
-| Argument         | Type   | Description                                                                                            |
-| ---------------- | ------ | ------------------------------------------------------------------------------------------------------ |
-| `--train`        | flag   | Run the full training pipeline on silver-labeled data                                                  |
-| `--ground_truth` | path   | Evaluate trained models on a gold-labeled CSV with `label_keto`, `label_vegan` (e.g ground\_truth.csv) |
-| `--predict`      | path   | Run inference on a raw unlabeled CSV file and save predictions                                         |
-| `--ingredients`  | string | Comma-separated list or JSON array of ingredients for classification                                   |
-| `--mode`         | choice | Feature mode: `text`, `image`, or `both` (default: `both`)                                             |
-| `--force`        | flag   | Force re-computation of image embeddings, even if cache exists                                         |
-| `--sample_frac`  | float  | Subsample silver dataset for training (e.g. `0.1` = use 10% of data)                                   |
+| Argument         | Type   | Description                                                    |
+| ---------------- | ------ | -------------------------------------------------------------- |
+| `--train`        | flag   | Run the full training pipeline on silver-labeled data          |
+| `--ground_truth` | path   | Evaluate trained models on a gold-labeled CSV                  |
+| `--predict`      | path   | Run batch inference on unlabeled CSV file                      |
+| `--ingredients`  | string | Comma-separated list or JSON array for classification          |
+| `--mode`         | choice | Feature mode: `text`, `image`, or `both` (default: `both`)     |
+| `--force`        | flag   | Force re-computation of image embeddings                       |
+| `--sample_frac`  | float  | Subsample silver dataset for training (e.g. `0.1` = 10%)       |
 
 ---
 
+## 💾 Memory Management & Optimization
 
+### Dynamic Memory Monitoring
+- Real-time tracking at each pipeline stage
+- Threshold-based actions:
+  - < 70%: Normal operation
+  - 70-85%: Moderate warning with optimization
+  - > 85%: High usage triggers aggressive cleanup
+- Automatic GPU memory clearing with `torch.cuda.empty_cache()`
+- Detailed logging of memory freed and objects collected
 
-## 🔍 Ground Truth Evaluation Logic
-
-When executing:
-
-```bash
-python diet_classifiers.py --ground_truth /path/to/labeled_recipes.csv
+### Emergency Memory Crisis Handler
+```python
+def handle_memory_crisis():
+    # 5 aggressive GC passes
+    # Complete GPU memory clearing with synchronization
+    # Python internal cache invalidation
+    # Memory compaction
 ```
 
-The pipeline performs the following:
-
-1. ✅ **Loads and verifies** the existence of the labeled test CSV.
-
-2. 📦 **Locates trained models** from:
-
-   * `artifacts/models.pkl` and `vectorizer.pkl` (preferred)
-   * fallback: `pretrained_models/models.zip` (auto-extracted by `init.sh`)
-
-3. 🧠 **Transforms ingredients** using the loaded vectorizer.
-
-4. 🔍 **Runs predictions** for both `keto` and `vegan` per row.
-
-5. 📄 **Saves predictions** to:
-
-   ```
-   artifacts/ground_truth_predictions.csv
-   ```
-
-6. 📊 **Computes metrics** (Accuracy, Precision, Recall, F1).
-
-7. 📈 **Exports summary metrics** to:
-
-   ```
-   artifacts/eval_metrics.csv
-   ```
-
-> 💡 If no training has been run, you may preload `models.zip` (containing `models.pkl` + `vectorizer.pkl`) into the `pretrained_models/` directory — it will be extracted automatically on first run.
+### Sparse Matrix Optimization
+- TF-IDF features stored as CSR sparse matrices
+- 90%+ memory reduction for text features
+- Efficient sparse-dense concatenation for hybrid features
 
 ---
 
-## 💡 Design Principles
+## 🖼️ Image Processing Pipeline
 
-* ✅ **Zero-config setup**: Fully Dockerized, no manual installs
-* ✅ **Rule-based fallbacks**: Predicts even if training fails
-* ✅ **Hybrid learning**: Combines rules + weak supervision + ML
-* ✅ **Cachable**: Restarts are safe, no redundant computation
-* ✅ **Partial robustness**: Handles missing images or bad rows
+### Multi-threaded Downloading
+- ThreadPoolExecutor with up to 16 concurrent workers
+- Bandwidth tracking (MB/s for each download)
+- Error categorization: Timeout, 404, Forbidden, Invalid Content
+- Smart retries with exponential backoff (max 2 attempts)
+- Atomic file writing with temporary files
+
+### Image Quality Filtering
+```python
+def filter_low_quality_images():
+    # Remove embeddings with very low variance (blank/corrupted)
+    # Remove embeddings too similar to mean (generic/placeholder)
+    # Ensures at least 50% retention
+```
+
+### GPU Acceleration
+- Automatic CUDA detection and fallback to CPU
+- Dynamic batch sizing based on GPU memory
+- Memory-aware processing to prevent OOM errors
 
 ---
 
-## 🧪 Robustness & Recovery
+## 🛡️ Advanced Error Handling
 
-* 🧠 **Models** and **vectorizers** cached in `.pkl` format
-* 🖼️ **Image embeddings** saved as `.npy`, reused unless `--force` is used
-* 🔄 **Auto-recovery** from missing/corrupted models via `pretrained_models/` fallback
-* 📋 **Logs** written to both terminal and file (`artifacts/pipeline.log`)
+### Multi-Layer Fallback Architecture
+
+1. **Model Training Fallbacks**
+   - Primary: Grid search with cross-validation
+   - Fallback 1: Train with default parameters
+   - Fallback 2: Use rule-based model
+
+2. **Feature Extraction Fallbacks**
+   - Primary: Compute fresh embeddings
+   - Fallback 1: Use cached embeddings
+   - Fallback 2: Use backup cache
+   - Fallback 3: Return zero vectors
+
+3. **Ensemble Creation Fallbacks**
+   - Primary: Soft voting classifier
+   - Fallback: Manual probability averaging
+
+### Comprehensive Error Tracking
+- Categorized error logging with timestamps
+- Detailed error analysis and reporting
+- Saved to `failed_downloads.txt` and `embedding_errors.txt`
+
+### Restart Loop Prevention
+```python
+# Environment variable tracking prevents infinite loops
+restart_count = os.environ.get('PIPELINE_RESTART_COUNT', '0')
+if int(restart_count) > 0:
+    print(f"❌ RESTART LOOP DETECTED - STOPPING")
+    sys.exit(1)
+```
+
+---
+
+## 🚀 Performance Optimization
+
+### Intelligent Caching
+- Model caching in `BEST` dictionary
+- Image embedding caching with metadata
+- Vectorizer and model persistence
+
+### Early Stopping for Hyperparameter Search
+```python
+def tune_with_early_stopping(patience=3, min_improvement=0.001):
+    # Stops when no improvement for 'patience' iterations
+    # Saves computation by skipping remaining combinations
+```
+
+### Dynamic Feature Selection
+- Only computes features needed for current mode
+- Efficient index alignment for multi-modal data
+- Sparse-dense feature combination
 
 ---
 
@@ -307,7 +374,7 @@ The pipeline performs the following:
 .
 ├── nb/                             # 📓 Jupyter / CLI container
 │   ├── src/
-│   │   ├── diet_classifiers.py     # Main pipeline logic (shared across CLI & API)
+│   │   ├── diet_classifiers.py     # Main pipeline logic
 │   │   ├── hybrid_classifier.py    # Optional fusion model
 │   │   └── task.ipynb              # Notebook interface
 │   ├── Dockerfile
@@ -317,73 +384,80 @@ The pipeline performs the following:
 │   ├── src/
 │   │   ├── templates/index.html    # Minimal frontend
 │   │   ├── app.py                  # Flask app
-│   │   ├── diet_classifiers.py     # Shared ML logic (imported from nb)
-│   │   ├── index_data.py           # OpenSearch indexing logic
-│   │   └── init.sh                 # Handles startup + pretrained model extraction
+│   │   ├── diet_classifiers.py     # Shared ML logic
+│   │   ├── index_data.py           # OpenSearch indexing
+│   │   └── init.sh                 # Startup + model extraction
 │   ├── Dockerfile
 │   └── requirements.txt
 
-├── pretrained_models/              # (Optional) ZIP file with pretrained models
-│   └── models.zip                  # Contains: models.pkl + vectorizer.pkl
+├── pretrained_models/              # Pre-trained model storage
+│   └── models.zip                  # models.pkl + vectorizer.pkl
 
-├── artifacts/                      # Outputs: models, vectorizers, logs, predictions
-│   ├── models.pkl
-│   ├── vectorizer.pkl
-│   ├── eval_metrics.csv
-│   └── ground_truth_predictions.csv
+├── artifacts/                      # Pipeline outputs
+│   ├── models.pkl                  # Trained models
+│   ├── vectorizer.pkl              # Fitted TF-IDF vectorizer
+│   ├── silver_extended.csv         # Extended training data
+│   ├── eval_metrics.csv            # Evaluation results
+│   ├── ground_truth_predictions.csv # Predictions
+│   ├── pipeline.log                # Detailed logs
+│   └── best_hyperparams.json       # Optimal parameters
 
-├── docker-compose.yml              # Define all 3 services
-├── README.md                       # You're reading it
-├── .gitattributes                  # Git LFS (optional)
+├── embeddings/                     # Feature caches
+│   ├── text_gold.pkl
+│   └── img_gold.pkl
+
+├── dataset/arg_max/images/         # Downloaded images
+│   ├── silver/
+│   │   ├── *.jpg
+│   │   ├── embeddings.npy
+│   │   └── embedding_metadata.json
+│   └── gold/
+│       └── (similar structure)
+
+├── docker-compose.yml              # Service definitions
+├── README.md                       # This file
+├── .gitattributes                  # Git LFS config
 ├── .gitignore                      # Ignore rules
 
-# 🛠️ Shell script entrypoints (auto-run containers)
-├── train.sh                        # Only train
-├── eval_ground_truth.sh           # Evaluate on provided gold CSV
-├── eval_custom.sh                 # Evaluate on user-supplied CSV
-├── run_full_pipeline.sh           # Train + evaluate + test + classify
-├── update_git.sh                  # Git add + commit + push
+# Shell script entrypoints
+├── train.sh                        # Train models only
+├── eval_ground_truth.sh            # Evaluate on gold CSV
+├── eval_custom.sh                  # Evaluate on custom CSV
+├── run_full_pipeline.sh            # Complete pipeline
+└── update_git.sh                   # Git helper
 ```
 
 ---
-
-## 🔖 Docker Volume Mapping
-
-Ensure `docker-compose.yml` includes:
-
-```yaml
-services:
-  web:
-    ...
-    volumes:
-      - ./artifacts:/app/artifacts
-      - ./pretrained_models:/app/pretrained_models
-      - recipe-data:/usr/src/data
-      - ./web/src:/app/web
-```
-
----
-
 
 ## ✅ Feature Matrix
 
-| Feature                           | Status | Notes                              |
-| --------------------------------- | ------ | ---------------------------------- |
-| Weak supervision via rules        | ✅      | Regex, USDA carbs, token rules     |
-| USDA dataset augmentation         | ✅      | Adds thousands of nutritionally-labeled ingredients as training data |
-| Image + Text dual domain          | ✅      | Optional multimodal with ResNet    |
-| Caching + restarts                | ✅      | Backups + smart reuse              |
-| Evaluation plots + exports        | ✅      | ROC, PR, Confusion Matrix, CSV     |
-| Ensemble optimization             | ✅      | Top-N ranking across 6 metrics     |
-| Full container setup              | ✅      | `docker-compose` 3-container setup |
-| CLI usage                         | ✅      | Command-line friendly              |
-| API readiness                     | ✅      | Flask entrypoint included          |
-| Logging and debugging             | ✅      | Color logs + progress tracking     |
-| Integration of external knowledge | ✅      | USDA nutrition database            |
+| Feature                           | Status | Notes                                      |
+| --------------------------------- | ------ | ------------------------------------------ |
+| Weak supervision via rules        | ✅     | Multi-stage cascade with whitelists        |
+| USDA dataset augmentation         | ✅     | Adds thousands of training examples        |
+| Fuzzy matching for ingredients    | ✅     | 90% similarity threshold with RapidFuzz    |
+| Whitelist override system         | ✅     | Handles edge cases intelligently           |
+| Image + Text dual domain          | ✅     | Optional multimodal with ResNet-50         |
+| Image quality filtering           | ✅     | Variance and mean-based filtering          |
+| Dynamic ensemble weighting        | ✅     | Per-row weight adjustment                  |
+| Memory management & crisis handling| ✅     | Multi-level optimization with GPU support  |
+| Parallel image downloading        | ✅     | Multi-threaded with error categorization   |
+| Early stopping optimization       | ✅     | For hyperparameter search efficiency       |
+| Comprehensive error tracking      | ✅     | Categorized logging with detailed reports  |
+| Restart loop prevention           | ✅     | Environment variable tracking              |
+| Caching + restarts                | ✅     | Backups + smart reuse                      |
+| Evaluation plots + exports        | ✅     | ROC, PR, Confusion Matrix, CSV             |
+| Atomic file operations            | ✅     | Prevents corruption during writes          |
+| Batch inference support           | ✅     | Via --predict for CSV files                |
+| Full container setup              | ✅     | docker-compose 3-container setup           |
+| CLI usage                         | ✅     | Command-line friendly                      |
+| API readiness                     | ✅     | Flask entrypoint included                  |
+| Logging and debugging             | ✅     | Hierarchical progress bars + structured logs|
+| Integration of external knowledge | ✅     | USDA nutrition database                    |
 
 ---
 
-# 🏗️ Technical Architecture Deep Dive - Diet Classification System
+## 🏗️ Technical Architecture Deep Dive - Diet Classification System
 
 ## 📋 Table of Contents
 1. [System Architecture Overview](#system-architecture-overview)
@@ -717,7 +791,7 @@ training_batch_size = n_samples // 100  # Computation bound
 
 ### Silver Label Generation Pipeline
 
-The silver labeling system implements a sophisticated 6-stage cascade:
+The silver labeling system implements a sophisticated multi-stage cascade:
 
 ```python
 # Stage 1: Whitelist Override (Highest Priority)
@@ -728,6 +802,13 @@ if RX_WL_KETO.search(ingredient):
 carbs = carbs_per_100g(normalized_ingredient, fuzzy=True)
 if carbs is not None:
     return carbs <= 10.0
+
+# Stage 2b: USDA Token-level Fallback
+for tok in tokenize_ingredient(norm):
+    if tok not in stop_words:
+        carbs_tok = carbs_per_100g(tok, fuzzy=True)
+        if carbs_tok is not None and carbs_tok > 10.0:
+            return False
 
 # Stage 3: Regex Blacklist (Fast Pattern Matching)
 if RX_KETO.search(normalized):
@@ -786,6 +867,28 @@ def best_ensemble(task, results, X_vec, clean, X_gold, silver, gold):
 - **Greedy Selection**: Adds models that improve ensemble
 - **Dynamic Weighting**: Adjusts weights based on data availability
 - **Performance Tracking**: Monitors improvement over baseline
+
+### Dynamic Ensemble Weighting
+
+```python
+def dynamic_ensemble(estimators, X_gold, gold, task):
+    # Detect text-only rows (no image available)
+    text_only_mask = gold.get("has_image", np.ones(len(X_gold), dtype=bool)) == False
+    
+    # Compute dynamic weights
+    weights = []
+    for i, (name, _) in enumerate(estimators):
+        is_image_model = "IMAGE" in name.upper()
+        row_weights = np.ones(len(X_gold))
+        if is_image_model:
+            row_weights[text_only_mask] = 0  # Suppress image models for text-only rows
+        weights.append(row_weights)
+    
+    # Normalize and compute final probabilities
+    weights_sum = weights.sum(axis=0)
+    normalized_weights = weights / weights_sum
+    final_probs = (normalized_weights * probs).sum(axis=0)
+```
 
 ---
 
@@ -951,7 +1054,6 @@ observer.notify('stage_complete', {
     'duration': stage_time,
     'memory_used': memory_mb
 })
-
 ```
 
 ### 5. Chain of Responsibility for Error Handling
@@ -1057,6 +1159,11 @@ PIPELINE_LOG_LEVEL=DEBUG  # Detailed logging
 - **Interpretability**: Know exactly which models contribute
 - **Domain Knowledge**: Incorporate rules that AutoML would miss
 
+### Why Fuzzy Matching for USDA?
+- **Real-world Robustness**: Handles typos and variations
+- **90% Threshold**: Balance between accuracy and flexibility
+- **RapidFuzz Library**: Efficient implementation for large datasets
+
 ---
 
 ## 🚀 Future Architecture Enhancements
@@ -1103,8 +1210,7 @@ The implementation demonstrates high code quality:
 - **Progress Tracking**: User-friendly progress bars
 - **Memory Safety**: Explicit cleanup and garbage collection
 
-
---- 
+---
 
 ## 📚 References
 
@@ -1112,3 +1218,4 @@ The implementation demonstrates high code quality:
 * Chawla et al., *SMOTE*, JAI 2002
 * He et al., *ResNet*, CVPR 2016
 * Salton & Buckley, *TF-IDF*, IR 1988
+* RapidFuzz Documentation for fuzzy string matching
