@@ -265,11 +265,11 @@ python diet_classifiers.py --predict /path/to/recipes.csv
 ### 🐳 Dockerized Execution
 
 ```bash
-./train.sh                # Only train models
-./eval_ground_truth.sh    # Evaluate trained models on ground_truth.csv
-./eval_custom.sh          # Evaluate on user-provided CSV file
-./run_full_pipeline.sh    # Train + evaluate (on given ground_truth.csv) + classify ingredients (on toy list "almond flour, erythritol, egg whites") end-to-end
-./update_git.sh           # Git commit + push helper
+scripts/train.sh                # Only train models
+scripts/eval_ground_truth.sh    # Evaluate trained models on ground_truth.csv
+scripts/eval_custom.sh          # Evaluate on user-provided CSV file
+scripts/run_full_pipeline.sh    # Train + evaluate (on given ground_truth.csv) + classify ingredients (on toy list "almond flour, erythritol, egg whites") end-to-end
+scripts/update_git.sh           # Git commit + push helper
 ```
 
 ### 🔧 Supported CLI Arguments
@@ -470,6 +470,7 @@ artifacts/
 ##### 📜 Execution Scripts
 *Shell wrappers that invoke `diet_classifiers.py`*
 ```
+scripts/
 ├── train.sh                      # Calls diet_classifiers.py --train
 ├── eval_ground_truth.sh          # Calls diet_classifiers.py --eval
 ├── eval_custom.sh                # Calls diet_classifiers.py --eval-custom
