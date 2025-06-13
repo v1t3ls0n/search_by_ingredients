@@ -27,15 +27,15 @@ We assume **no labeled data is available**, and solve the task using weak superv
 
 ```bash
 # 1. Clone and run
-git clone [your-repo]
-cd [your-repo]
+git clone https://github.com/v1t3ls0n/search_by_ingredients_v1t3ls0n.git
+cd search_by_ingredients_v1t3ls0n
 docker-compose up -d
 
 # 2. Test via CLI (classifiers are in the web container)
-docker exec -it search_by_ingredients_v1t3ls0n-web-1 python3 web/diet_classifiers.py --ingredients "almond flour, eggs, butter"
+docker exec -it search_by_ingredients_v1t3ls0n-web-1 python3 /app/web/diet_classifiers.py --ingredients "almond flour, eggs, butter"
 
 # 3. View web interface  
-Open http://localhost:5000 in your browser
+Open http://localhost:8080 in your browser
 
 # 4. The trained models are already included - no training needed!
 ```
