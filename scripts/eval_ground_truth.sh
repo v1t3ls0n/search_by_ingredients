@@ -1,23 +1,43 @@
-#!/bin/bash
+
+# ============================================
+# eval_ground_truth.sh
+# ============================================
+
+#!/usr/bin/env bash
 
 # ────────────────────────────────────────────────
-# 🚀 Run end-to-end prediction on gold set via Docker
+# 🚀 Evaluate pre-trained models on gold set via Docker
 # By Guy Vitelson
+# 
+# Note: Assumes models are already trained
+# Run train.sh first if models don't exist
 # ────────────────────────────────────────────────
 
-set -e
+set -euo pipefail
 
 echo "📦 Building and launching containers..."
 docker-compose up -d --build
 
 echo "⏳ Waiting for containers to be ready..."
-sleep 10  # Adjust if your services need more time to boot
+sleep 5
 
-# Optional: Show container status
-docker ps | grep v1t3ls0n
+# Check if models exist
+echo "🔍 Checking for pre-trained models..."
+if docker-compose exec web test -f /app/artifacts/models.pkl; then
+    echo "✅ Found pre-trained models"
+else
+    echo "⚠️  No pre-trained models found. Run train.sh first or use run_full_pipeline.sh"
+    echo "❓ Continue anyway? (y/n)"
+    read -r response
+    if [[ ! "$response" =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
+fi
 
-echo "🧠 Running prediction on gold set (ground_truth)..."
-docker exec -it search_by_ingredients_v1t3ls0n-web-1 \
-    python3 web/diet_classifiers.py --ground_truth /usr/src/data/ground_truth_sample.csv
+echo "🧠 Running evaluation on gold set..."
+docker-compose exec web python3 /app/web/diet_classifiers.py \
+    --ground_truth /app/data/ground_truth_sample.csv
 
-echo "✅ Done. Check logs above for prediction results."
+echo "✅ Evaluation complete!"
+echo "📊 Check logs above for results"
+echo "📄 Predictions saved to: /app/artifacts/ground_truth_predictions.csv"

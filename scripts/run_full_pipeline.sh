@@ -1,37 +1,58 @@
 #!/usr/bin/env bash
+# ============================================
+# run_full_pipeline.sh
+# ============================================
 
 # ───────────────────────────────────────────────────────────────
 # 🎯 End-to-End ML Pipeline Runner (inside Docker)
 # By Guy Vitelson
 #
 # - Builds Docker containers
-# - Trains models on silver labels
+# - Trains models on silver labels (uses cached embeddings if available)
 # - Evaluates on gold-standard CSV
 # - Classifies a test ingredient list
 #
 # Usage:
-#   ./run_full_pipeline.sh
+#   ./run_full_pipeline.sh [--force]  # --force to recompute embeddings
 # ───────────────────────────────────────────────────────────────
 
 set -euo pipefail
 
-echo "🛠️  Building Docker images..."
-docker compose build
+# Check for --force flag
+FORCE_FLAG=""
+if [ "${1:-}" = "--force" ]; then
+    FORCE_FLAG="--force"
+    echo "🔄 Force flag detected - will recompute embeddings"
+fi
 
-echo "🐳 Launching container to run the pipeline..."
-docker compose run web bash -c '
+echo "🛠️  Building Docker images..."
+docker-compose build
+
+echo "🚀 Starting services..."
+docker-compose up -d
+
+# Wait for services to be ready
+echo "⏳ Waiting for services to initialize..."
+sleep 5
+
+echo "🐳 Running full pipeline..."
+docker-compose exec web bash -c "
     set -euo pipefail
-    echo "📦 Ensuring Python deps are present (image should already have them)..."
+    
+    echo '📦 Verifying Python dependencies...'
     pip install -r requirements.txt --quiet || true
 
-    echo "🧠 Training and evaluating text and image classifiers on 100% of the data (sample_frac=1.0)…"
-    python web/diet_classifiers.py --train --mode both --sample_frac 1.0
+    echo '🧠 Training classifiers on 100% of the data...'
+    echo '📝 Note: Will use cached embeddings if available (add --force to recompute)'
+    python3 /app/web/diet_classifiers.py --train --mode both $FORCE_FLAG
 
-    echo "🧪 Evaluating on provided gold set..."
-    python web/diet_classifiers.py --ground_truth /app/data/ground_truth_sample.csv
+    echo '🧪 Evaluating on provided gold set...'
+    python3 /app/web/diet_classifiers.py --ground_truth /app/data/ground_truth_sample.csv
 
-    echo "🥘 Classifying custom ingredient list..."
-    python web/diet_classifiers.py --ingredients "almond flour, erythritol, egg whites"
-'
+    echo '🥘 Classifying custom ingredient list...'
+    python3 /app/web/diet_classifiers.py --ingredients 'almond flour, erythritol, egg whites'
+"
 
-echo "✅  All done!"
+echo "✅ Pipeline complete!"
+echo "📊 Results saved to /app/artifacts/"
+echo "💡 View logs: docker-compose logs -f web"
