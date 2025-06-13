@@ -447,7 +447,7 @@ pretrained_models/
 ```
 
 #### 📊 **Pipeline Artifacts** (`artifacts/`)
-*Initially empty - populated by `diet_classifiers.py` during execution*
+*Created by `diet_classifiers.py` during execution*
 
 ```
 artifacts/
