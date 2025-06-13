@@ -2912,18 +2912,27 @@ def filter_photo_rows(df: pd.DataFrame) -> pd.DataFrame:
 def filter_silver_by_downloaded_images(silver_df: pd.DataFrame, image_dir: Path) -> pd.DataFrame:
     """
     Keep only rows in silver that have corresponding downloaded image files.
-
-    Ensures alignment between the silver dataset and actually available images.
-
-    Args:
-        silver_df: Silver label DataFrame
-        image_dir: Directory containing downloaded images
-
-    Returns:
-        Filtered DataFrame with only rows that have images
     """
-    downloaded_ids = [int(p.stem)
-                      for p in (image_dir / "silver").glob("*.jpg")]
+    silver_img_dir = image_dir / "silver"
+    
+    # Check if directory exists
+    if not silver_img_dir.exists():
+        log.warning(f"Image directory does not exist: {silver_img_dir}")
+        return silver_df.iloc[0:0].copy()  # Return empty DataFrame
+    
+    # Get list of downloaded image files
+    downloaded_ids = []
+    for p in silver_img_dir.glob("*.jpg"):
+        try:
+            downloaded_ids.append(int(p.stem))
+        except ValueError:
+            continue  # Skip non-numeric filenames
+    
+    if not downloaded_ids:
+        log.warning(f"No downloaded images found in {silver_img_dir}")
+        return silver_df.iloc[0:0].copy()
+    
+    # Return rows that have downloaded images
     return silver_df.loc[silver_df.index.intersection(downloaded_ids)].copy()
 
 
@@ -5818,31 +5827,44 @@ def run_full_pipeline(mode: str = "both",
 
             # Enhanced filtering logic with better error handling
             img_pbar.set_description("   ├─ Filtering by downloads")
-
+            
             # Silver image filtering
             if silver_downloaded:
                 try:
-                    img_silver_df = filter_silver_by_downloaded_images(
-                        silver_img, CFG.image_dir)
+                    # Use the indices that were actually downloaded
+                    img_silver_df = silver_img.loc[silver_img.index.intersection(silver_downloaded)].copy()
+                    
                     if img_silver_df.empty:
-                        log.warning(
-                            f"      ⚠️  Silver filtering resulted in empty DataFrame")
-                        # Fallback: use original indices from downloads
-                        img_silver_df = silver_img.loc[silver_downloaded].copy(
-                        )
-
-                    log.info(
-                        f"      ├─ Silver filtered: {len(img_silver_df):,} with valid images")
+                        log.warning(f"      ⚠️  Silver filtering resulted in empty DataFrame")
+                        img_silver_df = pd.DataFrame()
+                    else:
+                        log.info(f"      ├─ Silver filtered: {len(img_silver_df):,} with valid images")
+                        
                 except Exception as e:
                     log.error(f"      ❌ Silver filtering failed: {e}")
-                    # Fallback to original silver_img subset
-                    img_silver_df = silver_img.loc[silver_downloaded].copy(
-                    ) if silver_downloaded else pd.DataFrame()
-                    log.info(
-                        f"      ├─ Silver fallback: {len(img_silver_df):,} images")
+                    img_silver_df = pd.DataFrame()
             else:
                 img_silver_df = pd.DataFrame()
                 log.info(f"      ├─ Silver filtered: Empty (no downloads)")
+
+            # Gold image filtering  
+            if gold_downloaded:
+                try:
+                    # Use the indices that were actually downloaded
+                    img_gold_df = gold_img.loc[gold_img.index.intersection(gold_downloaded)].copy()
+                    
+                    if img_gold_df.empty:
+                        log.warning(f"      ⚠️  Gold filtering resulted in empty DataFrame")
+                        img_gold_df = pd.DataFrame()
+                    else:
+                        log.info(f"      ├─ Gold filtered: {len(img_gold_df):,} with valid images")
+                        
+                except Exception as e:
+                    log.error(f"      ❌ Gold filtering failed: {e}")
+                    img_gold_df = pd.DataFrame()
+            else:
+                img_gold_df = pd.DataFrame()
+                log.info(f"      ├─ Gold filtered: Empty (no downloads)")
 
             # Gold image filtering
             if gold_downloaded:
@@ -5978,59 +6000,69 @@ def run_full_pipeline(mode: str = "both",
             img_pbar.update(1)
 
         # Enhanced dimension verification with detailed logging
-        if img_silver.size > 0 or img_gold.size > 0:
+        if (img_silver is not None and img_silver.size > 0) or (img_gold is not None and img_gold.size > 0):
             log.info(f"   🔍 DIMENSION VERIFICATION:")
-            log.info(f"   ├─ Silver embeddings: {img_silver.shape}")
-            log.info(f"   ├─ Silver DataFrame: {len(img_silver_df):,} rows")
-            log.info(f"   ├─ Gold embeddings: {img_gold.shape}")
-            log.info(f"   └─ Gold DataFrame: {len(img_gold_df):,} rows")
-
-            # Robust dimension checking
-            alignment_errors = []
-
-            if img_silver.size > 0:
+            
+            # Check silver dimensions
+            if img_silver is not None and img_silver.size > 0:
+                log.info(f"   ├─ Silver embeddings: {img_silver.shape}")
+                log.info(f"   ├─ Silver DataFrame: {len(img_silver_df):,} rows")
+                
+                # Fix dimension mismatch
                 if img_silver.shape[0] != len(img_silver_df):
-                    alignment_errors.append(
-                        f"Silver: {img_silver.shape[0]} != {len(img_silver_df)}")
-
-            if img_gold.size > 0:
+                    log.warning(f"   ⚠️  Silver dimension mismatch: {img_silver.shape[0]} != {len(img_silver_df)}")
+                    
+                    # Option 1: If embeddings has more rows, truncate
+                    if img_silver.shape[0] > len(img_silver_df):
+                        img_silver = img_silver[:len(img_silver_df)]
+                        log.info(f"   ├─ Truncated embeddings to match DataFrame")
+                    
+                    # Option 2: If DataFrame has more rows, filter it
+                    else:
+                        # Get the first N indices where N = number of embeddings
+                        valid_indices = img_silver_df.index[:img_silver.shape[0]]
+                        img_silver_df = img_silver_df.loc[valid_indices]
+                        log.info(f"   ├─ Filtered DataFrame to match embeddings")
+            
+            # Check gold dimensions
+            if img_gold is not None and img_gold.size > 0:
+                log.info(f"   ├─ Gold embeddings: {img_gold.shape}")
+                log.info(f"   └─ Gold DataFrame: {len(img_gold_df):,} rows")
+                
+                # Fix dimension mismatch
                 if img_gold.shape[0] != len(img_gold_df):
-                    alignment_errors.append(
-                        f"Gold: {img_gold.shape[0]} != {len(img_gold_df)}")
-
-            if alignment_errors:
-                log.warning(f"   ⚠️  Dimension mismatches detected:")
-                for error in alignment_errors:
-                    log.warning(f"      ├─ {error}")
-                log.warning(
-                    f"   └─ Proceeding with available data (may cause issues downstream)")
-            else:
-                log.info(f"   ✅ All dimensions verified!")
+                    log.warning(f"   ⚠️  Gold dimension mismatch: {img_gold.shape[0]} != {len(img_gold_df)}")
+                    
+                    if img_gold.shape[0] > len(img_gold_df):
+                        img_gold = img_gold[:len(img_gold_df)]
+                        log.info(f"   ├─ Truncated embeddings to match DataFrame")
+                    else:
+                        valid_indices = img_gold_df.index[:img_gold.shape[0]]
+                        img_gold_df = img_gold_df.loc[valid_indices]
+                        log.info(f"   ├─ Filtered DataFrame to match embeddings")
 
         # Convert to sparse matrices for memory efficiency
         try:
-            if img_silver.size > 0:
+            if img_silver is not None and img_silver.size > 0:
                 X_img_silver = csr_matrix(img_silver)
-                log.debug(
-                    f"      ├─ Silver sparse matrix: {X_img_silver.shape}")
+                log.debug(f"      ├─ Silver sparse matrix: {X_img_silver.shape}")
             else:
-                X_img_silver = csr_matrix((0, 2048))
-                log.debug(
-                    f"      ├─ Silver empty sparse matrix: {X_img_silver.shape}")
+                # Empty sparse matrix
+                X_img_silver = None
+                log.debug(f"      ├─ Silver: No image features available")
 
-            if img_gold.size > 0:
+            if img_gold is not None and img_gold.size > 0:
                 X_img_gold = csr_matrix(img_gold)
                 log.debug(f"      ├─ Gold sparse matrix: {X_img_gold.shape}")
             else:
-                X_img_gold = csr_matrix((0, 2048))
-                log.debug(
-                    f"      ├─ Gold empty sparse matrix: {X_img_gold.shape}")
-
+                # Empty sparse matrix
+                X_img_gold = None
+                log.debug(f"      ├─ Gold: No image features available")
+                
         except Exception as e:
             log.error(f"   ❌ Sparse matrix conversion failed: {e}")
-            # Fallback to empty matrices
-            X_img_silver = csr_matrix((0, 2048))
-            X_img_gold = csr_matrix((0, 2048))
+            X_img_silver = None
+            X_img_gold = None
 
         # Comprehensive results summary
         log.info(f"   📊 Image Processing Results:")
@@ -6098,25 +6130,61 @@ def run_full_pipeline(mode: str = "both",
               bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}]") as train_pbar:
 
         # IMAGE MODELS
-        if mode in {"image", "both"} and img_silver and img_silver.size > 0:
-            train_pbar.set_description("   ├─ Training Image Models")
-            log.info(f"   🖼️  Training image-based models...")
-
-            res_img = run_mode_A(
-                X_img_silver,
-                img_gold_df.clean,
-                X_img_gold,
-                img_silver_df,
-                img_gold_df,
-                domain="image",
-                apply_smote=False
-            )
-
-            results.extend(res_img)
-            log.info(f"      ✅ Image models: {len(res_img)} results")
-            optimize_memory_usage("Image Models")
-            train_pbar.update(1)
-
+        if mode in {"image", "both"}:
+            # Safely check if we have image data
+            has_silver_images = False
+            has_gold_images = False
+            
+            if img_silver is not None:
+                try:
+                    if hasattr(img_silver, 'size') and img_silver.size > 0:
+                        has_silver_images = True
+                except:
+                    pass
+                    
+            if img_gold is not None:
+                try:
+                    if hasattr(img_gold, 'size') and img_gold.size > 0:
+                        has_gold_images = True
+                except:
+                    pass
+            
+            if has_silver_images and has_gold_images and X_img_silver is not None and X_img_gold is not None:
+                train_pbar.set_description("   ├─ Training Image Models")
+                log.info(f"   🖼️  Training image-based models...")
+                
+                try:
+                    res_img = run_mode_A(
+                        X_img_silver,
+                        img_gold_df.clean,
+                        X_img_gold,
+                        img_silver_df,
+                        img_gold_df,
+                        domain="image",
+                        apply_smote=False
+                    )
+                    
+                    results.extend(res_img)
+                    log.info(f"      ✅ Image models: {len(res_img)} results")
+                    
+                except Exception as e:
+                    log.error(f"      ❌ Image model training failed: {str(e)}")
+                    import traceback
+                    log.error(f"Full traceback:\n{traceback.format_exc()}")
+                    
+                optimize_memory_usage("Image Models")
+                train_pbar.update(1)
+            else:
+                log.warning(f"   ⚠️  Skipping image models")
+                if not has_silver_images:
+                    log.warning(f"      ├─ No silver images")
+                if not has_gold_images:
+                    log.warning(f"      ├─ No gold images")
+                if X_img_silver is None:
+                    log.warning(f"      ├─ Silver features is None")
+                if X_img_gold is None:
+                    log.warning(f"      └─ Gold features is None")
+                    
         # TEXT MODELS
         if mode in {"text", "both"}:
             train_pbar.set_description("   ├─ Training Text Models")
@@ -6204,9 +6272,14 @@ def run_full_pipeline(mode: str = "both",
 
             train_pbar.update(1)
         # FINAL COMBINED MODEL TRAINING
-        if mode == "both" and img_silver and img_silver.size > 0:
-            train_pbar.set_description("   ├─ Final Combined Models")
-            log.info(f"   🔄 Training final combined models...")
+        if mode == "both":
+            # Check if we have valid image data
+            has_silver_images = (img_silver is not None) and (hasattr(img_silver, 'size')) and (img_silver.size > 0)
+            has_gold_images = (img_gold is not None) and (hasattr(img_gold, 'size')) and (img_gold.size > 0)
+            
+            if has_silver_images and has_gold_images:
+                train_pbar.set_description("   ├─ Final Combined Models")
+                log.info(f"   🔄 Training final combined models...")
 
             # Align features and data
             common_silver_idx = img_silver_df.index
