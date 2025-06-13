@@ -23,6 +23,25 @@ We assume **no labeled data is available**, and solve the task using weak superv
 
 ---
 
+## 🚀 Quick Start (2 minutes)
+
+```bash
+# 1. Clone and run
+git clone [your-repo]
+cd [your-repo]
+docker-compose up -d
+
+# 2. Test via CLI (classifiers are in the web container)
+docker exec -it search_by_ingredients_v1t3ls0n-web-1 python3 web/diet_classifiers.py --ingredients "almond flour, eggs, butter"
+
+# 3. View web interface  
+Open http://localhost:5000 in your browser
+
+# 4. The trained models are already included - no training needed!
+```
+
+---
+
 ## ⚙️ Pipeline Architecture
 
 ```
@@ -72,7 +91,7 @@ The actual classification implements a sophisticated cascade:
 #### For Keto Classification:
 ```python
 1. Whitelist Override (Highest Priority)
-   - Patterns like r"\balmond flour\b", r"\bcoconut flour\b"
+   - Regex patterns like r"\balmond flour\b", r"\bcoconut flour\b"
    - Immediate acceptance for known keto ingredients
 
 2. USDA Nutritional Check - Whole Phrase
@@ -85,10 +104,12 @@ The actual classification implements a sophisticated cascade:
    - Skips common stop words
 
 3. Regex Blacklist (Fast Pattern Matching)
-   - Compiled patterns for high-carb ingredients
+   - Compiled regex patterns from NON_KETO list
+   - Uses word boundaries for accurate matching
 
 4. Token-level Blacklist Analysis
-   - Detailed matching against NON_KETO list
+   - Additional verification using tokenized ingredients
+   - Handles multi-word ingredients like "kidney beans"
 
 5. ML Model Prediction (If Available)
    - Uses trained models with probability output
@@ -100,11 +121,11 @@ The actual classification implements a sophisticated cascade:
 #### For Vegan Classification:
 ```python
 1. Whitelist Override
-   - Handles edge cases like r"\beggplant\b" (not "egg")
+   - Regex patterns handling edge cases like r"\beggplant\b" (not "egg")
    - r"\bbutternut\b" (not "butter")
 
-2. Blacklist Check
-   - Comprehensive animal product detection
+2. Regex Blacklist Check
+   - Comprehensive animal product detection using compiled patterns
 
 3. ML Model with Verification
    - Trained models with rule-based correction
@@ -160,6 +181,13 @@ The ensemble system includes sophisticated optimizations:
 - **Early stopping optimization**: Stops hyperparameter search when no improvement
 - **Composite scoring**: Weighted combination of 6 metrics for model selection
 - **Greedy ensemble building**: Tests ensemble sizes 1 to N for optimal configuration
+
+### Additional Models
+
+* **Rule** (Pure rule-based classifier used as baseline and fallback)
+  - Implements the complete classification pipeline without ML
+  - Used when ML models fail or as a comparison baseline
+  - Appears in results as "Rule_TEXT" or "Rule_[DOMAIN]"
 
 ---
 
@@ -240,7 +268,7 @@ python diet_classifiers.py --predict /path/to/recipes.csv
 ./train.sh                # Only train models
 ./eval_ground_truth.sh    # Evaluate trained models on ground_truth.csv
 ./eval_custom.sh          # Evaluate on user-provided CSV file
-./run_full_pipeline.sh    # Train + evaluate + classify ingredients end-to-end
+./run_full_pipeline.sh    # Train + evaluate (on given ground_truth.csv) + classify ingredients (on toy list "almond flour, erythritol, egg whites") end-to-end
 ./update_git.sh           # Git commit + push helper
 ```
 
@@ -365,64 +393,124 @@ def tune_with_early_stopping(patience=3, min_improvement=0.001):
 
 ---
 
-## 📦 Project Directory Layout
+## 🚀 Project Directory Structure
 
-```text
-.
-├── nb/                             # 📓 Jupyter / CLI container
-│   ├── src/
-│   │   ├── diet_classifiers.py     # Main pipeline logic
-│   │   ├── hybrid_classifier.py    # Optional fusion model
-│   │   └── task.ipynb              # Notebook interface
-│   ├── Dockerfile
-│   └── requirements.txt
+### 📁 Directory Overview
 
-├── web/                            # 🌐 Web/API container
-│   ├── src/
-│   │   ├── templates/index.html    # Minimal frontend
-│   │   ├── app.py                  # Flask app
-│   │   ├── diet_classifiers.py     # Shared ML logic
-│   │   ├── index_data.py           # OpenSearch indexing
-│   │   └── init.sh                 # Startup + model extraction
-│   ├── Dockerfile
-│   └── requirements.txt
+**The complete implementation resides in a single file: `web/src/diet_classifiers.py`**. 
+All other files are boilerplate or configuration.
 
-├── pretrained_models/              # Pre-trained model storage
-│   └── models.zip                  # models.pkl + vectorizer.pkl
+---
 
-├── artifacts/                      # Pipeline outputs
-│   ├── models.pkl                  # Trained models
-│   ├── vectorizer.pkl              # Fitted TF-IDF vectorizer
-│   ├── silver_extended.csv         # Extended training data
-│   ├── eval_metrics.csv            # Evaluation results
-│   ├── ground_truth_predictions.csv # Predictions
-│   ├── pipeline.log                # Detailed logs
-│   └── best_hyperparams.json       # Optimal parameters
+### 🎯 Core Implementation
 
-├── embeddings/                     # Feature caches
-│   ├── text_gold.pkl
-│   └── img_gold.pkl
+#### ⭐ **The Heart of the Project**
 
-├── dataset/arg_max/images/         # Downloaded images
-│   ├── silver/
-│   │   ├── *.jpg
-│   │   ├── embeddings.npy
-│   │   └── embedding_metadata.json
-│   └── gold/
-│       └── (similar structure)
-
-├── docker-compose.yml              # Service definitions
-├── README.md                       # This file
-├── .gitattributes                  # Git LFS config
-├── .gitignore                      # Ignore rules
-
-# Shell script entrypoints
-├── train.sh                        # Train models only
-├── eval_ground_truth.sh            # Evaluate on gold CSV
-├── eval_custom.sh                  # Evaluate on custom CSV
-├── run_full_pipeline.sh            # Complete pipeline
-└── update_git.sh                   # Git helper
 ```
+web/src/diet_classifiers.py
+```
+
+**This single file contains:**
+- ✅ Complete ML pipeline implementation
+- ✅ All classification algorithms
+- ✅ Data processing logic
+- ✅ CLI interface
+- ✅ Model training & evaluation
+- ✅ Feature engineering
+- ✅ Hyperparameter optimization
+
+---
+
+### 🗂️ Directory Layout
+
+#### 📓 **Notebook & CLI Container** (`nb/`) 
+*[Boilerplate - Development environment]*
+
+```
+nb/
+├── src/
+│   ├── diet_classifiers.py        # [Boilerplate]
+│   ├── hybrid_classifier.py       # [Boilerplate]
+│   └── task.ipynb                # [Boilerplate]
+├── Dockerfile                     # [Boilerplate]
+└── requirements.txt               # [Boilerplate]
+```
+
+#### 🌐 **Web & API Container** (`web/`)
+*Contains the actual implementation*
+
+```
+web/
+├── src/
+│   ├── templates/
+│   │   └── index.html            # [Boilerplate - Minimal frontend]
+│   ├── app.py                    # [Boilerplate - Flask server]
+│   ├── diet_classifiers.py       # ⭐ COMPLETE IMPLEMENTATION ⭐
+│   ├── index_data.py             # [Boilerplate - OpenSearch indexing]
+│   └── init.sh                   # [Modified - Startup & model extraction]
+├── Dockerfile                    # [Modified - Container config]
+└── requirements.txt              # [Modified - Dependencies]
+```
+
+#### 🤖 **Pre-trained Models** (`pretrained_models/`)
+*Model storage*
+
+```
+pretrained_models/
+└── models.zip                    # Pre-trained models & vectorizers
+```
+
+#### 📊 **Pipeline Artifacts** (`artifacts/`)
+*Initially empty - populated by `diet_classifiers.py` during execution*
+
+```
+artifacts/
+├── models.pkl                    # Generated by pipeline
+├── vectorizer.pkl                # Generated by pipeline
+├── silver_extended.csv           # Generated by pipeline
+├── eval_metrics.csv              # Generated by pipeline
+├── ground_truth_predictions.csv  # Generated by pipeline
+├── pipeline.log                  # Generated by pipeline
+└── best_hyperparams.json         # Generated by pipeline
+```
+
+#### 🔧 **Configuration & Scripts**
+
+##### 🐳 Docker Configuration
+```
+├── docker-compose.yml            # [Modified - Service orchestration]
+```
+
+##### 📜 Execution Scripts
+*Shell wrappers that invoke `diet_classifiers.py`*
+```
+├── train.sh                      # Calls diet_classifiers.py --train
+├── eval_ground_truth.sh          # Calls diet_classifiers.py --eval
+├── eval_custom.sh                # Calls diet_classifiers.py --eval-custom
+├── run_full_pipeline.sh          # Calls diet_classifiers.py --full
+└── update_git.sh                 # Git helper
+```
+
+##### 📄 Documentation & Version Control
+```
+├── README.md                     # Project documentation
+├── .gitattributes               # Git LFS configuration
+└── .gitignore                   # Version control exclusions
+```
+
+---
+
+### 📝 Implementation Notes
+
+#### Modified Files (Minor Adjustments)
+As per task requirements, only minimal changes were made to:
+- 📄 **`/web/src/init.sh`** - Startup script adjustments
+- 🐳 **`/web/Dockerfile`** - Container configuration
+- 🔧 **`/docker-compose.yml`** - Service definitions
+- 📦 **`/web/requirements.txt`** - Dependency specifications
+
+#### Untouched Boilerplate
+All other files remain as provided in the original boilerplate, ensuring compatibility with the existing infrastructure.
 
 ---
 
