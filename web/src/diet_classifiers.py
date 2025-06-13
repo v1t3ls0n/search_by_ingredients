@@ -105,9 +105,8 @@ import unicodedata
 import re
 import logging
 import json
-import logging.handlers
-import queue
-
+import threading
+import sys
 # =============================================================================
 # IMPORTS AND DEPENDENCIES
 # =============================================================================
@@ -275,12 +274,12 @@ class Config:
 CFG = Config()
 
 
+
 # =============================================================================
-# LOGGING CONFIGURATION (THREAD-SAFE)
+# DIRECT WRITE LOGGING CONFIGURATION
 # =============================================================================
 """
-Sets up thread-safe logging with timestamps and severity levels.
-Uses QueueHandler to prevent race conditions and NULL characters.
+Direct write logging that bypasses buffering issues entirely.
 """
 # Make sure artifacts dir exists
 CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
@@ -288,12 +287,42 @@ CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
 # Define log file path
 log_file = CFG.artifacts_dir / "pipeline.log"
 
-# Delete existing log file for clean start
+# Delete existing log file
 if log_file.exists():
     try:
         log_file.unlink()
     except Exception:
         pass
+
+# Thread lock for file writing
+file_lock = threading.Lock()
+
+class DirectWriteHandler(logging.Handler):
+    """Handler that writes directly to file with no buffering"""
+    
+    def __init__(self, filename):
+        super().__init__()
+        self.filename = filename
+        # Write header
+        self._write_direct("="*80 + "\n")
+        self._write_direct("DIET CLASSIFIER PIPELINE - LOG INITIALIZED\n")
+        self._write_direct("="*80 + "\n")
+    
+    def _write_direct(self, msg):
+        """Write directly to file with no buffering"""
+        with file_lock:
+            with open(self.filename, 'a', encoding='utf-8') as f:
+                f.write(msg)
+                f.flush()
+                # Force OS-level flush
+                os.fsync(f.fileno())
+    
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            self._write_direct(msg + '\n')
+        except Exception:
+            self.handleError(record)
 
 # Set up logger
 log = logging.getLogger("PIPE")
@@ -304,60 +333,30 @@ log.handlers.clear()
 formatter = logging.Formatter(
     "%(asctime)s │ %(levelname)s │ %(message)s", datefmt="%H:%M:%S")
 
-# Console handler (direct)
+# Console handler (keep as is)
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(formatter)
 log.addHandler(console_handler)
 
-# For file handler, use QueueHandler for thread safety
-if hasattr(logging.handlers, 'QueueHandler'):
-    # Create queue and queue handler
-    log_queue = queue.Queue(-1)  # No limit on size
-    queue_handler = logging.handlers.QueueHandler(log_queue)
-    log.addHandler(queue_handler)
+# Direct write file handler
+direct_handler = DirectWriteHandler(str(log_file))
+direct_handler.setFormatter(formatter)
+log.addHandler(direct_handler)
 
-    # Create file handler
-    file_handler = logging.FileHandler(
-        log_file,
-        mode='w',
-        encoding='utf-8',
-        delay=False
-    )
-    file_handler.setFormatter(formatter)
+# Exception hook
+def log_exception_hook(exc_type, exc_value, exc_traceback):
+    """Log uncaught exceptions"""
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    
+    log.error("Uncaught exception:", exc_info=(exc_type, exc_value, exc_traceback))
 
-    # Create queue listener
-    queue_listener = logging.handlers.QueueListener(
-        log_queue,
-        file_handler,
-        respect_handler_level=True
-    )
-    queue_listener.start()
+sys.excepthook = log_exception_hook
 
-    # Register cleanup function
-    import atexit
-    atexit.register(queue_listener.stop)
-else:
-    # Fallback to direct file handler
-    file_handler = logging.FileHandler(
-        log_file,
-        mode='w',
-        encoding='utf-8',
-        delay=False
-    )
-    file_handler.setFormatter(formatter)
-    log.addHandler(file_handler)
+# Test logging
+log.info("Logging system initialized successfully")
 
-# Write initial message
-log.info("="*80)
-log.info("DIET CLASSIFIER PIPELINE - LOG INITIALIZED")
-log.info(f"Log file: {log_file}")
-log.info(f"Python version: {sys.version}")
-log.info("="*80)
-
-# Ensure handlers are flushed
-for handler in log.handlers:
-    if hasattr(handler, 'flush'):
-        handler.flush()
 
 # =============================================================================
 # GENERAL UTILITY FUNCTIONS
