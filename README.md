@@ -181,167 +181,167 @@ All the results above were achieved **before** enabling **dynamic per-row ensemb
 
 ---
 
-## 🖥️ CLI Interface
+## 🖥️ CLI & Docker Interface
 
-Train, evaluate, or classify directly via CLI:
+You can train, evaluate, and classify recipes using either:
+
+### 🧪 Direct Python Execution (for local use)
 
 ```bash
-# Train and evaluate using silver + gold set
+# 🔧 Train and evaluate on silver + gold sets
 python diet_classifiers.py --train --mode both
 
-# Evaluate on labeled test set
+# 📊 Evaluate trained models on a gold-labeled test set
 python diet_classifiers.py --ground_truth /usr/src/data/ground_truth_sample.csv
 
-# Classify custom ingredients
+# 🍴 Classify a custom list of ingredients
 python diet_classifiers.py --ingredients "almond flour, coconut oil, cocoa powder"
-````
-
-Additional options:
-
-| Argument         | Type   | Description                                                         |
-| ---------------- | ------ | ------------------------------------------------------------------- |
-| `--train`        | flag   | Run the full training pipeline on silver labels                     |
-| `--ground_truth` | path   | Evaluate trained models on a gold-labeled CSV file                  |
-| `--ingredients`  | str    | Comma-separated list or JSON array of ingredients for inference     |
-| `--mode`         | choice | Feature mode: `text`, `image`, or `both` (default: both)            |
-| `--force`        | flag   | Recompute image embeddings, ignoring cached `.npy` files            |
-| `--sample_frac`  | float  | Fraction of the silver set to sample for training (e.g., 0.1 = 10%) |
-
-Or run via Docker for full automation:
-
-```bash
-./run_pipeline.sh       # Build, train, and test in one go
 ```
 
+### 🐳 Dockerized Execution (preferred for ease and reproducibility)
+
+```bash
+./train.sh                # Only train models
+./eval_ground_truth.sh    # Evaluate trained models on gold dataset
+./eval_custom.sh          # Evaluate on user-provided CSV file
+./run_full_pipeline.sh    # Train + evaluate + classify end-to-end
+./update_git.sh           # Git commit + push helper
+```
+
+### 🔧 Supported CLI Arguments
+
+| Argument         | Type   | Description                                                                      |
+| ---------------- | ------ | -------------------------------------------------------------------------------- |
+| `--train`        | flag   | Run the full training pipeline on silver-labeled data                            |
+| `--ground_truth` | path   | Evaluate trained models on a gold-labeled CSV (with `label_keto`, `label_vegan`) |
+| `--ingredients`  | string | Comma-separated list or JSON array of ingredients for classification             |
+| `--mode`         | choice | Feature mode: `text`, `image`, or `both` (default: `both`)                       |
+| `--force`        | flag   | Force re-computation of image embeddings, even if cache exists                   |
+| `--sample_frac`  | float  | Subsample silver dataset for training (e.g. `0.1` = use 10% of data)             |
 
 ---
 
-### 🧠 Ground Truth Evaluation Pipeline
+## 🔍 Ground Truth Evaluation Logic
 
-When running:
+When executing:
 
 ```bash
 python diet_classifiers.py --ground_truth /path/to/labeled_recipes.csv
 ```
 
-The pipeline will:
+The pipeline performs the following:
 
-1. **Load and verify the ground truth CSV** file.
+1. ✅ **Loads and verifies** the existence of the labeled test CSV.
 
-2. **Automatically locate trained models**:
+2. 📦 **Locates trained models** from:
 
-   * Prefer models from `artifacts/models.pkl` and `vectorizer.pkl`.
-   * If missing, fall back to `pretrained_models/models.pkl` and `vectorizer.pkl`.
-   * Logs each decision clearly.
+   * `artifacts/models.pkl` and `vectorizer.pkl` (preferred)
+   * fallback: `pretrained_models/models.zip` (auto-extracted by `init.sh`)
 
-3. **Vectorize ingredients** using the loaded vectorizer.
+3. 🧠 **Transforms ingredients** using the loaded vectorizer.
 
-4. **Predict both vegan and keto labels** per row using the appropriate models.
+4. 🔍 **Runs predictions** for both `keto` and `vegan` per row.
 
-5. **Save predictions** to:
+5. 📄 **Saves predictions** to:
 
    ```
    artifacts/ground_truth_predictions.csv
    ```
 
-6. **Compute evaluation metrics** (accuracy, precision, recall, F1).
+6. 📊 **Computes metrics** (Accuracy, Precision, Recall, F1).
 
-7. **Save metrics summary** to:
+7. 📈 **Exports summary metrics** to:
 
    ```
    artifacts/eval_metrics.csv
    ```
 
-📦 *Models can be preloaded by placing `models.zip` (containing `models.pkl`, `vectorizer.pkl`) inside `pretrained_models/`. This zip will be auto-extracted by `init.sh`.*
-
-
-
+> 💡 If no training has been run, you may preload `models.zip` (containing `models.pkl` + `vectorizer.pkl`) into the `pretrained_models/` directory — it will be extracted automatically on first run.
 
 ---
 
 ## 💡 Design Principles
 
-* ✅ **No training? Still usable.** Rule-based fallback ensures predictions even if ML fails.
-* ✅ **Weak labels? Strong pipeline.** Ensemble softens rule noise with learned patterns.
-* ✅ **Cachable & restart-safe.** Embeddings, models, predictions all memoized with backup.
-* ✅ **Containerized deployment.** Three Docker services (CLI, notebook, web/API).
-* ✅ **Resilient against partial data.** Works with missing ingredients, broken photos, or sparse recipes.
+* ✅ **Zero-config setup**: Fully Dockerized, no manual installs
+* ✅ **Rule-based fallbacks**: Predicts even if training fails
+* ✅ **Hybrid learning**: Combines rules + weak supervision + ML
+* ✅ **Cachable**: Restarts are safe, no redundant computation
+* ✅ **Partial robustness**: Handles missing images or bad rows
 
 ---
 
 ## 🧪 Robustness & Recovery
 
-* ML, vectorizer, and image embeddings are cached with `.npy` or `.pkl` backups
-* If cache is corrupted or missing → auto-regenerates from source
-* Rule-based logic ensures fallback always available
-* Embedding pipeline supports restart-safe env guard
+* 🧠 **Models** and **vectorizers** cached in `.pkl` format
+* 🖼️ **Image embeddings** saved as `.npy`, reused unless `--force` is used
+* 🔄 **Auto-recovery** from missing/corrupted models via `pretrained_models/` fallback
+* 📋 **Logs** written to both terminal and file (`artifacts/pipeline.log`)
 
 ---
 
-## 📦 Directory Layout
+## 📦 Project Directory Layout
 
-```
+```text
 .
-├── nb/                            # 📓 Jupyter/CLI container
+├── nb/                             # 📓 Jupyter / CLI container
 │   ├── src/
-│   │   ├── diet_classifiers.py    # Diet classification logic (notebook/CLI)
-│   │   ├── hybrid_classifier.py   # Optional hybrid model
-│   │   └── task.ipynb             # Dev notebook
+│   │   ├── diet_classifiers.py     # Main pipeline logic (shared across CLI & API)
+│   │   ├── hybrid_classifier.py    # Optional fusion model
+│   │   └── task.ipynb              # Notebook interface
 │   ├── Dockerfile
 │   └── requirements.txt
 
-├── web/                           # 🌐 Web/API container
+├── web/                            # 🌐 Web/API container
 │   ├── src/
-│   │   ├── templates/
-│   │   │   └── index.html
-│   │   ├── app.py                 # Flask entrypoint
-│   │   ├── diet_classifiers.py    # Main pipeline logic
-│   │   ├── index_data.py          # Optional search support
-│   │   └── init.sh                # CLI entry + startup
+│   │   ├── templates/index.html    # Minimal frontend
+│   │   ├── app.py                  # Flask app
+│   │   ├── diet_classifiers.py     # Shared ML logic (imported from nb)
+│   │   ├── index_data.py           # OpenSearch indexing logic
+│   │   └── init.sh                 # Handles startup + pretrained model extraction
 │   ├── Dockerfile
 │   └── requirements.txt
 
-├── docker-compose.yml             # Multi-container runner
-├── README.md                      # Project overview and usage
-├── .gitattributes                 # Git LFS tracking config
-├── .gitignore                     # Ignore rules
-├── train.sh                       # Run training only
-├── eval_ground_truth.sh          # Evaluate on provided gold dataset
-├── eval_custom.sh                # Evaluate on a custom testset CSV
-├── run_full_pipeline.sh          # Build, train, evaluate, classify
-├── update_git.sh                 # Commit & push automation script
+├── pretrained_models/              # (Optional) ZIP file with pretrained models
+│   └── models.zip                  # Contains: models.pkl + vectorizer.pkl
 
+├── artifacts/                      # Outputs: models, vectorizers, logs, predictions
+│   ├── models.pkl
+│   ├── vectorizer.pkl
+│   ├── eval_metrics.csv
+│   └── ground_truth_predictions.csv
+
+├── docker-compose.yml              # Define all 3 services
+├── README.md                       # You're reading it
+├── .gitattributes                  # Git LFS (optional)
+├── .gitignore                      # Ignore rules
+
+# 🛠️ Shell script entrypoints (auto-run containers)
+├── train.sh                        # Only train
+├── eval_ground_truth.sh           # Evaluate on provided gold CSV
+├── eval_custom.sh                 # Evaluate on user-supplied CSV
+├── run_full_pipeline.sh           # Train + evaluate + test + classify
+├── update_git.sh                  # Git add + commit + push
 ```
 
-## 🔖 Artifacts Directory
+---
 
-Trained models and vectorizer are persisted here via the host-mounted  
-`./artifacts` folder (inside the container at `/app/artifacts`).
+## 🔖 Docker Volume Mapping
 
-After running the training pipeline, you’ll find:
-
-```
-
-artifacts/
-├── vectorizer.pkl
-└── models.pkl
-
-````
-
-Ensure your `docker-compose.yml` maps it:
+Ensure `docker-compose.yml` includes:
 
 ```yaml
 services:
   web:
-    …
+    ...
     volumes:
       - ./artifacts:/app/artifacts
+      - ./pretrained_models:/app/pretrained_models
       - recipe-data:/usr/src/data
       - ./web/src:/app/web
-````
-
+```
 
 ---
+
 
 ## ✅ Feature Matrix
 
