@@ -215,13 +215,77 @@ final_ensemble = best_ensemble(
 )
 ```
 
+### Advanced Model Training Pipeline
+
+The system implements **sophisticated ML training** with production-grade features:
+
+#### **Class Imbalance Handling**
+```python
+def apply_smote(X, y, max_dense_size: int = int(5e7)):
+    # Apply SMOTE only if minority class < 40% of dataset
+    counts = np.bincount(y)
+    ratio = counts.min() / counts.sum()
+    
+    if ratio < 0.4:  # Threshold for applying oversampling
+        if hasattr(X, "toarray") and X.shape[0] * X.shape[1] > max_dense_size:
+            # Too large for SMOTE - use random oversampling
+            ros = RandomOverSampler(random_state=42)
+            return ros.fit_resample(X, y)
+        else:
+            # Use SMOTE for synthetic minority examples
+            smote = SMOTE(sampling_strategy=0.3, random_state=42)
+            return smote.fit_resample(X, y)
+    return X, y
+```
+
+**Intelligent Oversampling Strategy:**
+- **Automatic Detection**: Only applies when minority class < 40%
+- **SMOTE**: Creates synthetic examples for balanced learning
+- **Random Oversampling**: Fallback for very large sparse matrices
+- **Memory Aware**: Switches strategies based on matrix size
+
+#### **Comprehensive Hyperparameter Tuning**
+```python
+HYPER = {
+    # Text models
+    "Softmax": {"C": [0.1, 1, 10]},
+    "SGD": {"alpha": [1e-4, 1e-3], "loss": ["log_loss", "modified_huber"]},
+    "Ridge": {"alpha": [0.1, 1.0, 10.0]},
+    "PA": {"C": [0.5, 1.0]},
+    
+    # Image/mixed models  
+    "MLP": {
+        "hidden_layer_sizes": [(256,), (512, 128)],
+        "alpha": [0.0001, 0.001],
+        "learning_rate_init": [0.001, 0.005]
+    },
+    "RF": {
+        "n_estimators": [150, 300],
+        "max_depth": [None, 20],
+        "min_samples_leaf": [1, 2]
+    },
+    "LGBM": {
+        "learning_rate": [0.05, 0.1],
+        "num_leaves": [31, 63],
+        "n_estimators": [150, 250]
+    }
+}
+```
+
+**Advanced Tuning Features:**
+- **Grid Search with Cross-Validation**: Exhaustive parameter exploration
+- **Early Stopping**: `tune_with_early_stopping()` for large parameter spaces  
+- **Intelligent Caching**: Results cached in `BEST` dictionary
+- **Model-Specific Grids**: Optimized parameters per algorithm type
+- **Fallback Handling**: Graceful degradation to default parameters
+
 ### Dynamic Ensemble Features
 
 The ensemble system implements a **4-level hierarchical architecture** with sophisticated optimizations:
 
 #### **Level 1: Individual Model Training**
 - 15+ diverse models across text/image/hybrid domains
-- Hyperparameter optimization with early stopping
+- Automatic probability calibration via `ensure_predict_proba()`
 - Cross-validation and composite metric scoring
 
 #### **Level 2: Domain-Specific Ensembles** 
@@ -370,9 +434,6 @@ scripts/update_git.sh           # Git commit + push helper
 | `--mode`         | choice | Feature mode: `text`, `image`, or `both` (default: `both`)     |
 | `--force`        | flag   | Force re-computation of image embeddings                       |
 | `--sample_frac`  | float  | Subsample silver dataset for training (e.g. `0.1` = 10%)       |
-| `--ensemble_size` | int    | Number of models in ensemble (default: auto-optimize)         |
-| `--alpha`         | float  | Text/Image blend weight (default: 0.5, auto-tune if None)     |
-| `--ensemble_method` | choice | Ensemble strategy: `individual`, `top_n`, `best_two`, `best_ensemble` |
 
 ---
 
@@ -600,6 +661,12 @@ All other files remain as provided in the original boilerplate, ensuring compati
 
 | Feature                           | Status | Notes                                      |
 | --------------------------------- | ------ | ------------------------------------------ |
+| SMOTE class balancing             | ✅     | Applied automatically when minority < 40%   |
+| Grid search hyperparameter tuning| ✅     | Model-specific parameter grids with CV      |
+| Early stopping optimization      | ✅     | Prevents overfitting in parameter search    |
+| Automatic probability calibration| ✅     | Ensures all models provide probabilities    |
+| Model persistence and caching    | ✅     | Saves/loads models and vectorizers          |
+| Restart loop prevention          | ✅     | Environment variable tracking               |
 | Weak supervision via rules        | ✅     | Multi-stage cascade with whitelists        |
 | USDA dataset augmentation         | ✅     | Adds thousands of training examples        |
 | Fuzzy matching for ingredients    | ✅     | 90% similarity threshold with RapidFuzz    |
@@ -610,9 +677,7 @@ All other files remain as provided in the original boilerplate, ensuring compati
 | Dynamic per-row weighting         | ✅     | Adaptive weights based on data availability |
 | Memory management & crisis handling| ✅     | Multi-level optimization with GPU support  |
 | Parallel image downloading        | ✅     | Multi-threaded with error categorization   |
-| Early stopping optimization       | ✅     | For hyperparameter search efficiency       |
 | Comprehensive error tracking      | ✅     | Categorized logging with detailed reports  |
-| Restart loop prevention           | ✅     | Environment variable tracking              |
 | Caching + restarts                | ✅     | Backups + smart reuse                      |
 | Evaluation plots + exports        | ✅     | ROC, PR, Confusion Matrix, CSV             |
 | Atomic file operations            | ✅     | Prevents corruption during writes          |
@@ -657,19 +722,27 @@ Multi-layer fallback architecture:
 - **Dynamic Feature Selection**: Only compute needed features
 - **Batch Processing**: Dynamic sizing based on operation type
 
-#### ML Pipeline Features
+#### **Advanced ML Pipeline Features**
 
 - **Silver Label Generation**: 6-stage cascade with USDA integration
-- **Model Diversity**: 15+ model architectures across text/image/hybrid
+- **SMOTE Class Balancing**: Applied automatically when minority class < 40%
+- **Grid Search Hyperparameter Tuning**: Model-specific parameter grids with cross-validation
+- **Early Stopping Optimization**: Prevents overfitting in hyperparameter search  
+- **Automatic Probability Calibration**: `ensure_predict_proba()` wraps models without probability outputs
+- **Model Diversity**: 15+ algorithms across linear, tree-based, neural network families
 - **Hierarchical Ensembles**: 4-level optimization with dynamic weighting
 - **Ensemble Optimization**: Greedy selection with composite scoring
 
-#### Production Features
+#### **Production Features**
 
+- **Restart Loop Prevention**: Environment variable tracking prevents infinite restart cycles
 - **Comprehensive Logging**: Multi-handler with structured output
 - **Progress Tracking**: Hierarchical tqdm progress bars
 - **Atomic File Operations**: Temporary files with integrity checks
 - **Performance Metrics**: Detailed tracking of timing and resources
+- **Memory Crisis Management**: `handle_memory_crisis()` with 5-pass garbage collection
+- **Model Persistence**: Automatic saving/loading of trained models and vectorizers
+- **Graceful Error Handling**: Multi-level fallbacks for all pipeline components
 
 #### Implementation Patterns
 
