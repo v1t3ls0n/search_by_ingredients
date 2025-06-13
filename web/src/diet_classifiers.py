@@ -418,7 +418,6 @@ def label_usda_keto_data(carb_df: pd.DataFrame) -> pd.DataFrame:
     df["source"] = "usda"
     return df[["ingredient", "clean", "silver_keto", "silver_vegan", "source"]]
 
-
 def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> list[int]:
     """
     Download images using multithreading with comprehensive logging and progress tracking.
@@ -451,7 +450,6 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
         >>> print(f"Downloaded {len(valid_indices)} images")
     """
     
-    import hashlib
     from collections import defaultdict, Counter
     from urllib.parse import urlparse
     import threading
@@ -471,12 +469,48 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
         log.warning("   ⚠️  PyTorch not available - skipping image downloads")
         return []
 
-    # Backup-based early exit
+    # ------------------------------------------------------------------
+    # ENHANCED CHECK FOR EXISTING EMBEDDINGS
+    # ------------------------------------------------------------------
+    # Check multiple locations for embeddings
+    embeddings_locations = [
+        img_dir / "embeddings.npy",
+        Path(f"embeddings_{img_dir.name}_backup.npy"),
+        Path("embeddings") / f"{img_dir.name}.pkl",
+        Path("/app") / f"embeddings_{img_dir.name}_backup.npy"  # Docker container path
+    ]
+    
+    embeddings_found = False
+    embeddings_path = None
+    
+    for emb_path in embeddings_locations:
+        if emb_path.exists():
+            try:
+                # Try to load to verify it's valid
+                test_load = np.load(str(emb_path), mmap_mode='r')
+                log.info(f"   🎯 Found valid embeddings at: {emb_path}")
+                log.info(f"      └─ Shape: {test_load.shape}")
+                embeddings_found = True
+                embeddings_path = emb_path
+                break
+            except Exception as e:
+                log.debug(f"   ⚠️  Invalid embeddings at {emb_path}: {e}")
+    
+    if embeddings_found:
+        log.info(f"   ✅ EMBEDDINGS FOUND - SKIPPING IMAGE DOWNLOAD!")
+        log.info(f"   ├─ Location: {embeddings_path}")
+        log.info(f"   ├─ Returning all {len(df):,} indices as valid")
+        log.info(f"   └─ Use --force flag to redownload images")
+        
+        # Return all indices as valid since we have embeddings
+        return sorted(df.index.tolist())
+
+    # Original backup-based check (for backwards compatibility)
     backup_emb = img_dir / "embeddings.npy"
     if backup_emb.exists():
         try:
             num_jpgs = len(list(img_dir.glob("*.jpg")))
-            if num_jpgs >= len(df):
+            if num_jpgs >= len(df) * 0.8:  # Allow 80% threshold
                 log.info(
                     f"   📦 Backup detected: {num_jpgs} images + existing embeddings → skipping downloads")
                 return sorted(df.index.tolist())  # Return all indices as valid
@@ -939,7 +973,6 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
         log.debug(f"   🧹 Memory cleanup completed")
 
     return valid_indices
-
 
 def filter_low_quality_images(img_dir: Path, embeddings: np.ndarray, original_indices: list) -> tuple:
     """

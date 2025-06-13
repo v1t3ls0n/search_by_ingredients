@@ -1,4 +1,6 @@
 # Byte-compiled / optimized / DLL files
+*.npy
+"embeddings_backup/"
 __pycache__/
 *.py[cod]
 artifacts/
