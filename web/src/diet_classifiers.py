@@ -18,10 +18,12 @@ KEY COMPONENTS:
   rule-based heuristics simulating expert knowledge:
     • Token normalization + lemmatization
     • Regex-based blacklist/whitelist
-    • USDA-based carbohydrate filtering (≤10g carbs/100g → keto-safe)
+    • USDA-based labeling: entire USDA nutritional dataset is scanned and all
+      food entries with ≤10g carbohydrates per 100g are added as keto-friendly examples
     • Phrase-level disqualifications (e.g., "chicken broth")
     • Whitelist override of verified-safe ingredients (e.g., "almond flour")
-    • Soft ML fallback + rule-based priority merging
+    • Token-level disqualifiers from NON_KETO list
+    • ML fallback prediction with rule-based correction
     • Photo sanity filtering: excludes rows with URLs like 'nophoto', 'nopic', 'nopicture'
 
 - MODEL TRAINING: Trains diverse ML models (Logistic Regression, SVM, MLP, Random Forest, etc.)
@@ -34,7 +36,8 @@ ARCHITECTURE OVERVIEW:
 ----------------------
 1. Data Loading:
    - Loads silver (unlabeled) and gold (labeled) recipes
-   - Uses USDA nutritional DB for rule-based classification
+   - Uses USDA nutritional DB to automatically extend the silver dataset with
+     thousands of labeled examples based on carbohydrate thresholds
    - Input can be CSV or Parquet
 
 2. Feature Extraction:
@@ -62,6 +65,7 @@ Supports interactive development, Docker builds, and production use.
 
 Author: Guy Vitelson (aka @v1t3ls0n on GitHub)
 """
+
 
 
 # =============================================================================
@@ -368,14 +372,22 @@ def _load_usda_carb_table() -> pd.DataFrame:
 
 def label_usda_keto_data(carb_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Convert carb_df from _load_usda_carb_table into a silver-format dataframe
-    with clean text and keto labels based on <10g carbs/100g rule.
+    Convert the USDA carb table into silver-style training data.
+
+    Labels each ingredient as keto if carbs_per_100g < 10.
+    Applies full ingredient normalization using `normalise()`.
+
+    Args:
+        carb_df: Output of _load_usda_carb_table()
+
+    Returns:
+        DataFrame with: ingredient, clean, silver_keto, silver_vegan, source
     """
     df = carb_df.copy()
     df["ingredient"] = df["food_desc"]
-    df["clean"] = df["food_desc"]
+    df["clean"] = df["ingredient"].map(normalise)  
     df["silver_keto"] = (df["carb_100g"] < 10).astype(int)
-    df["silver_vegan"] = np.nan  # we don't label vegan from USDA
+    df["silver_vegan"] = np.nan
     df["source"] = "usda"
     return df[["ingredient", "clean", "silver_keto", "silver_vegan", "source"]]
 
@@ -5522,6 +5534,7 @@ def run_full_pipeline(mode: str = "both",
         text_pbar.update(1)
 
         text_pbar.set_description("   ├─ Fitting on silver data")
+
         # Load USDA carb data and convert to keto-labeled rows
         carb_df = _load_usda_carb_table()
         if not carb_df.empty:
@@ -5532,6 +5545,7 @@ def run_full_pipeline(mode: str = "both",
             silver_txt.to_csv("artifacts/silver_extended.csv", index=False)
         else:
             log.warning("   ├─ No USDA data added - carb_df is empty")
+
 
         X_text_silver = vec.fit_transform(silver_txt.clean)
         text_pbar.update(1)
