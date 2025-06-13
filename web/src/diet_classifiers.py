@@ -6086,7 +6086,7 @@ def main():
     args = parser.parse_args()
 
     try:
-        log.info(f"🚀 Starting main with args: {args}")
+        log.info(f"🚀 Starting main with args: {args}")            
 
         if args.ingredients:
             # Handle ingredient classification
@@ -6265,6 +6265,72 @@ def main():
                 log.error(f"❌ Ground truth evaluation failed: {e}")
                 sys.exit(1)
 
+        elif args.predict:
+            log.info(f"🔮 Running prediction on unlabeled data: {args.predict}")
+
+            try:
+                import pickle
+
+                predict_path = Path(args.predict)
+                if not predict_path.exists():
+                    log.error(f"❌ Prediction file not found: {args.predict}")
+                    sys.exit(1)
+
+                df = pd.read_csv(predict_path)
+                if 'ingredients' not in df.columns:
+                    log.error("❌ Input CSV must contain an 'ingredients' column")
+                    sys.exit(1)
+
+                # Load models and vectorizer
+                model_path = CFG.artifacts_dir / "models.pkl"
+                vec_path = CFG.artifacts_dir / "vectorizer.pkl"
+
+                if not model_path.exists() or not vec_path.exists():
+                    log.warning("⚠️  Trained models not found in artifacts/, trying pretrained_models/...")
+
+                    model_path = Path("/app/pretrained_models/models.pkl")
+                    vec_path = Path("/app/pretrained_models/vectorizer.pkl")
+
+                    if not model_path.exists() or not vec_path.exists():
+                        log.error("❌ No trained models available in either artifacts/ or pretrained_models/")
+                        sys.exit(1)
+
+                with open(vec_path, 'rb') as f:
+                    vectorizer = pickle.load(f)
+                log.info(f"✅ Loaded vectorizer from {vec_path}")
+
+                with open(model_path, 'rb') as f:
+                    models = pickle.load(f)
+                log.info(f"✅ Loaded models from {model_path}")
+
+                # Transform ingredients
+                texts = df['ingredients'].fillna("").tolist()
+                X = vectorizer.transform(texts)
+                log.info("🧠 Vectorized ingredients")
+
+                # Predict
+                preds = []
+                for idx, row in df.iterrows():
+                    row_preds = {"index": idx, "ingredients": row["ingredients"]}
+                    for task in ["keto", "vegan"]:
+                        if task in models:
+                            pred = models[task].predict(X[idx])
+                            row_preds[f"{task}_pred"] = int(pred[0])
+                        else:
+                            row_preds[f"{task}_pred"] = None
+                            log.warning(f"⚠️ No model found for task: {task}")
+                    preds.append(row_preds)
+
+                preds_df = pd.DataFrame(preds)
+                out_path = CFG.artifacts_dir / "predictions_custom.csv"
+                preds_df.to_csv(out_path, index=False)
+                log.info(f"✅ Saved predictions to: {out_path}")
+
+            except Exception as e:
+                log.error(f"❌ Prediction failed: {e}")
+                sys.exit(1)
+
+        
         else:
             # Default pipeline
             log.info(f"🧠 Default pipeline - sample_frac={args.sample_frac}")

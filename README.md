@@ -199,22 +199,22 @@ python diet_classifiers.py --ingredients "almond flour, coconut oil, cocoa powde
 
 ```bash
 ./train.sh                # Only train models
-./eval_ground_truth.sh    # Evaluate trained models on gold dataset
+./eval_ground_truth.sh    # Evaluate trained models on the given ground_truth.csv
 ./eval_custom.sh          # Evaluate on user-provided CSV file
-./run_full_pipeline.sh    # Train + evaluate + classify end-to-end
+./run_full_pipeline.sh    # Train + evaluate (ground_truth.csv) + classify ingredients "almond flour, erythritol, egg whites" end-to-end
 ./update_git.sh           # Git commit + push helper
 ```
 
 ### 🔧 Supported CLI Arguments
 
-| Argument         | Type   | Description                                                                      |
-| ---------------- | ------ | -------------------------------------------------------------------------------- |
-| `--train`        | flag   | Run the full training pipeline on silver-labeled data                            |
-| `--ground_truth` | path   | Evaluate trained models on a gold-labeled CSV (with `label_keto`, `label_vegan`) |
-| `--ingredients`  | string | Comma-separated list or JSON array of ingredients for classification             |
-| `--mode`         | choice | Feature mode: `text`, `image`, or `both` (default: `both`)                       |
-| `--force`        | flag   | Force re-computation of image embeddings, even if cache exists                   |
-| `--sample_frac`  | float  | Subsample silver dataset for training (e.g. `0.1` = use 10% of data)             |
+| Argument         | Type   | Description                                                                                             |
+| ---------------- | ------ | --------------------------------------------------------------------------------------------------------|
+| `--train`        | flag   | Run the full training pipeline on silver-labeled data                                                   |
+| `--ground_truth` | path   | Evaluate trained models on a gold-labeled CSV with `label_keto`, `label_vegan` (e.g ground_truth.csv)   |
+| `--ingredients`  | string | Comma-separated list or JSON array of ingredients for classification                                    |
+| `--mode`         | choice | Feature mode: `text`, `image`, or `both` (default: `both`)                                              |
+| `--force`        | flag   | Force re-computation of image embeddings, even if cache exists                                          |
+| `--sample_frac`  | float  | Subsample silver dataset for training (e.g. `0.1` = use 10% of data)                                    |
 
 ---
 
