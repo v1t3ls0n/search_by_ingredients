@@ -286,6 +286,7 @@ CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
 
 
 # Define log file path
+CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
 log_file = CFG.artifacts_dir / "pipeline.log"
 
 
@@ -467,13 +468,25 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16, for
         return []
     
     # Define embedding search paths in priority order
+    mode = img_dir.name  # 'silver' or 'gold'
     embedding_candidates = [
-        img_dir / "embeddings.npy",                                    # Primary cache
-        img_dir.parent / f"embeddings_{img_dir.name}.npy",           # Parent directory
-        Path(f"embeddings_{img_dir.name}_backup.npy"),               # Backup location
-        Path("embeddings") / f"{img_dir.name}.npy",                  # Embeddings directory
-        Path("/app/embeddings") / f"{img_dir.name}.npy",             # Docker path
-        Path("/app") / f"embeddings_{img_dir.name}_backup.npy",      # Docker backup
+        # Check artifacts directory FIRST (where Docker mounts local files)
+        CFG.artifacts_dir / f"embeddings_{mode}_backup.npy",          # This is where your files are!
+        CFG.artifacts_dir / f"{mode}_embeddings.npy",                 # Alternative naming
+        CFG.artifacts_dir / f"embeddings_{mode}.npy",                 # Another alternative
+        
+        # Then check image directory
+        img_dir / "embeddings.npy",                                   # Primary cache
+        img_dir / f"embeddings_{mode}.npy",                          # Mode-specific
+        
+        # Current directory (legacy)
+        Path(f"embeddings_{mode}_backup.npy"),                       # Current dir backup
+        
+        # Other fallbacks
+        img_dir.parent / f"embeddings_{mode}.npy",                   # Parent directory
+        Path("embeddings") / f"{mode}.npy",                          # Embeddings directory
+        Path("/app/embeddings") / f"{mode}.npy",                     # Docker path
+        Path("/app") / f"embeddings_{mode}_backup.npy",              # Docker backup
         img_dir / "features.npy",                                     # Alternative naming
         img_dir.parent / "cached_embeddings.npy",                    # Generic cache
     ]
@@ -4007,9 +4020,14 @@ def build_image_embeddings(df: pd.DataFrame,
     # Set up paths
     img_dir = CFG.image_dir / mode
     embed_path = img_dir / "embeddings.npy"
-    backup_path = Path(f"embeddings_{mode}_backup.npy")
+    # Set up paths consistently
+    img_dir = CFG.image_dir / mode
+    embed_path = img_dir / "embeddings.npy"
+    backup_path = CFG.artifacts_dir / f"embeddings_{mode}_backup.npy"  # Save in artifacts where Docker can see it
     metadata_path = img_dir / "embedding_metadata.json"
-
+    
+    # Ensure artifacts directory exists
+    CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
     log.info(f"   📁 Paths:")
     log.info(f"   ├─ Image directory: {img_dir}")
     log.info(f"   ├─ Cache file: {embed_path}")
@@ -4022,9 +4040,11 @@ def build_image_embeddings(df: pd.DataFrame,
         log.info(f"\n   🔍 Cache Validation:")
 
         cache_options = [
+            ("Artifacts backup", backup_path),  # Check artifacts first since that's where Docker mounts
             ("Primary cache", embed_path),
-            ("Backup cache", backup_path)
+            ("Legacy backup", Path(f"embeddings_{mode}_backup.npy"))  # Old location for compatibility
         ]
+
 
         with tqdm(cache_options, desc="      ├─ Checking caches", position=1, leave=False,
                   bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as cache_pbar:
