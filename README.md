@@ -176,11 +176,12 @@ These results demonstrate **exceptionally strong performance**, especially consi
 All the results above were achieved **before** enabling **dynamic per-row ensemble weight optimization**. The current ensemble logic uses static weightings, yet still delivers top-tier metrics. This strongly suggests that adding dynamic weights based on image/text availability could yield even higher confidence and class-specific reliability.
 
 
+
 ---
 
 ## 🖥️ CLI & Docker Interface
 
-You can train, evaluate, and classify recipes using either:
+You can train, evaluate, and classify recipes or ingredients using either:
 
 ### 🧪 Direct Python Execution (for local use)
 
@@ -193,6 +194,9 @@ python diet_classifiers.py --ground_truth /usr/src/data/ground_truth_sample.csv
 
 # 🍴 Classify a custom list of ingredients
 python diet_classifiers.py --ingredients "almond flour, coconut oil, cocoa powder"
+
+# 📁 Predict labels for an unlabeled CSV file
+python diet_classifiers.py --predict /path/to/recipes.csv
 ```
 
 ### 🐳 Dockerized Execution (preferred for ease and reproducibility)
@@ -207,16 +211,19 @@ python diet_classifiers.py --ingredients "almond flour, coconut oil, cocoa powde
 
 ### 🔧 Supported CLI Arguments
 
-| Argument         | Type   | Description                                                                                             |
-| ---------------- | ------ | --------------------------------------------------------------------------------------------------------|
-| `--train`        | flag   | Run the full training pipeline on silver-labeled data                                                   |
-| `--ground_truth` | path   | Evaluate trained models on a gold-labeled CSV with `label_keto`, `label_vegan` (e.g ground_truth.csv)   |
-| `--ingredients`  | string | Comma-separated list or JSON array of ingredients for classification                                    |
-| `--mode`         | choice | Feature mode: `text`, `image`, or `both` (default: `both`)                                              |
-| `--force`        | flag   | Force re-computation of image embeddings, even if cache exists                                          |
-| `--sample_frac`  | float  | Subsample silver dataset for training (e.g. `0.1` = use 10% of data)                                    |
+| Argument         | Type   | Description                                                                                            |
+| ---------------- | ------ | ------------------------------------------------------------------------------------------------------ |
+| `--train`        | flag   | Run the full training pipeline on silver-labeled data                                                  |
+| `--ground_truth` | path   | Evaluate trained models on a gold-labeled CSV with `label_keto`, `label_vegan` (e.g ground\_truth.csv) |
+| `--predict`      | path   | Run inference on a raw unlabeled CSV file and save predictions                                         |
+| `--ingredients`  | string | Comma-separated list or JSON array of ingredients for classification                                   |
+| `--mode`         | choice | Feature mode: `text`, `image`, or `both` (default: `both`)                                             |
+| `--force`        | flag   | Force re-computation of image embeddings, even if cache exists                                         |
+| `--sample_frac`  | float  | Subsample silver dataset for training (e.g. `0.1` = use 10% of data)                                   |
 
 ---
+
+
 
 ## 🔍 Ground Truth Evaluation Logic
 
