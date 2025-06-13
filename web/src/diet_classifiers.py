@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
+
+
 """
 ================================================================================
 DIET CLASSIFIER PIPELINE - MULTI-MODAL MACHINE LEARNING FOR INGREDIENT ANALYSIS
@@ -78,16 +81,14 @@ Supports interactive development, Docker builds, and production use.
 Author: Guy Vitelson (aka @v1t3ls0n on GitHub)
 """
 
-# --- Future compatibility ---
+# Enable postponed evaluation of type annotations (Python 3.7+)
 from __future__ import annotations
-
 
 # =============================================================================
 # IMPORTS AND DEPENDENCIES
 # =============================================================================
 """
-This section imports all required libraries, organizing them by category:
-- Future compatibility imports
+  This section imports all required libraries, organizing them by category:
 - Standard library modules
 - Core third-party libraries (NumPy, Pandas, etc.)
 - Machine learning libraries (scikit-learn, LightGBM)
