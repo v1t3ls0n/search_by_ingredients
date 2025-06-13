@@ -5822,9 +5822,13 @@ def run_full_pipeline(mode: str = "both",
             log.info(f"   🤝 Creating text+image ensemble...")
 
             ensemble_results = []
+            
+            # Test different alpha values for optimal blending
+            alpha_values = [0.25, 0.5, 0.75]
+            
             for task in ("keto", "vegan"):
                 try:
-                    # Find best models
+                    # Check if we have models for both domains
                     text_models = [r for r in res_text if r["task"] == task]
                     image_models = [r for r in res_img if r["task"] == task]
 
@@ -5832,51 +5836,52 @@ def run_full_pipeline(mode: str = "both",
                         log.warning(f"      ⚠️  No models available for {task} ensemble")
                         continue
 
-                    bt = max(text_models, key=lambda r: r["F1"])
-                    bi = max(image_models, key=lambda r: r["F1"])
-
-                    log.info(f"      ├─ {task}: Text={bt['model']} (F1={bt['F1']:.3f}), "
-                             f"Image={bi['model']} (F1={bi['F1']:.3f})")
-
-                    # Align predictions
-                    if len(bt["prob"]) == len(gold) and len(bi["prob"]) == len(img_gold_df):
-                        s_txt = pd.Series(bt["prob"], index=gold.index)
-                        s_img = pd.Series(bi["prob"], index=img_gold_df.index)
-                        common = s_txt.index.intersection(s_img.index)
-
-                        log.info(f"      ├─ Alignment: {len(s_txt)} text + {len(s_img)} image = {len(common)} common")
-
-                        if len(common) >= 10:
-                            # Average predictions
-                            avg = (s_txt.loc[common] + s_img.loc[common]) / 2
-
-                            ensemble_result = pack(gold.loc[common, f"label_{task}"].values, avg.values) | {
-                                "model": "TxtImg", "task": task,
-                                "prob": avg.values, "pred": (avg.values >= .5).astype(int),
-                                "text_model": bt['model'],
-                                "image_model": bi['model'],
-                                "common_samples": len(common)
-                            }
-                            ensemble_results.append(ensemble_result)
-
-                            log.info(f"      ✅ {task} ensemble: F1={ensemble_result['F1']:.3f}")
-                        else:
-                            log.warning(f"      ⚠️  Too few common samples ({len(common)}) for {task} ensemble")
-                    else:
-                        log.warning(f"      ⚠️  Dimension mismatch for {task}: text={len(bt['prob'])}, image={len(bi['prob'])}")
+                    # Use best_two_domains with alpha optimization
+                    log.info(f"      ├─ {task}: Testing alpha values {alpha_values}")
+                    
+                    best_ensemble_result = None
+                    best_f1 = -1
+                    best_alpha = None
+                    
+                    for alpha in alpha_values:
+                        result = best_two_domains(
+                            task=task,
+                            text_results=res_text,
+                            image_results=res_img,
+                            gold_df=img_gold_df,  # Use image gold df as it has the common indices
+                            alpha=alpha
+                        )
+                        
+                        if result and result['F1'] > best_f1:
+                            best_f1 = result['F1']
+                            best_alpha = alpha
+                            best_ensemble_result = result
+                            
+                        log.info(f"         ├─ α={alpha}: F1={result['F1']:.3f}, "
+                                f"Text={result['text_model']}, Image={result['image_model']}")
+                    
+                    if best_ensemble_result:
+                        # Update model name to reflect optimal alpha
+                        best_ensemble_result['model'] = f"BestTwo_α{best_alpha}"
+                        ensemble_results.append(best_ensemble_result)
+                        log.info(f"      ✅ {task} best ensemble: α={best_alpha}, F1={best_f1:.3f}")
 
                 except Exception as e:
                     log.error(f"      ❌ {task} ensemble creation failed: {str(e)[:50]}...")
+                    if log.level <= logging.DEBUG:
+                        import traceback
+                        log.debug(f"Full traceback:\n{traceback.format_exc()}")
 
             if ensemble_results:
-                table("Ensemble Text+Image", ensemble_results)
+                table("Text+Image Ensembles", ensemble_results)
                 results.extend(ensemble_results)
-                log.info(f"      ✅ Created {len(ensemble_results)} ensembles")
+                log.info(f"      ✅ Created {len(ensemble_results)} ensemble configurations")
+
+                
             else:
                 log.warning(f"      ⚠️  No successful ensembles created")
 
             train_pbar.update(1)
-
         # FINAL COMBINED MODEL TRAINING
         if mode == "both" and img_silver and img_silver.size > 0:
             train_pbar.set_description("   ├─ Final Combined Models")
@@ -5998,8 +6003,51 @@ def run_full_pipeline(mode: str = "both",
 
             results.extend(ensemble_results)
             log.info(f"   📊 Ensemble results: {len(ensemble_results)} optimized ensembles")
+
+
+        if mode == "both" and 'res_text' in locals() and 'res_img' in locals():
+            log.info(f"\n   🔀 Cross-domain ensemble optimization...")
+            
+            cross_domain_results = []
+            for task in ensemble_tasks:
+                try:
+                    # Check we have both text and image results
+                    text_task_models = [r for r in res_text if r["task"] == task]
+                    image_task_models = [r for r in res_img if r["task"] == task]
+                    
+                    if text_task_models and image_task_models:
+                        log.info(f"      ├─ Optimizing {task} cross-domain ensemble...")
+                        
+                        # Use best_ensemble with image_res for smart blending
+                        cross_result = best_ensemble(
+                            task=task,
+                            res=res_text,  # Text results as primary
+                            X_vec=X_text_silver,
+                            clean=gold.clean,
+                            X_gold=X_text_gold,
+                            silver=silver_txt,
+                            gold=gold,
+                            image_res=res_img,  # This enables smart text+image blending
+                            alphas=(0.25, 0.5, 0.75)  # Alpha values to test
+                        )
+                        
+                        if cross_result:
+                            cross_domain_results.append(cross_result)
+                            log.info(f"      ✅ {task} cross-domain: "
+                                   f"{cross_result['model']} (F1={cross_result['F1']:.3f})")
+                    else:
+                        log.info(f"      ⏭️  {task}: Missing text or image models for cross-domain")
+                        
+                except Exception as e:
+                    log.error(f"      ❌ {task} cross-domain failed: {str(e)[:50]}...")
+                    
+            if cross_domain_results:
+                results.extend(cross_domain_results)
+                log.info(f"   📊 Cross-domain results: {len(cross_domain_results)} optimized ensembles")
+                
     else:
         log.warning(f"   ⚠️  No models available for ensemble optimization")
+
 
     stage_time = time.time() - stage_start
     log.info(f"   ✅ Ensemble optimization completed in {stage_time:.1f}s")
