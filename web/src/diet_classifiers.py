@@ -3017,7 +3017,7 @@ def apply_smote(X, y, max_dense_size: int = int(5e7)):
             return X, y
 
         ratio = counts.min() / counts.sum()
-        if ratio < 0.4:  # Only apply if minority class < 40%
+        if ratio < 0.4:  # Only apply if minority class < 30%
             # Check if X is sparse and decide strategy
             if hasattr(X, "toarray"):  # X is sparse
                 elements = X.shape[0] * X.shape[1]
@@ -3674,7 +3674,7 @@ def run_mode_A(
                 minority_ratio = float(np.min(counts)) / float(len(y_train))  # ✅ Fixed
                 log.info(f"   Minority class ratio: {minority_ratio:.1%}")
                 if minority_ratio < 0.4:
-                    log.info(f"   🔄 Applying SMOTE (minority < 40%)...")
+                    log.info(f"   🔄 Applying SMOTE (minority < 30%)...")
                     try:
                         with tqdm(total=1, desc="   ├─ SMOTE Processing",
                                   position=1, leave=False,

@@ -222,7 +222,7 @@ The system implements **sophisticated ML training** with production-grade featur
 #### **Class Imbalance Handling**
 ```python
 def apply_smote(X, y, max_dense_size: int = int(5e7)):
-    # Apply SMOTE only if minority class < 40% of dataset
+    # Apply SMOTE only if minority class < 30% of dataset
     counts = np.bincount(y)
     ratio = counts.min() / counts.sum()
     
@@ -239,7 +239,7 @@ def apply_smote(X, y, max_dense_size: int = int(5e7)):
 ```
 
 **Intelligent Oversampling Strategy:**
-- **Automatic Detection**: Only applies when minority class < 40%
+- **Automatic Detection**: Only applies when minority class < 30%
 - **SMOTE**: Creates synthetic examples for balanced learning
 - **Random Oversampling**: Fallback for very large sparse matrices
 - **Memory Aware**: Switches strategies based on matrix size
@@ -661,7 +661,7 @@ All other files remain as provided in the original boilerplate, ensuring compati
 
 | Feature                           | Status | Notes                                      |
 | --------------------------------- | ------ | ------------------------------------------ |
-| SMOTE class balancing             | ✅     | Applied automatically when minority < 40%   |
+| SMOTE class balancing             | ✅     | Applied automatically when minority < 30%   |
 | Grid search hyperparameter tuning| ✅     | Model-specific parameter grids with CV      |
 | Early stopping optimization      | ✅     | Prevents overfitting in parameter search    |
 | Automatic probability calibration| ✅     | Ensures all models provide probabilities    |
@@ -725,7 +725,7 @@ Multi-layer fallback architecture:
 #### **Advanced ML Pipeline Features**
 
 - **Silver Label Generation**: 6-stage cascade with USDA integration
-- **SMOTE Class Balancing**: Applied automatically when minority class < 40%
+- **SMOTE Class Balancing**: Applied automatically when minority class < 30%
 - **Grid Search Hyperparameter Tuning**: Model-specific parameter grids with cross-validation
 - **Early Stopping Optimization**: Prevents overfitting in hyperparameter search  
 - **Automatic Probability Calibration**: `ensure_predict_proba()` wraps models without probability outputs
