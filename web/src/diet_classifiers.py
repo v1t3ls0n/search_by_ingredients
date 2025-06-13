@@ -4,10 +4,8 @@
 ================================================================================
 DIET CLASSIFIER PIPELINE - MULTI-MODAL MACHINE LEARNING FOR INGREDIENT ANALYSIS
 ================================================================================
-
 This comprehensive machine learning pipeline classifies recipes as keto-friendly 
 or vegan based on their ingredients using a multi-modal approach combining:
-
 1. TEXT FEATURES: TF-IDF vectorization of normalized ingredient lists
 2. IMAGE FEATURES: ResNet-50 embeddings from recipe photos
 3. RULE-BASED VERIFICATION: Domain-specific heuristics and USDA nutritional data
@@ -25,7 +23,6 @@ KEY COMPONENTS:
     • Token-level disqualifiers from NON_KETO list
     • ML fallback prediction with rule-based correction
     • Photo sanity filtering: excludes rows with URLs like 'nophoto', 'nopic', 'nopicture'
-
 - MODEL TRAINING: Trains diverse ML models (Logistic Regression, SVM, MLP, Random Forest, etc.)
 - ENSEMBLE METHODS: Combines multiple classifiers using top-N voting and rule-based overrides
 - CACHING & RESTORE: Saves and reuses models, vectorizers, image embeddings
@@ -59,6 +56,21 @@ USAGE MODES:
 1. Training: `--train` to trigger full silver model training pipeline
 2. Inference: `--ingredients` for direct classification from command line
 3. Evaluation: `--ground_truth` for benchmarking against labeled CSV
+4. Batch Prediction: `--predict` for unlabeled CSV file inference
+
+EXAMPLES:
+---------
+# Train models on silver-labeled data
+python diet_classifiers.py --train --mode both
+
+# Evaluate trained models on ground truth data
+python diet_classifiers.py --ground_truth /path/to/ground_truth.csv
+
+# Classify custom ingredients
+python diet_classifiers.py --ingredients "almond flour, eggs, butter"
+
+# Batch inference on unlabeled CSV
+python diet_classifiers.py --predict /path/to/recipes.csv
 
 Robust against partial data, broken images, or failed downloads.
 Supports interactive development, Docker builds, and production use.
@@ -66,6 +78,8 @@ Supports interactive development, Docker builds, and production use.
 Author: Guy Vitelson (aka @v1t3ls0n on GitHub)
 """
 
+# --- Future compatibility ---
+from __future__ import annotations
 
 
 # =============================================================================
@@ -81,8 +95,6 @@ This section imports all required libraries, organizing them by category:
 - Specialized libraries (NLTK, imbalanced-learn)
 """
 
-# --- Future compatibility ---
-from __future__ import annotations
 
 # --- Standard library ---
 import json
