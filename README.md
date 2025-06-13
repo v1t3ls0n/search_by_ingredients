@@ -383,28 +383,6 @@ services:
 
 ---
 
-## 🛠️ Future Improvements
-
-| Feature                                       | Status | Notes                                                                                                                  |
-| --------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------- |
-| 💡 **Dynamic Ensemble Weighting (per-row)**   | 🔜     | Logic is implemented, pending evaluation. Will allow better fusion of text/image-only rows using adaptive soft voting. |
-| 💡 Net-carb detection (fiber, sugar alcohol)  | ❌      | Enhance numeric validation by subtracting fiber/sugar alcohol from carb totals.                                        |
-| 💡 Active learning to resolve USDA ambiguity  | ❌      | Use model uncertainty to suggest human verification.                                                                   |
-| 💡 UI for human feedback verification loop    | ❌      | Let users refine silver labels over time.                                                                              |
-| 💡 Auto-generated model cards and ONNX export | ❌      | For transparency and deployment readiness.                                                                             |
-
-> ✅ "Dynamic voting is now supported by the ensemble system but **has not yet been used to generate the above results**. An updated run with this optimization is scheduled next."
-
----
-
-## 📚 References
-
-* USDA FoodData Central (2023)
-* Chawla et al., *SMOTE*, JAI 2002
-* He et al., *ResNet*, CVPR 2016
-* Salton & Buckley, *TF-IDF*, IR 1988
-
-
 # 🏗️ Technical Architecture Deep Dive - Diet Classification System
 
 ## 📋 Table of Contents
@@ -1125,3 +1103,12 @@ The implementation demonstrates high code quality:
 - **Progress Tracking**: User-friendly progress bars
 - **Memory Safety**: Explicit cleanup and garbage collection
 
+
+--- 
+
+## 📚 References
+
+* USDA FoodData Central (2023)
+* Chawla et al., *SMOTE*, JAI 2002
+* He et al., *ResNet*, CVPR 2016
+* Salton & Buckley, *TF-IDF*, IR 1988
