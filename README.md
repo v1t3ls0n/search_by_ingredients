@@ -48,20 +48,30 @@ Export: Metrics, Plots, Artifacts
 
 ---
 
-## 🔩 Silver Labeling Engine
+### 🔍 Silver Labeling Heuristics
 
-Our system produces training labels (silver labels) via a **6-stage heuristic**:
+Our silver labeling engine applies **progressive rule-based heuristics** that simulate expert knowledge to label unlabeled recipes.
 
-| Stage | Description                          | Example                                |
-|-------|--------------------------------------|----------------------------------------|
-| 1.    | Whitelist (early positive)           | "almond flour" is always keto          |
-| 2.    | USDA numeric check (carbs ≤ 10g)     | "jackfruit" fails: 23g carbs           |
-| 3.    | Regex blacklist                      | Rejects "sugar", "rice"                |
-| 4.    | Token combination matching           | "kidney beans" → non-keto              |
-| 5.    | ML soft classification (probability) | Learns semantic context                |
-| 6.    | Hard override with rules             | Final decision ensures dietary safety  |
+Before applying classification logic, we pre-filter unqualified samples:
 
-> Fallbacks like token simplification (`egg whites` → `egg`) + USDA fuzzy match improve recall.
+* ❌ **Photo Filtering:** Remove rows whose `photo_url` contains `nophoto`, `nopic`, or `nopicture` — these are consistently blank or irrelevant images.
+* ❌ **Empty or malformed ingredient entries** are excluded from training.
+* ✅ **Ingredient normalization** includes lemmatization, unit removal, numeric stripping, and character simplification.
+
+#### Labeling Logic:
+
+We then assign **silver labels** using the following prioritized rules:
+
+| Stage | Description                                                                                                  | Example |
+| ----- | ------------------------------------------------------------------------------------------------------------ | ------- |
+| 1.    | **Whitelist override**: Certain ingredients (e.g., `"almond flour"`) are always positive for keto/vegan.     |         |
+| 2.    | **USDA nutrient check**: Ingredient-level carbs are looked up (≤10g net carbs per 100g → keto).              |         |
+| 3.    | **Regex blacklist**: Disqualifies patterns like `"sugar"`, `"honey"`, `"bacon"` for relevant tasks.          |         |
+| 4.    | **Token combination rules**: Phrases like `"kidney beans"` or `"chicken broth"` trigger exclusions.          |         |
+| 5.    | **Soft ML classification**: Weak ML models trained on early confident examples provide score-based fallback. |         |
+| 6.    | **Hard override + verification**: Final logic ensures dietary-safe labels with rule-based priority.          |         |
+
+> This hybrid process is robust to noisy input and simulates a domain-expert verification process.
 
 ---
 
@@ -163,27 +173,112 @@ These results demonstrate **exceptionally strong performance**, especially consi
 All the results above were achieved **before** enabling **dynamic per-row ensemble weight optimization**. The current ensemble logic uses static weightings, yet still delivers top-tier metrics. This strongly suggests that adding dynamic weights based on image/text availability could yield even higher confidence and class-specific reliability.
 
 ---
+Here are your updated and integrated outputs:
+
+---
+
+### ✅ Updated Docstring for `diet_classifiers.py`
+
+```python
+"""
+================================================================================
+DIET CLASSIFIER PIPELINE - MULTI-MODAL MACHINE LEARNING FOR INGREDIENT ANALYSIS
+================================================================================
+
+This comprehensive machine learning pipeline classifies recipes as keto-friendly 
+or vegan based on their ingredients using a multi-modal approach combining:
+
+1. TEXT FEATURES: TF-IDF vectorization of normalized ingredient lists
+2. IMAGE FEATURES: ResNet-50 embeddings from recipe photos
+3. RULE-BASED VERIFICATION: Domain-specific heuristics and USDA nutritional data
+
+KEY COMPONENTS:
+---------------
+- SILVER LABEL GENERATION: Creates weak labels from unlabeled data using multi-stage
+  rule-based heuristics simulating expert knowledge:
+    • Token normalization + lemmatization
+    • Regex-based blacklist/whitelist
+    • USDA-based carbohydrate filtering (≤10g carbs/100g → keto-safe)
+    • Phrase-level disqualifications (e.g., "chicken broth")
+    • Whitelist override of verified-safe ingredients (e.g., "almond flour")
+    • Soft ML fallback + rule-based priority merging
+    • Photo sanity filtering: excludes rows with URLs like 'nophoto', 'nopic', 'nopicture'
+
+- MODEL TRAINING: Trains diverse ML models (Logistic Regression, SVM, MLP, Random Forest, etc.)
+- ENSEMBLE METHODS: Combines multiple classifiers using top-N voting and rule-based overrides
+- CACHING & RESTORE: Saves and reuses models, vectorizers, image embeddings
+- LOGGING: Logs to both console and `artifacts/pipeline.log`
+- FULL EVALUATION: Saves gold-test predictions and per-class metrics to CSV
+
+ARCHITECTURE OVERVIEW:
+----------------------
+1. Data Loading:
+   - Loads silver (unlabeled) and gold (labeled) recipes
+   - Uses USDA nutritional DB for rule-based classification
+   - Input can be CSV or Parquet
+
+2. Feature Extraction:
+   - Text: TF-IDF vectorization after custom normalization
+   - Image: ResNet-50 feature extraction from downloaded photos
+   - Merges modalities where appropriate
+
+3. Model Training:
+   - Silver-labeled data → supervised classifiers
+   - Supports `--mode text`, `--mode image`, `--mode both`
+
+4. Prediction & Evaluation:
+   - Supports ingredient inference or full CSV evaluation
+   - Computes Accuracy, F1, Precision, Recall
+   - Exports predictions and metrics to artifacts directory
+
+USAGE MODES:
+------------
+1. Training: `--train` to trigger full silver model training pipeline
+2. Inference: `--ingredients` for direct classification from command line
+3. Evaluation: `--ground_truth` for benchmarking against labeled CSV
+
+Robust against partial data, broken images, or failed downloads.
+Supports interactive development, Docker builds, and production use.
+
+Author: Guy Vitelson (aka @v1t3ls0n on GitHub)
+"""
+```
+
+---
 
 ## 🖥️ CLI Interface
 
-Train, test, classify, or run gold-eval in one line:
+Train, evaluate, or classify directly via CLI:
 
 ```bash
-# Train and evaluate on silver + gold
+# Train and evaluate using silver + gold set
 python diet_classifiers.py --train --mode both
 
-# Evaluate only against gold set
-python diet_classifiers.py --ground_truth data/gold_sample.csv
+# Evaluate on labeled test set
+python diet_classifiers.py --ground_truth /usr/src/data/ground_truth_sample.csv
 
-# Classify custom ingredient list
-python diet_classifiers.py --ingredients "almond flour, erythritol, egg whites"
+# Classify custom ingredients
+python diet_classifiers.py --ingredients "almond flour, coconut oil, cocoa powder"
 ````
 
-Or via Docker:
+Additional options:
+
+| Argument         | Type   | Description                                                         |
+| ---------------- | ------ | ------------------------------------------------------------------- |
+| `--train`        | flag   | Run the full training pipeline on silver labels                     |
+| `--ground_truth` | path   | Evaluate trained models on a gold-labeled CSV file                  |
+| `--ingredients`  | str    | Comma-separated list or JSON array of ingredients for inference     |
+| `--mode`         | choice | Feature mode: `text`, `image`, or `both` (default: both)            |
+| `--force`        | flag   | Recompute image embeddings, ignoring cached `.npy` files            |
+| `--sample_frac`  | float  | Fraction of the silver set to sample for training (e.g., 0.1 = 10%) |
+
+Or run via Docker for full automation:
 
 ```bash
-./run_pipeline.sh       # End-to-end build + run
+./run_pipeline.sh       # Build, train, and test in one go
 ```
+
+
 
 ---
 

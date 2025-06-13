@@ -13,45 +13,56 @@ or vegan based on their ingredients using a multi-modal approach combining:
 3. RULE-BASED VERIFICATION: Domain-specific heuristics and USDA nutritional data
 
 KEY COMPONENTS:
---------------
-- SILVER LABEL GENERATION: Creates weak labels from unlabeled data using rules
-- MODEL TRAINING: Trains multiple ML models (SVM, Neural Networks, etc.)
-- ENSEMBLE METHODS: Combines predictions from multiple models
-- EVALUATION: Tests on gold-standard manually labeled data
+---------------
+- SILVER LABEL GENERATION: Creates weak labels from unlabeled data using multi-stage
+  rule-based heuristics simulating expert knowledge:
+    • Token normalization + lemmatization
+    • Regex-based blacklist/whitelist
+    • USDA-based carbohydrate filtering (≤10g carbs/100g → keto-safe)
+    • Phrase-level disqualifications (e.g., "chicken broth")
+    • Whitelist override of verified-safe ingredients (e.g., "almond flour")
+    • Soft ML fallback + rule-based priority merging
+    • Photo sanity filtering: excludes rows with URLs like 'nophoto', 'nopic', 'nopicture'
+
+- MODEL TRAINING: Trains diverse ML models (Logistic Regression, SVM, MLP, Random Forest, etc.)
+- ENSEMBLE METHODS: Combines multiple classifiers using top-N voting and rule-based overrides
+- CACHING & RESTORE: Saves and reuses models, vectorizers, image embeddings
+- LOGGING: Logs to both console and `artifacts/pipeline.log`
+- FULL EVALUATION: Saves gold-test predictions and per-class metrics to CSV
 
 ARCHITECTURE OVERVIEW:
----------------------
-1. Data Loading Stage:
-   - Loads recipe datasets (silver & gold standard)
-   - Loads USDA nutritional database for carbohydrate rules
-   - Handles both CSV and Parquet formats
+----------------------
+1. Data Loading:
+   - Loads silver (unlabeled) and gold (labeled) recipes
+   - Uses USDA nutritional DB for rule-based classification
+   - Input can be CSV or Parquet
 
 2. Feature Extraction:
-   - Text: TF-IDF on normalized, lemmatized ingredients
-   - Images: Downloads photos, extracts ResNet-50 features
-   - Combines features for multi-modal learning
+   - Text: TF-IDF vectorization after custom normalization
+   - Image: ResNet-50 feature extraction from downloaded photos
+   - Merges modalities where appropriate
 
 3. Model Training:
-   - Trains models on silver labels (weak supervision)
-   - Evaluates on gold standard test set
-   - Supports text-only, image-only, or combined modes
+   - Silver-labeled data → supervised classifiers
+   - Supports `--mode text`, `--mode image`, `--mode both`
 
-4. Post-Processing:
-   - Rule-based verification corrects ML predictions
-   - Ensemble methods combine multiple models
-   - Exports evaluation metrics and plots
+4. Prediction & Evaluation:
+   - Supports ingredient inference or full CSV evaluation
+   - Computes Accuracy, F1, Precision, Recall
+   - Exports predictions and metrics to artifacts directory
 
 USAGE MODES:
------------
-1. Training: Run full pipeline to train models
-2. Inference: Classify new ingredients using trained models
-3. Evaluation: Test on ground truth dataset
+------------
+1. Training: `--train` to trigger full silver model training pipeline
+2. Inference: `--ingredients` for direct classification from command line
+3. Evaluation: `--ground_truth` for benchmarking against labeled CSV
 
-The pipeline emphasizes robustness with comprehensive error handling,
-memory optimization, and progress tracking throughout all stages.
+Robust against partial data, broken images, or failed downloads.
+Supports interactive development, Docker builds, and production use.
 
 Author: Guy Vitelson (aka @v1t3ls0n on GitHub)
 """
+
 
 # =============================================================================
 # IMPORTS AND DEPENDENCIES
@@ -81,6 +92,8 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 from rapidfuzz import process
 import pickle
+import os
+from pathlib import Path
 
 # --- Third-party: core ---
 import joblib
@@ -204,21 +217,6 @@ except Exception as e:  # pragma: no cover
 # --- Imbalanced learning ---
 from imblearn.over_sampling import SMOTE, RandomOverSampler
 
-
-# =============================================================================
-# LOGGING CONFIGURATION
-# =============================================================================
-"""
-Sets up comprehensive logging with timestamps and severity levels.
-All major operations are logged for debugging and monitoring.
-"""
-
-logging.basicConfig(level=logging.INFO,
-                    format="%(asctime)s │ %(levelname)s │ %(message)s",
-                    datefmt="%H:%M:%S")
-log = logging.getLogger("PIPE")
-
-
 # =============================================================================
 # CONFIGURATION AND CONSTANTS
 # =============================================================================
@@ -258,6 +256,39 @@ CFG = Config()
 
 
 # =============================================================================
+# LOGGING CONFIGURATION
+# =============================================================================
+"""
+Sets up comprehensive logging with timestamps and severity levels.
+All major operations are logged for debugging and monitoring.
+"""
+# Make sure artifacts dir exists (harmless if already exists via Docker)
+CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+
+# Define log file path
+log_file = CFG.artifacts_dir / "pipeline.log"
+
+
+# Set up logger
+log = logging.getLogger("PIPE")
+log.setLevel(logging.INFO)
+
+# Define formatter
+formatter = logging.Formatter("%(asctime)s │ %(levelname)s │ %(message)s", datefmt="%H:%M:%S")
+
+# Console handler
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+log.addHandler(console_handler)
+
+# File handler
+file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
+file_handler.setFormatter(formatter)
+log.addHandler(file_handler)
+
+
+# =============================================================================
 # DATA LOADING AND DATASET MANAGEMENT
 # =============================================================================
 """
@@ -286,8 +317,6 @@ def _load_usda_carb_table() -> pd.DataFrame:
         - nutrient.csv: Nutrient definitions
         - food_nutrient.csv: Nutrient content per food item
     """
-    from pathlib import Path
-    import pandas as pd
 
     # 1. Resolve file paths
     usda = CFG.usda_dir
@@ -369,7 +398,6 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> 
         >>> print(f"Downloaded {len(valid_indices)} images")
     """
     import time
-    import os
     import hashlib
     from collections import defaultdict, Counter
     from urllib.parse import urlparse
@@ -6133,45 +6161,90 @@ def main():
                 sys.exit(1)
 
         elif args.ground_truth:
-            # Handle ground truth evaluation
             log.info(f"📊 Evaluating on ground truth: {args.ground_truth}")
 
             try:
+                import pickle
+                from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+
+                if not os.path.exists(args.ground_truth):
+                    log.error(f"❌ Ground truth file not found: {args.ground_truth}")
+                    log.info("💡 Make sure to run the command with:")
+                    log.info("   python diet_classifiers.py --ground_truth /usr/src/data/ground_truth_sample.csv")
+                    sys.exit(1)
+
                 df = pd.read_csv(args.ground_truth)
                 log.info(f"✅ Loaded ground truth with {len(df)} rows")
 
-                # Evaluate using pre-trained models
-                _ensure_pipeline()
-                
-                # Process each row
+                # Load models and vectorizer
+                model_path = CFG.artifacts_dir / "models.pkl"
+                vec_path = CFG.artifacts_dir / "vectorizer.pkl"
+
+                with open(vec_path, 'rb') as f:
+                    vectorizer = pickle.load(f)
+                log.info(f"✅ Loaded vectorizer from {vec_path}")
+
+                with open(model_path, 'rb') as f:
+                    models = pickle.load(f)
+                log.info(f"✅ Loaded models from {model_path}")
+
+                # Vectorize ingredients
+                texts = df['ingredients'].fillna("").tolist()
+                X = vectorizer.transform(texts)
+                log.info("✅ Transformed text to feature vectors")
+
+                # Predict
                 results = []
                 for idx, row in df.iterrows():
-                    ingredients = row['ingredients']
-                    keto_pred = is_keto(ingredients)
-                    vegan_pred = is_vegan(ingredients)
-                    
-                    results.append({
-                        'index': idx,
-                        'keto_pred': keto_pred,
-                        'vegan_pred': vegan_pred,
-                        'keto_true': row.get('label_keto', None),
-                        'vegan_true': row.get('label_vegan', None)
-                    })
-                
-                # Calculate metrics
+                    res = {"index": idx}
+                    for task in ["keto", "vegan"]:
+                        if task in models:
+                            pred = models[task].predict(X[idx])
+                            res[f"{task}_pred"] = int(pred[0])
+                        else:
+                            res[f"{task}_pred"] = None
+                            log.warning(f"⚠️ No trained model found for task: {task}")
+                    res["keto_true"] = row.get("label_keto")
+                    res["vegan_true"] = row.get("label_vegan")
+                    results.append(res)
+
                 results_df = pd.DataFrame(results)
-                
-                if 'label_keto' in df.columns:
-                    keto_acc = accuracy_score(df['label_keto'], results_df['keto_pred'])
-                    log.info(f"Keto accuracy: {keto_acc:.3f}")
-                
-                if 'label_vegan' in df.columns:
-                    vegan_acc = accuracy_score(df['label_vegan'], results_df['vegan_pred'])
-                    log.info(f"Vegan accuracy: {vegan_acc:.3f}")
-                
-                # Save results
-                results_df.to_csv("ground_truth_predictions.csv", index=False)
-                log.info("✅ Saved predictions to ground_truth_predictions.csv")
+
+                # Save predictions
+                pred_path = CFG.artifacts_dir / "ground_truth_predictions.csv"
+                results_df.to_csv(pred_path, index=False)
+                log.info(f"✅ Saved predictions to {pred_path}")
+
+                # Evaluation metrics
+                metrics = []
+                for task in ["keto", "vegan"]:
+                    true_col = f"{task}_true"
+                    pred_col = f"{task}_pred"
+
+                    if true_col in results_df.columns:
+                        y_true = results_df[true_col].dropna().astype(int)
+                        y_pred = results_df[pred_col].dropna().astype(int)
+
+                        acc = accuracy_score(y_true, y_pred)
+                        prec = precision_score(y_true, y_pred, zero_division=0)
+                        rec = recall_score(y_true, y_pred, zero_division=0)
+                        f1 = f1_score(y_true, y_pred, zero_division=0)
+
+                        metrics.append({
+                            "task": task,
+                            "accuracy": acc,
+                            "precision": prec,
+                            "recall": rec,
+                            "f1_score": f1
+                        })
+
+                        log.info(f"✔️  {task.capitalize()} - ACC: {acc:.3f} | PREC: {prec:.3f} | REC: {rec:.3f} | F1: {f1:.3f}")
+
+                # Save metrics
+                metrics_df = pd.DataFrame(metrics)
+                metrics_path = CFG.artifacts_dir / "eval_metrics.csv"
+                metrics_df.to_csv(metrics_path, index=False)
+                log.info(f"📈 Saved evaluation metrics to {metrics_path}")
 
             except Exception as e:
                 log.error(f"❌ Ground truth evaluation failed: {e}")
