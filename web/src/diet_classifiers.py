@@ -366,6 +366,19 @@ def _load_usda_carb_table() -> pd.DataFrame:
     log.info("USDA carb table loaded: %d distinct food descriptions", len(carb_df))
     return carb_df
 
+def label_usda_keto_data(carb_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convert carb_df from _load_usda_carb_table into a silver-format dataframe
+    with clean text and keto labels based on <10g carbs/100g rule.
+    """
+    df = carb_df.copy()
+    df["ingredient"] = df["food_desc"]
+    df["clean"] = df["food_desc"]
+    df["silver_keto"] = (df["carb_100g"] < 10).astype(int)
+    df["silver_vegan"] = np.nan  # we don't label vegan from USDA
+    df["source"] = "usda"
+    return df[["ingredient", "clean", "silver_keto", "silver_vegan", "source"]]
+
 
 def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> list[int]:
     """
@@ -5509,6 +5522,17 @@ def run_full_pipeline(mode: str = "both",
         text_pbar.update(1)
 
         text_pbar.set_description("   ├─ Fitting on silver data")
+        # Load USDA carb data and convert to keto-labeled rows
+        carb_df = _load_usda_carb_table()
+        if not carb_df.empty:
+            usda_labeled = label_usda_keto_data(carb_df)
+            log.info(f"   ├─ USDA examples added: {len(usda_labeled)}")
+            silver_txt = pd.concat([silver_txt, usda_labeled], ignore_index=True)
+            Path("artifacts").mkdir(exist_ok=True)
+            silver_txt.to_csv("artifacts/silver_extended.csv", index=False)
+        else:
+            log.warning("   ├─ No USDA data added - carb_df is empty")
+
         X_text_silver = vec.fit_transform(silver_txt.clean)
         text_pbar.update(1)
 
