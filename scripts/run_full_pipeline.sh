@@ -1,7 +1,8 @@
+# ============================================
+# run_full_pipeline.sh - Windows-compatible version
+# ============================================
+
 #!/usr/bin/env bash
-# ============================================
-# run_full_pipeline.sh
-# ============================================
 
 # ───────────────────────────────────────────────────────────────
 # 🎯 End-to-End ML Pipeline Runner (inside Docker)
@@ -44,13 +45,13 @@ docker-compose exec web bash -c "
 
     echo '🧠 Training classifiers on 100% of the data...'
     echo '📝 Note: Will use cached embeddings if available (add --force to recompute)'
-    python3 /app/web/diet_classifiers.py --train --mode both $FORCE_FLAG
+    python3 web/diet_classifiers.py --train --mode both $FORCE_FLAG
 
     echo '🧪 Evaluating on provided gold set...'
-    python3 /app/web/diet_classifiers.py --ground_truth /app/data/ground_truth_sample.csv
+    python3 web/diet_classifiers.py --ground_truth data/ground_truth_sample.csv
 
     echo '🥘 Classifying custom ingredient list...'
-    python3 /app/web/diet_classifiers.py --ingredients 'almond flour, erythritol, egg whites'
+    python3 web/diet_classifiers.py --ingredients 'almond flour, erythritol, egg whites'
 "
 
 echo "✅ Pipeline complete!"

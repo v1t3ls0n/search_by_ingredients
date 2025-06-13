@@ -1,6 +1,5 @@
-
 # ============================================
-# eval_ground_truth.sh
+# eval_ground_truth.sh - Windows-compatible version
 # ============================================
 
 #!/usr/bin/env bash
@@ -23,7 +22,7 @@ sleep 5
 
 # Check if models exist
 echo "🔍 Checking for pre-trained models..."
-if docker-compose exec web test -f /app/artifacts/models.pkl; then
+if docker-compose exec web test -f artifacts/models.pkl; then
     echo "✅ Found pre-trained models"
 else
     echo "⚠️  No pre-trained models found. Run train.sh first or use run_full_pipeline.sh"
@@ -35,8 +34,8 @@ else
 fi
 
 echo "🧠 Running evaluation on gold set..."
-docker-compose exec web python3 /app/web/diet_classifiers.py \
-    --ground_truth /app/data/ground_truth_sample.csv
+docker-compose exec web python3 web/diet_classifiers.py \
+    --ground_truth data/ground_truth_sample.csv
 
 echo "✅ Evaluation complete!"
 echo "📊 Check logs above for results"

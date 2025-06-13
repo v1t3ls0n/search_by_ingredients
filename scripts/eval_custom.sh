@@ -1,7 +1,5 @@
-
-
 # ============================================
-# eval_custom.sh
+# eval_custom.sh - Windows-compatible version
 # ============================================
 
 #!/usr/bin/env bash
@@ -50,16 +48,16 @@ sleep 5
 
 # Check if models exist
 echo "🔍 Checking for pre-trained models..."
-if docker-compose exec web test -f /app/artifacts/models.pkl; then
+if docker-compose exec web test -f artifacts/models.pkl; then
     echo "✅ Found pre-trained models"
 else
     echo "⚠️  No pre-trained models found. Training models first..."
-    docker-compose exec web python3 /app/web/diet_classifiers.py --train --mode both
+    docker-compose exec web python3 web/diet_classifiers.py --train --mode both
 fi
 
 echo "🐳 Running prediction on custom CSV..."
-docker-compose exec web python3 /app/web/diet_classifiers.py \
-    --ground_truth /app/data/tmp_ground_truth.csv $FORCE_FLAG
+docker-compose exec web python3 web/diet_classifiers.py \
+    --ground_truth data/tmp_ground_truth.csv $FORCE_FLAG
 
 echo "✅ Evaluation complete!"
 echo "📊 Check logs for results"

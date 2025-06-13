@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# ============================================
+# train.sh - Windows-compatible version
+# ============================================
 
 # ───────────────────────────────────────────────────────
 # 🧠 Train text + image models on silver-labeled dataset
@@ -19,8 +22,8 @@ sleep 5
 echo "🎯 Starting training pipeline..."
 echo "📝 Note: This will use cached embeddings if available, or compute them fresh if not."
 
-# Run training in the web container (not 'run' which creates new container)
-docker-compose exec web python3 /app/web/diet_classifiers.py --train --mode both
+# Use relative path since WORKDIR is /app
+docker-compose exec web python3 web/diet_classifiers.py --train --mode both
 
 echo "✅ Training complete!"
 echo "📊 Models saved to:"
