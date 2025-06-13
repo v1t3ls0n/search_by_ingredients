@@ -8,7 +8,7 @@ best_params.json
 # C extensions
 *.so
 .jpg
-
+utils/
 # Distribution / packaging
 .Python
 build/
