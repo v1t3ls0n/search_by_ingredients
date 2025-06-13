@@ -392,7 +392,6 @@ def tune_with_early_stopping(patience=3, min_improvement=0.001):
 - Sparse-dense feature combination
 
 ---
-
 ## 🚀 Project Directory Structure
 
 ### 📁 Directory Overview
@@ -423,19 +422,6 @@ web/src/diet_classifiers.py
 
 ### 🗂️ Directory Layout
 
-#### 📓 **Notebook & CLI Container** (`nb/`) 
-*[Boilerplate - Development environment]*
-
-```
-nb/
-├── src/
-│   ├── diet_classifiers.py        # [Boilerplate]
-│   ├── hybrid_classifier.py       # [Boilerplate]
-│   └── task.ipynb                # [Boilerplate]
-├── Dockerfile                     # [Boilerplate]
-└── requirements.txt               # [Boilerplate]
-```
-
 #### 🌐 **Web & API Container** (`web/`)
 *Contains the actual implementation*
 
@@ -447,7 +433,7 @@ web/
 │   ├── app.py                    # [Boilerplate - Flask server]
 │   ├── diet_classifiers.py       # ⭐ COMPLETE IMPLEMENTATION ⭐
 │   ├── index_data.py             # [Boilerplate - OpenSearch indexing]
-│   └── init.sh                   # [Modified - Startup & model extraction]
+│   └── init.sh                   # [Modified - Startup script]
 ├── Dockerfile                    # [Modified - Container config]
 └── requirements.txt              # [Modified - Dependencies]
 ```
@@ -478,7 +464,7 @@ artifacts/
 
 ##### 🐳 Docker Configuration
 ```
-├── docker-compose.yml            # [Modified - Service orchestration]
+├── docker-compose.yml            # [Modified - Two-service architecture]
 ```
 
 ##### 📜 Execution Scripts
@@ -502,15 +488,20 @@ artifacts/
 
 ### 📝 Implementation Notes
 
+#### Streamlined Architecture
+The project uses a **two-service Docker architecture** (the original `nb/` notebook container has been removed as unnecessary boilerplate):
+- **`os`**: OpenSearch for recipe indexing and search capabilities
+- **`web`**: Complete ML pipeline, Flask API, and CLI interface
+
 #### Modified Files (Minor Adjustments)
 As per task requirements, only minimal changes were made to:
-- 📄 **`/web/src/init.sh`** - Startup script adjustments
-- 🐳 **`/web/Dockerfile`** - Container configuration
-- 🔧 **`/docker-compose.yml`** - Service definitions
-- 📦 **`/web/requirements.txt`** - Dependency specifications
+- 🐳 **`/web/Dockerfile`** - Container configuration with dataset downloads
+- 🔧 **`/docker-compose.yml`** - Simplified two-service orchestration
+- 📦 **`/web/requirements.txt`** - ML pipeline dependencies
+- 📄 **`/web/src/init.sh`** - Startup script (model extraction moved to Dockerfile)
 
 #### Untouched Boilerplate
-All other files remain as provided in the original boilerplate, ensuring compatibility with the existing infrastructure.
+All other files remain as provided in the original boilerplate, ensuring compatibility with the existing infrastructure while removing unnecessary complexity.
 
 ---
 
