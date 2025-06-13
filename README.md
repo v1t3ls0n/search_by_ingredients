@@ -226,7 +226,7 @@ def apply_smote(X, y, max_dense_size: int = int(5e7)):
     counts = np.bincount(y)
     ratio = counts.min() / counts.sum()
     
-    if ratio < 0.4:  # Threshold for applying oversampling
+    if ratio < 0.3:  # Threshold for applying oversampling
         if hasattr(X, "toarray") and X.shape[0] * X.shape[1] > max_dense_size:
             # Too large for SMOTE - use random oversampling
             ros = RandomOverSampler(random_state=42)
