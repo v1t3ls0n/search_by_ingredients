@@ -105,6 +105,8 @@ import unicodedata
 import re
 import logging
 import json
+import logging.handlers
+import queue
 
 # =============================================================================
 # IMPORTS AND DEPENDENCIES
@@ -231,7 +233,6 @@ except Exception as e:  # pragma: no cover
     transforms = None
     TORCH_AVAILABLE = False
 
-# --- Imbalanced learning ---
 
 # =============================================================================
 # CONFIGURATION AND CONSTANTS
@@ -275,38 +276,88 @@ CFG = Config()
 
 
 # =============================================================================
-# LOGGING CONFIGURATION
+# LOGGING CONFIGURATION (THREAD-SAFE)
 # =============================================================================
 """
-Sets up comprehensive logging with timestamps and severity levels.
-All major operations are logged for debugging and monitoring.
+Sets up thread-safe logging with timestamps and severity levels.
+Uses QueueHandler to prevent race conditions and NULL characters.
 """
-# Make sure artifacts dir exists (harmless if already exists via Docker)
+# Make sure artifacts dir exists
 CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
-
 
 # Define log file path
-CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
 log_file = CFG.artifacts_dir / "pipeline.log"
 
+# Delete existing log file for clean start
+if log_file.exists():
+    try:
+        log_file.unlink()
+    except Exception:
+        pass
 
 # Set up logger
 log = logging.getLogger("PIPE")
 log.setLevel(logging.INFO)
+log.handlers.clear()
 
 # Define formatter
 formatter = logging.Formatter(
     "%(asctime)s │ %(levelname)s │ %(message)s", datefmt="%H:%M:%S")
 
-# Console handler
+# Console handler (direct)
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(formatter)
 log.addHandler(console_handler)
 
-# File handler
-file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
-file_handler.setFormatter(formatter)
-log.addHandler(file_handler)
+# For file handler, use QueueHandler for thread safety
+if hasattr(logging.handlers, 'QueueHandler'):
+    # Create queue and queue handler
+    log_queue = queue.Queue(-1)  # No limit on size
+    queue_handler = logging.handlers.QueueHandler(log_queue)
+    log.addHandler(queue_handler)
+
+    # Create file handler
+    file_handler = logging.FileHandler(
+        log_file,
+        mode='w',
+        encoding='utf-8',
+        delay=False
+    )
+    file_handler.setFormatter(formatter)
+
+    # Create queue listener
+    queue_listener = logging.handlers.QueueListener(
+        log_queue,
+        file_handler,
+        respect_handler_level=True
+    )
+    queue_listener.start()
+
+    # Register cleanup function
+    import atexit
+    atexit.register(queue_listener.stop)
+else:
+    # Fallback to direct file handler
+    file_handler = logging.FileHandler(
+        log_file,
+        mode='w',
+        encoding='utf-8',
+        delay=False
+    )
+    file_handler.setFormatter(formatter)
+    log.addHandler(file_handler)
+
+# Write initial message
+log.info("="*80)
+log.info("DIET CLASSIFIER PIPELINE - LOG INITIALIZED")
+log.info(f"Log file: {log_file}")
+log.info(f"Python version: {sys.version}")
+log.info("="*80)
+
+# Ensure handlers are flushed
+for handler in log.handlers:
+    if hasattr(handler, 'flush'):
+        handler.flush()
 
 # =============================================================================
 # GENERAL UTILITY FUNCTIONS
@@ -429,31 +480,31 @@ def label_usda_keto_data(carb_df: pd.DataFrame) -> pd.DataFrame:
 def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16, force: bool = False) -> list[int]:
     """
     Download images with maximum robustness and intelligent caching.
-    
+
     This refactored function prioritizes:
     1. Embeddings-first approach - always check for embeddings before downloading
     2. Graceful degradation - work with partial data
     3. Smart caching - multiple fallback strategies
     4. Error resilience - handle all failure modes
     5. Resource efficiency - minimize unnecessary work
-    
+
     Args:
         df: DataFrame containing photo_url column with image URLs
         img_dir: Directory to save downloaded images
         max_workers: Maximum number of concurrent download threads
         force: Force redownload even if embeddings exist
-        
+
     Returns:
         List of valid indices for downstream processing
     """
-    
+
     from collections import defaultdict, Counter
     from urllib.parse import urlparse
     import threading
     import hashlib
-    
+
     download_start = time.time()
-    
+
     # ------------------------------------------------------------------
     # PRIORITY 1: EMBEDDINGS-FIRST APPROACH
     # ------------------------------------------------------------------
@@ -461,70 +512,84 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16, for
     log.info(f"   Target directory: {img_dir}")
     log.info(f"   Total samples: {len(df):,}")
     log.info(f"   Force recompute: {force}")
-    
+
     # Check PyTorch availability
     if not TORCH_AVAILABLE:
         log.warning("   ⚠️  PyTorch not available - returning empty indices")
         return []
-    
+
     # Define embedding search paths in priority order
     mode = img_dir.name  # 'silver' or 'gold'
     embedding_candidates = [
         # Check artifacts directory FIRST (where Docker mounts local files)
-        CFG.artifacts_dir / f"embeddings_{mode}_backup.npy",          # This is where your files are!
-        CFG.artifacts_dir / f"{mode}_embeddings.npy",                 # Alternative naming
-        CFG.artifacts_dir / f"embeddings_{mode}.npy",                 # Another alternative
-        
+        # This is where your files are!
+        CFG.artifacts_dir / f"embeddings_{mode}_backup.npy",
+        # Alternative naming
+        CFG.artifacts_dir / f"{mode}_embeddings.npy",
+        # Another alternative
+        CFG.artifacts_dir / f"embeddings_{mode}.npy",
+
         # Then check image directory
         img_dir / "embeddings.npy",                                   # Primary cache
-        img_dir / f"embeddings_{mode}.npy",                          # Mode-specific
-        
+        # Mode-specific
+        img_dir / f"embeddings_{mode}.npy",
+
         # Current directory (legacy)
-        Path(f"embeddings_{mode}_backup.npy"),                       # Current dir backup
-        
+        # Current dir backup
+        Path(f"embeddings_{mode}_backup.npy"),
+
         # Other fallbacks
-        img_dir.parent / f"embeddings_{mode}.npy",                   # Parent directory
-        Path("embeddings") / f"{mode}.npy",                          # Embeddings directory
-        Path("/app/embeddings") / f"{mode}.npy",                     # Docker path
-        Path("/app") / f"embeddings_{mode}_backup.npy",              # Docker backup
-        img_dir / "features.npy",                                     # Alternative naming
+        # Parent directory
+        img_dir.parent / f"embeddings_{mode}.npy",
+        # Embeddings directory
+        Path("embeddings") / f"{mode}.npy",
+        # Docker path
+        Path("/app/embeddings") / f"{mode}.npy",
+        # Docker backup
+        Path("/app") / f"embeddings_{mode}_backup.npy",
+        # Alternative naming
+        img_dir / "features.npy",
         img_dir.parent / "cached_embeddings.npy",                    # Generic cache
     ]
-    
+
     # EMBEDDINGS VALIDATION AND SELECTION
     if not force:
         log.info(f"   🔍 Searching for existing embeddings...")
-        
+
         for i, emb_path in enumerate(embedding_candidates, 1):
             if not emb_path.exists():
                 log.debug(f"      {i}. {emb_path.name}: Not found")
                 continue
-                
+
             try:
                 # Quick validation load
                 embeddings = np.load(str(emb_path), mmap_mode='r')
                 emb_shape = embeddings.shape
-                
+
                 # Validate embedding properties
                 if len(emb_shape) != 2:
-                    log.debug(f"      {i}. {emb_path.name}: Invalid dimensions {emb_shape}")
+                    log.debug(
+                        f"      {i}. {emb_path.name}: Invalid dimensions {emb_shape}")
                     continue
-                    
+
                 if emb_shape[1] not in [2048, 512, 1024, 4096]:  # Common embedding sizes
-                    log.debug(f"      {i}. {emb_path.name}: Unusual feature size {emb_shape[1]}")
+                    log.debug(
+                        f"      {i}. {emb_path.name}: Unusual feature size {emb_shape[1]}")
                     continue
-                
+
                 # Check size compatibility
                 size_ratio = emb_shape[0] / len(df)
                 min_threshold = 0.3  # Accept if at least 30% coverage
-                
+
                 if size_ratio >= min_threshold:
                     log.info(f"   ✅ EMBEDDINGS FOUND: {emb_path}")
                     log.info(f"      ├─ Shape: {emb_shape}")
-                    log.info(f"      ├─ Coverage: {size_ratio:.1%} ({emb_shape[0]:,}/{len(df):,})")
-                    log.info(f"      ├─ File size: {emb_path.stat().st_size / (1024**2):.1f} MB")
+                    log.info(
+                        f"      ├─ Coverage: {size_ratio:.1%} ({emb_shape[0]:,}/{len(df):,})")
+                    log.info(
+                        f"      ├─ File size: {emb_path.stat().st_size / (1024**2):.1f} MB")
                     log.info(f"      └─ 🚀 SKIPPING IMAGE DOWNLOADS!")
-                    
+
                     # Return appropriate indices based on available embeddings
                     if emb_shape[0] >= len(df):
                         return sorted(df.index.tolist())
@@ -532,38 +597,40 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16, for
                         # Return indices up to available embeddings
                         return sorted(df.index[:emb_shape[0]].tolist())
                 else:
-                    log.debug(f"      {i}. {emb_path.name}: Low coverage {size_ratio:.1%}")
-                    
+                    log.debug(
+                        f"      {i}. {emb_path.name}: Low coverage {size_ratio:.1%}")
+
             except Exception as e:
-                log.debug(f"      {i}. {emb_path.name}: Load failed - {str(e)[:50]}")
+                log.debug(
+                    f"      {i}. {emb_path.name}: Load failed - {str(e)[:50]}")
                 continue
-        
+
         log.info(f"   ❌ No suitable embeddings found - proceeding with downloads")
     else:
         log.info(f"   🔄 Force mode enabled - bypassing embedding cache")
-    
+
     # ------------------------------------------------------------------
     # PRIORITY 2: SMART DOWNLOAD STRATEGY
     # ------------------------------------------------------------------
-    
+
     # Create directory structure
     img_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Validate DataFrame
     if 'photo_url' not in df.columns:
         log.error("   ❌ No 'photo_url' column found")
         return []
-    
+
     if df.empty:
         log.warning("   ⚠️  Empty DataFrame provided")
         return []
-    
+
     # ------------------------------------------------------------------
     # PRIORITY 3: INTELLIGENT DOWNLOAD PLANNING
     # ------------------------------------------------------------------
-    
+
     log.info(f"\n   📋 DOWNLOAD PLANNING:")
-    
+
     # Analyze current state
     url_stats = {
         'total': len(df),
@@ -573,15 +640,15 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16, for
         'missing_urls': 0,
         'invalid_urls': 0
     }
-    
+
     download_queue = []
     valid_indices = []
-    
+
     # Analyze each row
     for idx, row in df.iterrows():
         img_path = img_dir / f"{idx}.jpg"
         url = row.get('photo_url')
-        
+
         # Check if file already exists and is valid
         if img_path.exists():
             try:
@@ -599,47 +666,49 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16, for
             except Exception:
                 url_stats['corrupted_files'] += 1
                 img_path.unlink(missing_ok=True)
-        
+
         # Validate URL
         if not url or not isinstance(url, str):
             url_stats['missing_urls'] += 1
             continue
-            
+
         url = str(url).strip()
         if not url.startswith(('http://', 'https://')):
             url_stats['invalid_urls'] += 1
             continue
-            
+
         # URL is valid for download
         url_stats['valid_urls'] += 1
         download_queue.append((idx, url))
-    
+
     # Log analysis results
     log.info(f"      📊 Analysis Results:")
     log.info(f"      ├─ Total samples: {url_stats['total']:,}")
     log.info(f"      ├─ Existing valid files: {url_stats['existing_files']:,}")
-    log.info(f"      ├─ Corrupted files cleaned: {url_stats['corrupted_files']:,}")
+    log.info(
+        f"      ├─ Corrupted files cleaned: {url_stats['corrupted_files']:,}")
     log.info(f"      ├─ Valid URLs to download: {url_stats['valid_urls']:,}")
     log.info(f"      ├─ Missing URLs: {url_stats['missing_urls']:,}")
     log.info(f"      └─ Invalid URLs: {url_stats['invalid_urls']:,}")
-    
+
     # Early exit strategies
     if not download_queue:
         log.info(f"   ✅ All files exist - no downloads needed")
         return valid_indices
-    
+
     if len(download_queue) > len(df) * 0.8:  # More than 80% need downloading
-        log.warning(f"   ⚠️  Large download required: {len(download_queue):,} files")
+        log.warning(
+            f"   ⚠️  Large download required: {len(download_queue):,} files")
         log.info(f"      └─ This may take a while...")
-    
+
     log.info(f"   🎯 Download Queue: {len(download_queue):,} files")
-    
+
     # ------------------------------------------------------------------
     # PRIORITY 4: ROBUST DOWNLOAD EXECUTION
     # ------------------------------------------------------------------
-    
+
     log.info(f"\n   🚀 EXECUTING ROBUST DOWNLOADS:")
-    
+
     # Download statistics
     stats = {
         'downloaded': 0,
@@ -649,21 +718,21 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16, for
         'bytes_total': 0
     }
     stats_lock = threading.Lock()
-    
+
     def robust_download(idx_url_tuple):
         """Ultra-robust download function with comprehensive error handling."""
         idx, url = idx_url_tuple
         img_path = img_dir / f"{idx}.jpg"
-        
+
         # Double-check if file was created by another thread
         if img_path.exists() and img_path.stat().st_size > 100:
             with stats_lock:
                 stats['skipped'] += 1
             return 'skipped', idx, None
-        
+
         max_retries = 3
         backoff_delays = [1, 2, 5]  # Progressive backoff
-        
+
         for attempt in range(max_retries):
             try:
                 # Request configuration
@@ -674,65 +743,66 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16, for
                     'Connection': 'keep-alive',
                     'Cache-Control': 'no-cache'
                 }
-                
+
                 # Make request with timeout
                 response = requests.get(
-                    url, 
+                    url,
                     headers=headers,
                     timeout=(10, 30),  # (connect, read) timeout
                     stream=True,
                     allow_redirects=True
                 )
                 response.raise_for_status()
-                
+
                 # Validate content type
                 content_type = response.headers.get('content-type', '').lower()
-                if not any(img_type in content_type for img_type in 
-                          ['image/', 'jpeg', 'jpg', 'png', 'gif', 'webp']):
+                if not any(img_type in content_type for img_type in
+                           ['image/', 'jpeg', 'jpg', 'png', 'gif', 'webp']):
                     raise ValueError(f"Invalid content type: {content_type}")
-                
+
                 # Download with size limits
                 content = b''
                 downloaded_size = 0
                 max_size = 20 * 1024 * 1024  # 20MB limit
-                
+
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:
                         content += chunk
                         downloaded_size += len(chunk)
                         if downloaded_size > max_size:
-                            raise ValueError(f"File too large: {downloaded_size} bytes")
-                
+                            raise ValueError(
+                                f"File too large: {downloaded_size} bytes")
+
                 # Validate minimum size
                 if len(content) < 500:  # Minimum viable image
                     raise ValueError(f"File too small: {len(content)} bytes")
-                
+
                 # Atomic write operation
                 temp_path = img_path.with_suffix('.tmp')
                 try:
                     with open(temp_path, 'wb') as f:
                         f.write(content)
-                    
+
                     # Verify write integrity
                     if temp_path.stat().st_size != len(content):
                         raise ValueError("Write verification failed")
-                    
+
                     # Atomic move to final location
                     temp_path.rename(img_path)
-                    
+
                     # Update statistics
                     with stats_lock:
                         stats['downloaded'] += 1
                         stats['bytes_total'] += len(content)
                         if attempt > 0:
                             stats['retries'] += 1
-                    
+
                     return 'success', idx, len(content)
-                    
+
                 finally:
                     # Cleanup temp file if it exists
                     temp_path.unlink(missing_ok=True)
-                
+
             except requests.exceptions.Timeout:
                 error = f"Timeout (attempt {attempt + 1})"
             except requests.exceptions.ConnectionError:
@@ -748,23 +818,24 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16, for
                 break
             except Exception as e:
                 error = f"Unexpected: {str(e)[:30]} (attempt {attempt + 1})"
-            
+
             # Wait before retry (except on last attempt)
             if attempt < max_retries - 1:
                 time.sleep(backoff_delays[attempt])
-        
+
         # All attempts failed
         with stats_lock:
             stats['failed'] += 1
-        
+
         return 'failed', idx, error
-    
+
     # Execute downloads with progress tracking
     successful_downloads = []
-    
+
     with ThreadPoolExecutor(max_workers=min(max_workers, len(download_queue))) as executor:
-        futures = [executor.submit(robust_download, item) for item in download_queue]
-        
+        futures = [executor.submit(robust_download, item)
+                   for item in download_queue]
+
         # Progress bar
         with tqdm(
             as_completed(futures),
@@ -772,63 +843,68 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16, for
             desc="      ├─ Downloading",
             bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}] {rate_fmt}"
         ) as pbar:
-            
+
             for future in pbar:
                 try:
                     status, idx, result = future.result()
-                    
+
                     if status in ['success', 'skipped']:
                         successful_downloads.append(idx)
                         valid_indices.append(idx)
-                    
+
                     # Update progress display
                     pbar.set_postfix({
                         'Success': f"{stats['downloaded'] + stats['skipped']}",
                         'Failed': f"{stats['failed']}",
                         'Retries': f"{stats['retries']}"
                     })
-                    
+
                 except Exception as e:
                     log.debug(f"Future result error: {e}")
-    
+
     # ------------------------------------------------------------------
     # PRIORITY 5: RESULTS ANALYSIS AND GRACEFUL DEGRADATION
     # ------------------------------------------------------------------
-    
+
     total_time = time.time() - download_start
-    
+
     log.info(f"\n   📊 DOWNLOAD RESULTS:")
     log.info(f"   ├─ Processing time: {total_time:.1f}s")
     log.info(f"   ├─ Files downloaded: {stats['downloaded']:,}")
     log.info(f"   ├─ Files skipped: {stats['skipped']:,}")
     log.info(f"   ├─ Download failures: {stats['failed']:,}")
     log.info(f"   ├─ Retry attempts: {stats['retries']:,}")
-    log.info(f"   └─ Data transferred: {stats['bytes_total'] / (1024**2):.1f} MB")
-    
+    log.info(
+        f"   └─ Data transferred: {stats['bytes_total'] / (1024**2):.1f} MB")
+
     # Calculate success metrics
     total_attempted = len(download_queue)
     total_successful = stats['downloaded'] + stats['skipped']
-    success_rate = (total_successful / total_attempted * 100) if total_attempted > 0 else 100
-    
+    success_rate = (total_successful / total_attempted *
+                    100) if total_attempted > 0 else 100
+
     log.info(f"\n   📈 SUCCESS METRICS:")
     log.info(f"   ├─ Download success rate: {success_rate:.1f}%")
     log.info(f"   ├─ Total valid files: {len(valid_indices):,}")
-    log.info(f"   ├─ Coverage: {len(valid_indices)/len(df)*100:.1f}% of dataset")
-    
+    log.info(
+        f"   ├─ Coverage: {len(valid_indices)/len(df)*100:.1f}% of dataset")
+
     # Determine if results are acceptable
     coverage_threshold = 0.1  # Accept if at least 10% coverage
     if len(valid_indices) / len(df) >= coverage_threshold:
-        log.info(f"   ✅ ACCEPTABLE COVERAGE - proceeding with {len(valid_indices):,} images")
+        log.info(
+            f"   ✅ ACCEPTABLE COVERAGE - proceeding with {len(valid_indices):,} images")
     else:
-        log.warning(f"   ⚠️  LOW COVERAGE - only {len(valid_indices):,} images available")
-        log.warning(f"   └─ Consider using text-only mode or checking data sources")
-    
+        log.warning(
+            f"   ⚠️  LOW COVERAGE - only {len(valid_indices):,} images available")
+        log.warning(
+            f"   └─ Consider using text-only mode or checking data sources")
+
     # Memory cleanup
     import gc
     gc.collect()
-    
-    return sorted(valid_indices)
 
+    return sorted(valid_indices)
 
 
 def filter_low_quality_images(img_dir: Path, embeddings: np.ndarray, original_indices: list) -> tuple:
@@ -4023,9 +4099,10 @@ def build_image_embeddings(df: pd.DataFrame,
     # Set up paths consistently
     img_dir = CFG.image_dir / mode
     embed_path = img_dir / "embeddings.npy"
-    backup_path = CFG.artifacts_dir / f"embeddings_{mode}_backup.npy"  # Save in artifacts where Docker can see it
+    # Save in artifacts where Docker can see it
+    backup_path = CFG.artifacts_dir / f"embeddings_{mode}_backup.npy"
     metadata_path = img_dir / "embedding_metadata.json"
-    
+
     # Ensure artifacts directory exists
     CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
     log.info(f"   📁 Paths:")
@@ -4040,11 +4117,12 @@ def build_image_embeddings(df: pd.DataFrame,
         log.info(f"\n   🔍 Cache Validation:")
 
         cache_options = [
-            ("Artifacts backup", backup_path),  # Check artifacts first since that's where Docker mounts
+            # Check artifacts first since that's where Docker mounts
+            ("Artifacts backup", backup_path),
             ("Primary cache", embed_path),
-            ("Legacy backup", Path(f"embeddings_{mode}_backup.npy"))  # Old location for compatibility
+            # Old location for compatibility
+            ("Legacy backup", Path(f"embeddings_{mode}_backup.npy"))
         ]
-
 
         with tqdm(cache_options, desc="      ├─ Checking caches", position=1, leave=False,
                   bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as cache_pbar:
@@ -5741,24 +5819,28 @@ def run_full_pipeline(mode: str = "both",
 
             # Enhanced filtering logic with better error handling
             img_pbar.set_description("   ├─ Filtering by downloads")
-            
+
             # Silver image filtering
             if silver_downloaded:
                 try:
                     img_silver_df = filter_silver_by_downloaded_images(
                         silver_img, CFG.image_dir)
                     if img_silver_df.empty:
-                        log.warning(f"      ⚠️  Silver filtering resulted in empty DataFrame")
+                        log.warning(
+                            f"      ⚠️  Silver filtering resulted in empty DataFrame")
                         # Fallback: use original indices from downloads
-                        img_silver_df = silver_img.loc[silver_downloaded].copy()
-                    
+                        img_silver_df = silver_img.loc[silver_downloaded].copy(
+                        )
+
                     log.info(
                         f"      ├─ Silver filtered: {len(img_silver_df):,} with valid images")
                 except Exception as e:
                     log.error(f"      ❌ Silver filtering failed: {e}")
                     # Fallback to original silver_img subset
-                    img_silver_df = silver_img.loc[silver_downloaded].copy() if silver_downloaded else pd.DataFrame()
-                    log.info(f"      ├─ Silver fallback: {len(img_silver_df):,} images")
+                    img_silver_df = silver_img.loc[silver_downloaded].copy(
+                    ) if silver_downloaded else pd.DataFrame()
+                    log.info(
+                        f"      ├─ Silver fallback: {len(img_silver_df):,} images")
             else:
                 img_silver_df = pd.DataFrame()
                 log.info(f"      ├─ Silver filtered: Empty (no downloads)")
@@ -5769,20 +5851,23 @@ def run_full_pipeline(mode: str = "both",
                     img_gold_df = filter_photo_rows(gold_img)
                     # Ensure we only keep images that were actually downloaded
                     if not img_gold_df.empty:
-                        img_gold_df = img_gold_df.loc[img_gold_df.index.intersection(gold_downloaded)].copy()
-                    
+                        img_gold_df = img_gold_df.loc[img_gold_df.index.intersection(
+                            gold_downloaded)].copy()
+
                     if img_gold_df.empty:
-                        log.warning(f"      ⚠️  Gold filtering resulted in empty DataFrame")
+                        log.warning(
+                            f"      ⚠️  Gold filtering resulted in empty DataFrame")
                         # Fallback: use original indices from downloads
                         img_gold_df = gold_img.loc[gold_downloaded].copy()
-                        
+
                 except Exception as e:
                     log.error(f"      ❌ Gold filtering failed: {e}")
                     # Fallback to original gold_img subset
-                    img_gold_df = gold_img.loc[gold_downloaded].copy() if gold_downloaded else pd.DataFrame()
+                    img_gold_df = gold_img.loc[gold_downloaded].copy(
+                    ) if gold_downloaded else pd.DataFrame()
             else:
                 img_gold_df = pd.DataFrame()
-                
+
             log.info(
                 f"      ├─ Gold filtered: {len(img_gold_df):,} with valid images")
             img_pbar.update(1)
@@ -5798,23 +5883,27 @@ def run_full_pipeline(mode: str = "both",
                     if len(silver_valid_indices) != len(img_silver_df):
                         log.info(
                             f"      ├─ Aligning silver DataFrame: {len(img_silver_df):,} → {len(silver_valid_indices):,} rows")
-                        img_silver_df = img_silver_df.loc[silver_valid_indices].copy()
+                        img_silver_df = img_silver_df.loc[silver_valid_indices].copy(
+                        )
 
                     # Validate dimensions match
                     if img_silver.shape[0] != len(img_silver_df):
                         log.error(f"      ❌ Silver dimension mismatch after alignment: "
-                                 f"embeddings={img_silver.shape[0]}, df={len(img_silver_df)}")
+                                  f"embeddings={img_silver.shape[0]}, df={len(img_silver_df)}")
                         # Try to fix by truncating to smaller size
                         min_size = min(img_silver.shape[0], len(img_silver_df))
                         img_silver = img_silver[:min_size]
                         img_silver_df = img_silver_df.iloc[:min_size].copy()
-                        log.info(f"      🔧 Truncated both to {min_size} for alignment")
+                        log.info(
+                            f"      🔧 Truncated both to {min_size} for alignment")
 
                     log.info(f"      ├─ Silver embeddings: {img_silver.shape}")
-                    log.info(f"      ├─ Silver DataFrame: {len(img_silver_df):,} rows")
-                    
+                    log.info(
+                        f"      ├─ Silver DataFrame: {len(img_silver_df):,} rows")
+
                 except Exception as e:
-                    log.error(f"      ❌ Silver embedding extraction failed: {e}")
+                    log.error(
+                        f"      ❌ Silver embedding extraction failed: {e}")
                     img_silver = np.array([]).reshape(0, 2048)
                     img_silver_df = pd.DataFrame()
                     silver_valid_indices = []
@@ -5836,21 +5925,24 @@ def run_full_pipeline(mode: str = "both",
                     if len(gold_valid_indices) != len(img_gold_df):
                         log.info(
                             f"      ├─ Aligning gold DataFrame: {len(img_gold_df):,} → {len(gold_valid_indices):,} rows")
-                        img_gold_df = img_gold_df.loc[gold_valid_indices].copy()
+                        img_gold_df = img_gold_df.loc[gold_valid_indices].copy(
+                        )
 
                     # Validate dimensions match
                     if img_gold.shape[0] != len(img_gold_df):
                         log.error(f"      ❌ Gold dimension mismatch after alignment: "
-                                 f"embeddings={img_gold.shape[0]}, df={len(img_gold_df)}")
+                                  f"embeddings={img_gold.shape[0]}, df={len(img_gold_df)}")
                         # Try to fix by truncating to smaller size
                         min_size = min(img_gold.shape[0], len(img_gold_df))
                         img_gold = img_gold[:min_size]
                         img_gold_df = img_gold_df.iloc[:min_size].copy()
-                        log.info(f"      🔧 Truncated both to {min_size} for alignment")
+                        log.info(
+                            f"      🔧 Truncated both to {min_size} for alignment")
 
                     log.info(f"      ├─ Gold embeddings: {img_gold.shape}")
-                    log.info(f"      ├─ Gold DataFrame: {len(img_gold_df):,} rows")
-                    
+                    log.info(
+                        f"      ├─ Gold DataFrame: {len(img_gold_df):,} rows")
+
                 except Exception as e:
                     log.error(f"      ❌ Gold embedding extraction failed: {e}")
                     img_gold = np.array([]).reshape(0, 2048)
@@ -5868,19 +5960,20 @@ def run_full_pipeline(mode: str = "both",
             try:
                 # Ensure embeddings directory exists
                 Path("embeddings").mkdir(exist_ok=True)
-                
+
                 if img_gold.size > 0:
                     joblib.dump(img_gold, "embeddings/img_gold.pkl")
                     log.info(
                         f"      ├─ Saved gold embeddings to embeddings/img_gold.pkl")
                 else:
                     log.info(f"      ├─ Skipped saving empty gold embeddings")
-                    
+
                 # Also save silver embeddings for future use
                 if img_silver.size > 0:
                     joblib.dump(img_silver, "embeddings/img_silver.pkl")
-                    log.info(f"      ├─ Saved silver embeddings to embeddings/img_silver.pkl")
-                    
+                    log.info(
+                        f"      ├─ Saved silver embeddings to embeddings/img_silver.pkl")
+
             except Exception as e:
                 log.warning(f"      ⚠️  Failed to save embeddings: {e}")
             img_pbar.update(1)
@@ -5895,20 +5988,23 @@ def run_full_pipeline(mode: str = "both",
 
             # Robust dimension checking
             alignment_errors = []
-            
+
             if img_silver.size > 0:
                 if img_silver.shape[0] != len(img_silver_df):
-                    alignment_errors.append(f"Silver: {img_silver.shape[0]} != {len(img_silver_df)}")
-                    
+                    alignment_errors.append(
+                        f"Silver: {img_silver.shape[0]} != {len(img_silver_df)}")
+
             if img_gold.size > 0:
                 if img_gold.shape[0] != len(img_gold_df):
-                    alignment_errors.append(f"Gold: {img_gold.shape[0]} != {len(img_gold_df)}")
-            
+                    alignment_errors.append(
+                        f"Gold: {img_gold.shape[0]} != {len(img_gold_df)}")
+
             if alignment_errors:
                 log.warning(f"   ⚠️  Dimension mismatches detected:")
                 for error in alignment_errors:
                     log.warning(f"      ├─ {error}")
-                log.warning(f"   └─ Proceeding with available data (may cause issues downstream)")
+                log.warning(
+                    f"   └─ Proceeding with available data (may cause issues downstream)")
             else:
                 log.info(f"   ✅ All dimensions verified!")
 
@@ -5916,18 +6012,21 @@ def run_full_pipeline(mode: str = "both",
         try:
             if img_silver.size > 0:
                 X_img_silver = csr_matrix(img_silver)
-                log.debug(f"      ├─ Silver sparse matrix: {X_img_silver.shape}")
+                log.debug(
+                    f"      ├─ Silver sparse matrix: {X_img_silver.shape}")
             else:
                 X_img_silver = csr_matrix((0, 2048))
-                log.debug(f"      ├─ Silver empty sparse matrix: {X_img_silver.shape}")
+                log.debug(
+                    f"      ├─ Silver empty sparse matrix: {X_img_silver.shape}")
 
             if img_gold.size > 0:
                 X_img_gold = csr_matrix(img_gold)
                 log.debug(f"      ├─ Gold sparse matrix: {X_img_gold.shape}")
             else:
                 X_img_gold = csr_matrix((0, 2048))
-                log.debug(f"      ├─ Gold empty sparse matrix: {X_img_gold.shape}")
-                
+                log.debug(
+                    f"      ├─ Gold empty sparse matrix: {X_img_gold.shape}")
+
         except Exception as e:
             log.error(f"   ❌ Sparse matrix conversion failed: {e}")
             # Fallback to empty matrices
@@ -5942,25 +6041,32 @@ def run_full_pipeline(mode: str = "both",
         log.info(f"   ├─ Gold images available: {len(gold_img):,}")
         log.info(f"   ├─ Gold images downloaded: {len(gold_downloaded):,}")
         log.info(f"   ├─ Gold valid embeddings: {img_gold.shape[0]:,}")
-        log.info(f"   ├─ Silver embedding size: {img_silver.nbytes // (1024**2) if img_silver.size > 0 else 0} MB")
-        log.info(f"   └─ Gold embedding size: {img_gold.nbytes // (1024**2) if img_gold.size > 0 else 0} MB")
+        log.info(
+            f"   ├─ Silver embedding size: {img_silver.nbytes // (1024**2) if img_silver.size > 0 else 0} MB")
+        log.info(
+            f"   └─ Gold embedding size: {img_gold.nbytes // (1024**2) if img_gold.size > 0 else 0} MB")
 
         # Enhanced early exit logic for image-only mode
         if mode == "image":
             total_valid_images = img_silver.shape[0] + img_gold.shape[0]
             min_required_images = 10  # Minimum viable images for training
-            
+
             if total_valid_images < min_required_images:
                 log.warning(f"   ⚠️  Insufficient images for image-only mode!")
-                log.warning(f"      ├─ Total valid images: {total_valid_images}")
-                log.warning(f"      ├─ Minimum required: {min_required_images}")
-                log.warning(f"      └─ Consider using mode='text' or mode='both'")
-                
+                log.warning(
+                    f"      ├─ Total valid images: {total_valid_images}")
+                log.warning(
+                    f"      ├─ Minimum required: {min_required_images}")
+                log.warning(
+                    f"      └─ Consider using mode='text' or mode='both'")
+
                 stage_time = time.time() - stage_start
-                log.info(f"   ❌ Image processing insufficient in {stage_time:.1f}s")
+                log.info(
+                    f"   ❌ Image processing insufficient in {stage_time:.1f}s")
                 return None, None, None, []
             else:
-                log.info(f"   ✅ Sufficient images for image-only mode: {total_valid_images}")
+                log.info(
+                    f"   ✅ Sufficient images for image-only mode: {total_valid_images}")
 
         stage_time = time.time() - stage_start
         log.info(f"   ✅ Image processing completed in {stage_time:.1f}s")
