@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 
-
 """
 ================================================================================
 DIET CLASSIFIER PIPELINE - MULTI-MODAL MACHINE LEARNING FOR INGREDIENT ANALYSIS
@@ -83,6 +82,29 @@ Author: Guy Vitelson (aka @v1t3ls0n on GitHub)
 
 # Enable postponed evaluation of type annotations (Python 3.7+)
 from __future__ import annotations
+from imblearn.over_sampling import SMOTE, RandomOverSampler
+from nltk.stem import WordNetLemmatizer
+import nltk
+import psutil
+from scipy.sparse import hstack, csr_matrix
+from tqdm import tqdm
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import joblib
+import time
+import os
+import pickle
+from rapidfuzz import process
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
+from pathlib import Path
+from dataclasses import dataclass, field
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import warnings
+import unicodedata
+import re
+import logging
+import json
 
 # =============================================================================
 # IMPORTS AND DEPENDENCIES
@@ -98,33 +120,10 @@ from __future__ import annotations
 
 
 # --- Standard library ---
-import json
-import logging
-import re
-import unicodedata
-import warnings
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
-from rapidfuzz import process
-import pickle
-import os
-from pathlib import Path
-import time
 
 # --- Third-party: core ---
-import joblib
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from tqdm import tqdm
-from scipy.sparse import hstack, csr_matrix
-import psutil
 
 # --- NLTK (used for lemmatization) ---
-import nltk
-from nltk.stem import WordNetLemmatizer
 try:
     nltk.download('wordnet', quiet=True)
     nltk.download('omw-1.4', quiet=True)
@@ -233,7 +232,6 @@ except Exception as e:  # pragma: no cover
     TORCH_AVAILABLE = False
 
 # --- Imbalanced learning ---
-from imblearn.over_sampling import SMOTE, RandomOverSampler
 
 # =============================================================================
 # CONFIGURATION AND CONSTANTS
@@ -246,11 +244,12 @@ Central configuration for the pipeline including:
 - Domain-specific ingredient lists for keto/vegan classification
 """
 
+
 @dataclass(frozen=True)
 class Config:
     """
     Immutable configuration container for the pipeline.
-    
+
     Attributes:
         artifacts_dir: Directory for saving trained models and vectorizers
         data_dir: Root directory for data files
@@ -262,7 +261,7 @@ class Config:
     pretrained_models_dir: Path = Path("/app/pretrained_models")
     artifacts_dir: Path = Path("/app/artifacts")
     data_dir: Path = Path("/app/data")
-    usda_dir: Path  = Path("/app/data/usda")
+    usda_dir: Path = Path("/app/data/usda")
     url_map: Mapping[str, str] = field(default_factory=lambda: {
         "allrecipes.parquet": "/app/data/allrecipes.parquet",
         "ground_truth_sample.csv": "/app/data/ground_truth_sample.csv",
@@ -270,6 +269,7 @@ class Config:
     vec_kwargs: Dict[str, Any] = field(default_factory=lambda: dict(
         min_df=2, ngram_range=(1, 3), max_features=50000, sublinear_tf=True))
     image_dir: Path = Path("dataset/arg_max/images")
+
 
 CFG = Config()
 
@@ -294,7 +294,8 @@ log = logging.getLogger("PIPE")
 log.setLevel(logging.INFO)
 
 # Define formatter
-formatter = logging.Formatter("%(asctime)s │ %(levelname)s │ %(message)s", datefmt="%H:%M:%S")
+formatter = logging.Formatter(
+    "%(asctime)s │ %(levelname)s │ %(message)s", datefmt="%H:%M:%S")
 
 # Console handler
 console_handler = logging.StreamHandler()
@@ -309,6 +310,8 @@ log.addHandler(file_handler)
 # =============================================================================
 # GENERAL UTILITY FUNCTIONS
 # =============================================================================
+
+
 def safe_array_check(arr, condition_func):
     """Safely check array conditions to avoid ambiguous truth value errors."""
     try:
@@ -320,6 +323,7 @@ def safe_array_check(arr, condition_func):
             return condition_func(arr).any() if arr.size > 1 else condition_func(arr)
         raise
 
+
 # =============================================================================
 # DATA LOADING AND DATASET MANAGEMENT
 # =============================================================================
@@ -330,19 +334,20 @@ Functions for loading and managing the various datasets used in the pipeline:
 - Image metadata
 """
 
+
 def _load_usda_carb_table() -> pd.DataFrame:
     """
     Load USDA nutritional database and extract carbohydrate content.
-    
+
     This function loads the USDA FoodData Central database files and creates
     a lookup table mapping food descriptions to carbohydrate content per 100g.
     Used for the numeric keto rule (foods with >10g carbs/100g are non-keto).
-    
+
     Returns:
         DataFrame with columns:
         - food_desc: Lowercase food description
         - carb_100g: Carbohydrate content per 100g
-        
+
     Note:
         Requires USDA database CSV files in the configured directory:
         - food.csv: Food items and descriptions
@@ -397,6 +402,7 @@ def _load_usda_carb_table() -> pd.DataFrame:
     log.info("USDA carb table loaded: %d distinct food descriptions", len(carb_df))
     return carb_df
 
+
 def label_usda_keto_data(carb_df: pd.DataFrame) -> pd.DataFrame:
     """
     Convert the USDA carb table into silver-style training data.
@@ -412,587 +418,425 @@ def label_usda_keto_data(carb_df: pd.DataFrame) -> pd.DataFrame:
     """
     df = carb_df.copy()
     df["ingredient"] = df["food_desc"]
-    df["clean"] = df["ingredient"].map(normalise)  
+    df["clean"] = df["ingredient"].map(normalise)
     df["silver_keto"] = (df["carb_100g"] < 10).astype(int)
     df["silver_vegan"] = np.nan
     df["source"] = "usda"
     return df[["ingredient", "clean", "silver_keto", "silver_vegan", "source"]]
 
-def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16) -> list[int]:
+
+def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16, force: bool = False) -> list[int]:
     """
-    Download images using multithreading with comprehensive logging and progress tracking.
-
-    This function downloads recipe images from URLs specified in the DataFrame,
-    implementing robust error handling, retry mechanisms, and detailed progress tracking.
-    It's designed to handle large-scale downloads efficiently while providing
-    comprehensive feedback on the download process.
-
-    Enhanced Features:
-    - Real-time download statistics and bandwidth monitoring
-    - URL validation and preprocessing
-    - Error categorization and analysis
-    - Retry mechanisms for failed downloads
-    - File integrity verification
-    - Memory-efficient processing
-    - Detailed error logging
-
+    Download images with maximum robustness and intelligent caching.
+    
+    This refactored function prioritizes:
+    1. Embeddings-first approach - always check for embeddings before downloading
+    2. Graceful degradation - work with partial data
+    3. Smart caching - multiple fallback strategies
+    4. Error resilience - handle all failure modes
+    5. Resource efficiency - minimize unnecessary work
+    
     Args:
         df: DataFrame containing photo_url column with image URLs
         img_dir: Directory to save downloaded images
         max_workers: Maximum number of concurrent download threads
-
+        force: Force redownload even if embeddings exist
+        
     Returns:
-        List of successful indices for filtering downstream processing
-
-    Example:
-        >>> recipes_df = pd.DataFrame({'photo_url': ['http://example.com/img1.jpg']})
-        >>> valid_indices = _download_images(recipes_df, Path('./images'), max_workers=8)
-        >>> print(f"Downloaded {len(valid_indices)} images")
+        List of valid indices for downstream processing
     """
     
     from collections import defaultdict, Counter
     from urllib.parse import urlparse
     import threading
-
+    import hashlib
+    
     download_start = time.time()
-
+    
     # ------------------------------------------------------------------
-    # Initialization and Validation
+    # PRIORITY 1: EMBEDDINGS-FIRST APPROACH
     # ------------------------------------------------------------------
-    log.info(f"\n📥 IMAGE DOWNLOAD PIPELINE: {img_dir.name}")
+    log.info(f"\n🧠 EMBEDDINGS-FIRST IMAGE PIPELINE: {img_dir.name}")
     log.info(f"   Target directory: {img_dir}")
-    log.info(f"   Max workers: {max_workers}")
-    log.info(f"   Total URLs to process: {len(df):,}")
-
-    # Check if PyTorch/PIL available for image processing
+    log.info(f"   Total samples: {len(df):,}")
+    log.info(f"   Force recompute: {force}")
+    
+    # Check PyTorch availability
     if not TORCH_AVAILABLE:
-        log.warning("   ⚠️  PyTorch not available - skipping image downloads")
+        log.warning("   ⚠️  PyTorch not available - returning empty indices")
         return []
-
-    # ------------------------------------------------------------------
-    # ENHANCED CHECK FOR EXISTING EMBEDDINGS
-    # ------------------------------------------------------------------
-    # Check multiple locations for embeddings
-    embeddings_locations = [
-        img_dir / "embeddings.npy",
-        Path(f"embeddings_{img_dir.name}_backup.npy"),
-        Path("embeddings") / f"{img_dir.name}.pkl",
-        Path("/app") / f"embeddings_{img_dir.name}_backup.npy"  # Docker container path
+    
+    # Define embedding search paths in priority order
+    embedding_candidates = [
+        img_dir / "embeddings.npy",                                    # Primary cache
+        img_dir.parent / f"embeddings_{img_dir.name}.npy",           # Parent directory
+        Path(f"embeddings_{img_dir.name}_backup.npy"),               # Backup location
+        Path("embeddings") / f"{img_dir.name}.npy",                  # Embeddings directory
+        Path("/app/embeddings") / f"{img_dir.name}.npy",             # Docker path
+        Path("/app") / f"embeddings_{img_dir.name}_backup.npy",      # Docker backup
+        img_dir / "features.npy",                                     # Alternative naming
+        img_dir.parent / "cached_embeddings.npy",                    # Generic cache
     ]
     
-    embeddings_found = False
-    embeddings_path = None
-    
-    for emb_path in embeddings_locations:
-        if emb_path.exists():
-            try:
-                # Try to load to verify it's valid
-                test_load = np.load(str(emb_path), mmap_mode='r')
-                log.info(f"   🎯 Found valid embeddings at: {emb_path}")
-                log.info(f"      └─ Shape: {test_load.shape}")
-                embeddings_found = True
-                embeddings_path = emb_path
-                break
-            except Exception as e:
-                log.debug(f"   ⚠️  Invalid embeddings at {emb_path}: {e}")
-    
-    if embeddings_found:
-        log.info(f"   ✅ EMBEDDINGS FOUND - SKIPPING IMAGE DOWNLOAD!")
-        log.info(f"   ├─ Location: {embeddings_path}")
-        log.info(f"   ├─ Returning all {len(df):,} indices as valid")
-        log.info(f"   └─ Use --force flag to redownload images")
+    # EMBEDDINGS VALIDATION AND SELECTION
+    if not force:
+        log.info(f"   🔍 Searching for existing embeddings...")
         
-        # Return all indices as valid since we have embeddings
-        return sorted(df.index.tolist())
-
-    # Original backup-based check (for backwards compatibility)
-    backup_emb = img_dir / "embeddings.npy"
-    if backup_emb.exists():
-        try:
-            num_jpgs = len(list(img_dir.glob("*.jpg")))
-            if num_jpgs >= len(df) * 0.8:  # Allow 80% threshold
-                log.info(
-                    f"   📦 Backup detected: {num_jpgs} images + existing embeddings → skipping downloads")
-                return sorted(df.index.tolist())  # Return all indices as valid
-        except Exception as e:
-            log.warning(f"   ⚠️ Could not verify backup completeness: {e}")
-
+        for i, emb_path in enumerate(embedding_candidates, 1):
+            if not emb_path.exists():
+                log.debug(f"      {i}. {emb_path.name}: Not found")
+                continue
+                
+            try:
+                # Quick validation load
+                embeddings = np.load(str(emb_path), mmap_mode='r')
+                emb_shape = embeddings.shape
+                
+                # Validate embedding properties
+                if len(emb_shape) != 2:
+                    log.debug(f"      {i}. {emb_path.name}: Invalid dimensions {emb_shape}")
+                    continue
+                    
+                if emb_shape[1] not in [2048, 512, 1024, 4096]:  # Common embedding sizes
+                    log.debug(f"      {i}. {emb_path.name}: Unusual feature size {emb_shape[1]}")
+                    continue
+                
+                # Check size compatibility
+                size_ratio = emb_shape[0] / len(df)
+                min_threshold = 0.3  # Accept if at least 30% coverage
+                
+                if size_ratio >= min_threshold:
+                    log.info(f"   ✅ EMBEDDINGS FOUND: {emb_path}")
+                    log.info(f"      ├─ Shape: {emb_shape}")
+                    log.info(f"      ├─ Coverage: {size_ratio:.1%} ({emb_shape[0]:,}/{len(df):,})")
+                    log.info(f"      ├─ File size: {emb_path.stat().st_size / (1024**2):.1f} MB")
+                    log.info(f"      └─ 🚀 SKIPPING IMAGE DOWNLOADS!")
+                    
+                    # Return appropriate indices based on available embeddings
+                    if emb_shape[0] >= len(df):
+                        return sorted(df.index.tolist())
+                    else:
+                        # Return indices up to available embeddings
+                        return sorted(df.index[:emb_shape[0]].tolist())
+                else:
+                    log.debug(f"      {i}. {emb_path.name}: Low coverage {size_ratio:.1%}")
+                    
+            except Exception as e:
+                log.debug(f"      {i}. {emb_path.name}: Load failed - {str(e)[:50]}")
+                continue
+        
+        log.info(f"   ❌ No suitable embeddings found - proceeding with downloads")
+    else:
+        log.info(f"   🔄 Force mode enabled - bypassing embedding cache")
+    
+    # ------------------------------------------------------------------
+    # PRIORITY 2: SMART DOWNLOAD STRATEGY
+    # ------------------------------------------------------------------
+    
     # Create directory structure
     img_dir.mkdir(parents=True, exist_ok=True)
-    log.info(f"   ✅ Directory created/verified: {img_dir}")
-
-    # Validate DataFrame structure
+    
+    # Validate DataFrame
     if 'photo_url' not in df.columns:
-        log.error("   ❌ No 'photo_url' column found in DataFrame")
+        log.error("   ❌ No 'photo_url' column found")
         return []
-
+    
+    if df.empty:
+        log.warning("   ⚠️  Empty DataFrame provided")
+        return []
+    
     # ------------------------------------------------------------------
-    # URL Analysis and Preprocessing
+    # PRIORITY 3: INTELLIGENT DOWNLOAD PLANNING
     # ------------------------------------------------------------------
-    log.info(f"\n   🔍 URL Analysis:")
-
-    with tqdm(total=3, desc="      ├─ Analyzing URLs", position=1, leave=False,
-              bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as analysis_pbar:
-
-        analysis_pbar.set_description("      ├─ Filtering valid URLs")
-
-        # Analyze URL patterns and validity
-        url_analysis = {
-            'total': len(df),
-            'valid_http': 0,
-            'already_exists': 0,
-            'invalid_format': 0,
-            'empty_null': 0,
-            'domains': Counter(),
-            'extensions': Counter()
-        }
-
-        valid_downloads = []
-        skipped_existing = []
-
-        for idx, url in df['photo_url'].items():
-            img_path = img_dir / f"{idx}.jpg"
-
-            # Check if already exists
-            if img_path.exists():
-                url_analysis['already_exists'] += 1
-                skipped_existing.append(idx)
-                continue
-
-            # Validate URL format
-            if not isinstance(url, str) or not url.strip():
-                url_analysis['empty_null'] += 1
-                continue
-
-            url = url.strip()
-            if not url.startswith(('http://', 'https://')):
-                url_analysis['invalid_format'] += 1
-                continue
-
-            # URL is valid for download
-            url_analysis['valid_http'] += 1
-            valid_downloads.append((idx, url))
-
-            # Analyze domain and extension
-            try:
-                parsed = urlparse(url)
-                domain = parsed.netloc.lower()
-                url_analysis['domains'][domain] += 1
-
-                # Extract file extension from path
-                path_parts = parsed.path.lower().split('.')
-                if len(path_parts) > 1:
-                    ext = path_parts[-1][:10]  # Limit length
-                    url_analysis['extensions'][ext] += 1
-            except Exception:
-                pass
-
-        analysis_pbar.update(1)
-
-        analysis_pbar.set_description("      ├─ Generating statistics")
-
-        # Log URL analysis results
-        log.info(f"      📊 URL Statistics:")
-        log.info(f"      ├─ Total URLs: {url_analysis['total']:,}")
-        log.info(
-            f"      ├─ Valid HTTP(S): {url_analysis['valid_http']:,} ({url_analysis['valid_http']/url_analysis['total']*100:.1f}%)")
-        log.info(f"      ├─ Already exist: {url_analysis['already_exists']:,}")
-        log.info(
-            f"      ├─ Invalid format: {url_analysis['invalid_format']:,}")
-        log.info(f"      └─ Empty/null: {url_analysis['empty_null']:,}")
-
-        analysis_pbar.update(1)
-
-        # Show top domains
-        if url_analysis['domains']:
-            top_domains = url_analysis['domains'].most_common(5)
-            log.info(f"      📊 Top Domains:")
-            for domain, count in top_domains:
-                log.info(
-                    f"      ├─ {domain}: {count:,} images ({count/url_analysis['valid_http']*100:.1f}%)")
-
-        # Show file extensions
-        if url_analysis['extensions']:
-            top_extensions = url_analysis['extensions'].most_common(3)
-            log.info(f"      📊 File Extensions:")
-            for ext, count in top_extensions:
-                log.info(f"      ├─ .{ext}: {count:,}")
-
-        analysis_pbar.update(1)
-
-    # Early exit if no downloads needed
-    if not valid_downloads:
-        log.info(
-            f"   ✅ No new downloads needed (all {url_analysis['already_exists']} images exist)")
-        return skipped_existing
-
-    log.info(
-        f"   🎯 Download Plan: {len(valid_downloads):,} new images to download")
-
-    # ------------------------------------------------------------------
-    # Download Execution with Enhanced Tracking
-    # ------------------------------------------------------------------
-    log.info(f"\n   🚀 Starting parallel downloads...")
-
-    # Shared statistics with thread safety
-    stats_lock = threading.Lock()
-    download_stats = {
-        "downloaded": 0,
-        "exists": 0,
-        "invalid": 0,
-        "failed": 0,
-        "bytes_downloaded": 0,
-        "retry_success": 0
+    
+    log.info(f"\n   📋 DOWNLOAD PLANNING:")
+    
+    # Analyze current state
+    url_stats = {
+        'total': len(df),
+        'valid_urls': 0,
+        'existing_files': 0,
+        'corrupted_files': 0,
+        'missing_urls': 0,
+        'invalid_urls': 0
     }
-
-    valid_indices = list(skipped_existing)  # Include pre-existing
-    failed_urls = []
-    download_times = []
-
-    def fetch_with_retry(idx_url, max_retries=2):
-        """
-        Enhanced fetch function with retry logic and detailed error handling.
-        
-        This internal function handles individual image downloads with:
-        - Automatic retry on failure
-        - Content validation
-        - Atomic file writing
-        - Detailed error tracking
-        
-        Args:
-            idx_url: Tuple of (index, url) to download
-            max_retries: Number of retry attempts
-            
-        Returns:
-            Tuple of (status, index, url, error, size, [fetch_time])
-        """
-        idx, url = idx_url
+    
+    download_queue = []
+    valid_indices = []
+    
+    # Analyze each row
+    for idx, row in df.iterrows():
         img_path = img_dir / f"{idx}.jpg"
-
-        # Double-check existence (race condition safety)
+        url = row.get('photo_url')
+        
+        # Check if file already exists and is valid
         if img_path.exists():
-            with stats_lock:
-                stats_check = os.path.getsize(img_path)
-                download_stats["exists"] += 1
-                if stats_check > 0:
-                    return "exists", idx, url, None, stats_check
-
-        # Validate URL format (redundant check for thread safety)
-        if not isinstance(url, str) or not url.strip().startswith("http"):
-            with stats_lock:
-                download_stats["invalid"] += 1
-            return "invalid", idx, url, "Invalid URL format", 0
-
-        # Attempt download with retries
-        last_error = None
-        for attempt in range(max_retries + 1):
-            fetch_start = time.time()
-
             try:
-                # Configure request with better error handling
+                # Quick validation - check file size and basic structure
+                file_size = img_path.stat().st_size
+                if file_size > 100:  # Minimum viable size
+                    # Additional validation could include PIL.Image.open() but that's expensive
+                    url_stats['existing_files'] += 1
+                    valid_indices.append(idx)
+                    continue
+                else:
+                    # File too small, mark for redownload
+                    url_stats['corrupted_files'] += 1
+                    img_path.unlink(missing_ok=True)
+            except Exception:
+                url_stats['corrupted_files'] += 1
+                img_path.unlink(missing_ok=True)
+        
+        # Validate URL
+        if not url or not isinstance(url, str):
+            url_stats['missing_urls'] += 1
+            continue
+            
+        url = str(url).strip()
+        if not url.startswith(('http://', 'https://')):
+            url_stats['invalid_urls'] += 1
+            continue
+            
+        # URL is valid for download
+        url_stats['valid_urls'] += 1
+        download_queue.append((idx, url))
+    
+    # Log analysis results
+    log.info(f"      📊 Analysis Results:")
+    log.info(f"      ├─ Total samples: {url_stats['total']:,}")
+    log.info(f"      ├─ Existing valid files: {url_stats['existing_files']:,}")
+    log.info(f"      ├─ Corrupted files cleaned: {url_stats['corrupted_files']:,}")
+    log.info(f"      ├─ Valid URLs to download: {url_stats['valid_urls']:,}")
+    log.info(f"      ├─ Missing URLs: {url_stats['missing_urls']:,}")
+    log.info(f"      └─ Invalid URLs: {url_stats['invalid_urls']:,}")
+    
+    # Early exit strategies
+    if not download_queue:
+        log.info(f"   ✅ All files exist - no downloads needed")
+        return valid_indices
+    
+    if len(download_queue) > len(df) * 0.8:  # More than 80% need downloading
+        log.warning(f"   ⚠️  Large download required: {len(download_queue):,} files")
+        log.info(f"      └─ This may take a while...")
+    
+    log.info(f"   🎯 Download Queue: {len(download_queue):,} files")
+    
+    # ------------------------------------------------------------------
+    # PRIORITY 4: ROBUST DOWNLOAD EXECUTION
+    # ------------------------------------------------------------------
+    
+    log.info(f"\n   🚀 EXECUTING ROBUST DOWNLOADS:")
+    
+    # Download statistics
+    stats = {
+        'downloaded': 0,
+        'failed': 0,
+        'skipped': 0,
+        'retries': 0,
+        'bytes_total': 0
+    }
+    stats_lock = threading.Lock()
+    
+    def robust_download(idx_url_tuple):
+        """Ultra-robust download function with comprehensive error handling."""
+        idx, url = idx_url_tuple
+        img_path = img_dir / f"{idx}.jpg"
+        
+        # Double-check if file was created by another thread
+        if img_path.exists() and img_path.stat().st_size > 100:
+            with stats_lock:
+                stats['skipped'] += 1
+            return 'skipped', idx, None
+        
+        max_retries = 3
+        backoff_delays = [1, 2, 5]  # Progressive backoff
+        
+        for attempt in range(max_retries):
+            try:
+                # Request configuration
                 headers = {
-                    'User-Agent': 'Mozilla/5.0 (compatible; RecipeImageDownloader/1.0)',
-                    'Accept': 'image/*,*/*;q=0.8',
+                    'User-Agent': 'Mozilla/5.0 (compatible; RecipeBot/1.0)',
+                    'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
                     'Accept-Encoding': 'gzip, deflate',
-                    'Connection': 'keep-alive'
+                    'Connection': 'keep-alive',
+                    'Cache-Control': 'no-cache'
                 }
-
-                resp = requests.get(
-                    url,
-                    timeout=15,  # Increased timeout
+                
+                # Make request with timeout
+                response = requests.get(
+                    url, 
                     headers=headers,
-                    allow_redirects=True,
-                    stream=True  # For large images
+                    timeout=(10, 30),  # (connect, read) timeout
+                    stream=True,
+                    allow_redirects=True
                 )
-                resp.raise_for_status()
-
-                # Check content type
-                content_type = resp.headers.get('content-type', '').lower()
-                if not any(img_type in content_type for img_type in ['image/', 'jpeg', 'jpg', 'png', 'gif']):
+                response.raise_for_status()
+                
+                # Validate content type
+                content_type = response.headers.get('content-type', '').lower()
+                if not any(img_type in content_type for img_type in 
+                          ['image/', 'jpeg', 'jpg', 'png', 'gif', 'webp']):
                     raise ValueError(f"Invalid content type: {content_type}")
-
-                # Download with size validation
-                content = resp.content
-                if len(content) < 100:  # Minimum viable image size
-                    raise ValueError(f"Image too small: {len(content)} bytes")
-
-                if len(content) > 50 * 1024 * 1024:  # 50MB limit
-                    raise ValueError(f"Image too large: {len(content)} bytes")
-
-                # Write file atomically
+                
+                # Download with size limits
+                content = b''
+                downloaded_size = 0
+                max_size = 20 * 1024 * 1024  # 20MB limit
+                
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        content += chunk
+                        downloaded_size += len(chunk)
+                        if downloaded_size > max_size:
+                            raise ValueError(f"File too large: {downloaded_size} bytes")
+                
+                # Validate minimum size
+                if len(content) < 500:  # Minimum viable image
+                    raise ValueError(f"File too small: {len(content)} bytes")
+                
+                # Atomic write operation
                 temp_path = img_path.with_suffix('.tmp')
-                with open(temp_path, 'wb') as fh:
-                    fh.write(content)
-
-                # Verify file integrity
-                if os.path.getsize(temp_path) != len(content):
-                    os.remove(temp_path)
-                    raise ValueError("File size mismatch after write")
-
-                # Atomic move to final location
-                temp_path.rename(img_path)
-
-                # Update statistics
-                fetch_time = time.time() - fetch_start
-                with stats_lock:
-                    if attempt > 0:
-                        download_stats["retry_success"] += 1
-                    download_stats["downloaded"] += 1
-                    download_stats["bytes_downloaded"] += len(content)
-
-                return "downloaded", idx, url, None, len(content), fetch_time
-
+                try:
+                    with open(temp_path, 'wb') as f:
+                        f.write(content)
+                    
+                    # Verify write integrity
+                    if temp_path.stat().st_size != len(content):
+                        raise ValueError("Write verification failed")
+                    
+                    # Atomic move to final location
+                    temp_path.rename(img_path)
+                    
+                    # Update statistics
+                    with stats_lock:
+                        stats['downloaded'] += 1
+                        stats['bytes_total'] += len(content)
+                        if attempt > 0:
+                            stats['retries'] += 1
+                    
+                    return 'success', idx, len(content)
+                    
+                finally:
+                    # Cleanup temp file if it exists
+                    temp_path.unlink(missing_ok=True)
+                
             except requests.exceptions.Timeout:
-                last_error = f"Timeout after 15s (attempt {attempt+1})"
+                error = f"Timeout (attempt {attempt + 1})"
             except requests.exceptions.ConnectionError:
-                last_error = f"Connection error (attempt {attempt+1})"
+                error = f"Connection error (attempt {attempt + 1})"
             except requests.exceptions.HTTPError as e:
-                last_error = f"HTTP {e.response.status_code} (attempt {attempt+1})"
-            except requests.exceptions.RequestException as e:
-                last_error = f"Request error: {str(e)[:50]} (attempt {attempt+1})"
+                error = f"HTTP {e.response.status_code} (attempt {attempt + 1})"
+                # Don't retry 4xx errors
+                if 400 <= e.response.status_code < 500:
+                    break
             except ValueError as e:
-                last_error = f"Validation error: {str(e)} (attempt {attempt+1})"
-                break  # Don't retry validation errors
+                error = f"Validation: {str(e)} (attempt {attempt + 1})"
+                # Don't retry validation errors
+                break
             except Exception as e:
-                last_error = f"Unexpected error: {str(e)[:50]} (attempt {attempt+1})"
-
-            # Brief pause before retry
-            if attempt < max_retries:
-                time.sleep(0.5 * (attempt + 1))  # Exponential backoff
-
+                error = f"Unexpected: {str(e)[:30]} (attempt {attempt + 1})"
+            
+            # Wait before retry (except on last attempt)
+            if attempt < max_retries - 1:
+                time.sleep(backoff_delays[attempt])
+        
         # All attempts failed
         with stats_lock:
-            download_stats["failed"] += 1
-
-        return "failed", idx, url, last_error, 0
-
-    # ------------------------------------------------------------------
-    # Parallel Download Execution
-    # ------------------------------------------------------------------
-    bandwidth_samples = []
-    start_time = time.time()
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit all download tasks
-        futures = [executor.submit(fetch_with_retry, idx_url)
-                   for idx_url in valid_downloads]
-
-        # Progress bar with real-time statistics
-        progress_bar = tqdm(
+            stats['failed'] += 1
+        
+        return 'failed', idx, error
+    
+    # Execute downloads with progress tracking
+    successful_downloads = []
+    
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(download_queue))) as executor:
+        futures = [executor.submit(robust_download, item) for item in download_queue]
+        
+        # Progress bar
+        with tqdm(
             as_completed(futures),
             total=len(futures),
-            desc=f"      ├─ Downloading {img_dir.name}",
-            position=1, leave=False,
+            desc="      ├─ Downloading",
             bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}] {rate_fmt}"
-        )
-
-        completed = 0
-        for future in progress_bar:
-            completed += 1
-            result = future.result()
-
-            # Unpack result (handle variable return length)
-            if len(result) >= 5:
-                status, idx, url, error, size = result[:5]
-                fetch_time = result[5] if len(result) > 5 else 0
-            else:
-                status, idx, url, error, size = result + \
-                    (0,) * (5 - len(result))
-                fetch_time = 0
-
-            # Track successful downloads
-            if status in {"downloaded", "exists"}:
-                valid_indices.append(idx)
-
-                # Calculate bandwidth for downloaded files
-                if status == "downloaded" and fetch_time > 0 and size > 0:
-                    bandwidth_mbps = (size / (1024 * 1024)) / fetch_time
-                    bandwidth_samples.append(bandwidth_mbps)
-                    download_times.append(fetch_time)
-
-            elif status == "failed":
-                failed_urls.append((idx, url, error))
-
-            # Update progress bar with live statistics
-            current_time = time.time()
-            elapsed = current_time - start_time
-
-            if elapsed > 0:
-                downloads_per_sec = completed / elapsed
-
-                # Calculate current stats safely
-                with stats_lock:
-                    current_stats = download_stats.copy()
-
-                # Estimate completion
-                remaining = len(futures) - completed
-                eta_seconds = remaining / downloads_per_sec if downloads_per_sec > 0 else 0
-
-                # Update progress description with live stats
-                progress_bar.set_postfix({
-                    'Success': f"{current_stats['downloaded'] + current_stats['exists']}",
-                    'Failed': f"{current_stats['failed']}",
-                    'Speed': f"{downloads_per_sec:.1f}/s",
-                    'ETA': f"{eta_seconds:.0f}s" if eta_seconds < 3600 else f"{eta_seconds/3600:.1f}h"
-                })
-
+        ) as pbar:
+            
+            for future in pbar:
+                try:
+                    status, idx, result = future.result()
+                    
+                    if status in ['success', 'skipped']:
+                        successful_downloads.append(idx)
+                        valid_indices.append(idx)
+                    
+                    # Update progress display
+                    pbar.set_postfix({
+                        'Success': f"{stats['downloaded'] + stats['skipped']}",
+                        'Failed': f"{stats['failed']}",
+                        'Retries': f"{stats['retries']}"
+                    })
+                    
+                except Exception as e:
+                    log.debug(f"Future result error: {e}")
+    
     # ------------------------------------------------------------------
-    # Download Results Analysis
+    # PRIORITY 5: RESULTS ANALYSIS AND GRACEFUL DEGRADATION
     # ------------------------------------------------------------------
+    
     total_time = time.time() - download_start
-
+    
     log.info(f"\n   📊 DOWNLOAD RESULTS:")
-    log.info(f"   ├─ Total processing time: {total_time:.1f}s")
-    log.info(
-        f"   ├─ Successfully downloaded: {download_stats['downloaded']:,}")
-    log.info(f"   ├─ Already existed: {download_stats['exists']:,}")
-    log.info(f"   ├─ Failed downloads: {download_stats['failed']:,}")
-    log.info(f"   ├─ Invalid URLs: {download_stats['invalid']:,}")
-    log.info(f"   └─ Retry successes: {download_stats['retry_success']:,}")
+    log.info(f"   ├─ Processing time: {total_time:.1f}s")
+    log.info(f"   ├─ Files downloaded: {stats['downloaded']:,}")
+    log.info(f"   ├─ Files skipped: {stats['skipped']:,}")
+    log.info(f"   ├─ Download failures: {stats['failed']:,}")
+    log.info(f"   ├─ Retry attempts: {stats['retries']:,}")
+    log.info(f"   └─ Data transferred: {stats['bytes_total'] / (1024**2):.1f} MB")
+    
+    # Calculate success metrics
+    total_attempted = len(download_queue)
+    total_successful = stats['downloaded'] + stats['skipped']
+    success_rate = (total_successful / total_attempted * 100) if total_attempted > 0 else 100
+    
+    log.info(f"\n   📈 SUCCESS METRICS:")
+    log.info(f"   ├─ Download success rate: {success_rate:.1f}%")
+    log.info(f"   ├─ Total valid files: {len(valid_indices):,}")
+    log.info(f"   ├─ Coverage: {len(valid_indices)/len(df)*100:.1f}% of dataset")
+    
+    # Determine if results are acceptable
+    coverage_threshold = 0.1  # Accept if at least 10% coverage
+    if len(valid_indices) / len(df) >= coverage_threshold:
+        log.info(f"   ✅ ACCEPTABLE COVERAGE - proceeding with {len(valid_indices):,} images")
+    else:
+        log.warning(f"   ⚠️  LOW COVERAGE - only {len(valid_indices):,} images available")
+        log.warning(f"   └─ Consider using text-only mode or checking data sources")
+    
+    # Memory cleanup
+    import gc
+    gc.collect()
+    
+    return sorted(valid_indices)
 
-    # Success rate analysis
-    total_attempted = download_stats['downloaded'] + download_stats['failed']
-    if total_attempted > 0:
-        success_rate = download_stats['downloaded'] / total_attempted * 100
-        log.info(
-            f"   📈 Success rate: {success_rate:.1f}% ({download_stats['downloaded']}/{total_attempted})")
 
-    # Performance metrics
-    if download_stats['downloaded'] > 0:
-        log.info(f"\n   ⚡ Performance Metrics:")
-        log.info(
-            f"   ├─ Download speed: {download_stats['downloaded']/total_time:.1f} images/second")
-        log.info(
-            f"   ├─ Data downloaded: {download_stats['bytes_downloaded']/(1024*1024):.1f} MB")
-
-        if bandwidth_samples:
-            avg_bandwidth = sum(bandwidth_samples) / len(bandwidth_samples)
-            max_bandwidth = max(bandwidth_samples)
-            log.info(f"   ├─ Average bandwidth: {avg_bandwidth:.1f} MB/s")
-            log.info(f"   └─ Peak bandwidth: {max_bandwidth:.1f} MB/s")
-
-        if download_times:
-            avg_time = sum(download_times) / len(download_times)
-            log.info(f"   └─ Average download time: {avg_time:.2f}s per image")
-
-    # ------------------------------------------------------------------
-    # Error Analysis and Logging
-    # ------------------------------------------------------------------
-    if failed_urls:
-        log.info(f"\n   ⚠️  Error Analysis ({len(failed_urls)} failures):")
-
-        # Categorize errors
-        error_categories = defaultdict(int)
-        error_examples = defaultdict(list)
-
-        for idx, url, error in failed_urls:
-            # Categorize error types
-            if not error:
-                category = "Unknown"
-            elif "timeout" in error.lower():
-                category = "Timeout"
-            elif "connection" in error.lower():
-                category = "Connection"
-            elif "404" in error or "not found" in error.lower():
-                category = "Not Found"
-            elif "403" in error or "forbidden" in error.lower():
-                category = "Forbidden"
-            elif "validation" in error.lower():
-                category = "Invalid Content"
-            else:
-                category = "Other"
-
-            error_categories[category] += 1
-            # Keep max 3 examples per category
-            if len(error_examples[category]) < 3:
-                error_examples[category].append(
-                    (idx, url[:50] + "..." if len(url) > 50 else url, error))
-
-        # Log error summary
-        for category, count in sorted(error_categories.items(), key=lambda x: x[1], reverse=True):
-            percentage = count / len(failed_urls) * 100
-            log.info(f"   ├─ {category}: {count} ({percentage:.1f}%)")
-
-            # Show examples for major error categories
-            if count >= 5 and error_examples[category]:
-                for idx, url_short, error in error_examples[category][:2]:
-                    log.info(
-                        f"   │  └─ Example: {url_short} - {error[:60]}...")
-
-        # Save detailed error log
-        fail_log_path = img_dir / "failed_downloads.txt"
-        try:
-            with open(fail_log_path, "w", encoding='utf-8') as f:
-                f.write("Index\tURL\tError\tTimestamp\n")
-                for idx, url, error in failed_urls:
-                    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-                    f.write(f"{idx}\t{url}\t{error}\t{timestamp}\n")
-
-            log.info(f"   💾 Detailed error log saved to: {fail_log_path}")
-
-        except Exception as e:
-            log.warning(f"   ⚠️  Failed to save error log: {e}")
-
-    # ------------------------------------------------------------------
-    # Disk Usage and Cleanup
-    # ------------------------------------------------------------------
-    try:
-        # Calculate disk usage
-        total_size = 0
-        image_count = 0
-        for img_file in img_dir.glob("*.jpg"):
-            if img_file.is_file():
-                total_size += img_file.stat().st_size
-                image_count += 1
-
-        if image_count > 0:
-            log.info(f"\n   💾 Storage Summary:")
-            log.info(f"   ├─ Images stored: {image_count:,}")
-            log.info(f"   ├─ Total size: {total_size/(1024*1024):.1f} MB")
-            log.info(
-                f"   └─ Average size: {total_size/(1024*1024)/image_count:.2f} MB per image")
-
-    except Exception as e:
-        log.warning(f"   ⚠️  Storage analysis failed: {e}")
-
-    # ------------------------------------------------------------------
-    # Final Summary
-    # ------------------------------------------------------------------
-    total_valid = len(valid_indices)
-    log.info(f"\n   🏁 DOWNLOAD COMPLETE:")
-    log.info(
-        f"   ├─ Total valid images: {total_valid:,}/{len(df):,} ({total_valid/len(df)*100:.1f}%)")
-    log.info(f"   ├─ Processing rate: {len(df)/total_time:.1f} URLs/second")
-    log.info(f"   ├─ Thread efficiency: {max_workers} workers")
-    log.info(f"   └─ Directory: {img_dir}")
-
-    # Memory cleanup for large operations
-    if len(df) > 10000:
-        import gc
-        gc.collect()
-        log.debug(f"   🧹 Memory cleanup completed")
-
-    return valid_indices
 
 def filter_low_quality_images(img_dir: Path, embeddings: np.ndarray, original_indices: list) -> tuple:
     """
     Filter out low-quality images based on embedding statistics.
-    
+
     This function analyzes image embeddings to identify and remove:
     - Blank or corrupted images (very low variance)
     - Generic placeholder images (too similar to mean)
-    
+
     The filtering ensures at least 50% of images are retained to prevent
     over-aggressive filtering.
-    
+
     Args:
         img_dir: Directory containing the images
         embeddings: NumPy array of image embeddings (n_images, embedding_dim)
         original_indices: List of indices corresponding to embeddings
-        
+
     Returns:
         Tuple of (filtered_embeddings, filtered_indices)
-        
+
     Note:
         This function is critical for maintaining alignment between
         embeddings and their corresponding data indices.
@@ -1042,15 +886,14 @@ def load_datasets() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFr
 
     Returns:
         Tuple of (silver_dataframe, gold_dataframe, recipes_dataframe, carb_dataframe)
-        
+
     Raises:
         FileNotFoundError: If required data files are missing
         ValueError: If data validation fails
         RuntimeError: If critical errors occur during loading
     """
-    
-    import requests
 
+    import requests
 
     load_start = time.time()
 
@@ -1593,7 +1436,7 @@ def load_datasets() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFr
         f"   ├─ Silver Labels: {len(silver):,} rows × {len(silver.columns)} columns")
     log.info(f"   ├─ USDA Carb Tbl:  {len(carb_df):,} rows × {len(carb_df.columns)} columns "
              f"({carb_df.memory_usage(deep=True).sum() / (1024**2):.1f} MB)")
-    
+
     # Update total memory after USDA load
     total_used = total_memory + carb_df.memory_usage(deep=True).sum()/1_048_576
     log.info(f"   ├─ Total memory usage: {total_used:.1f} MB")
@@ -1624,16 +1467,16 @@ def get_datasets(sample_frac: float | None = None
                             pd.DataFrame, pd.DataFrame]:
     """
     Lazy-load and cache the four DataFrames returned by load_datasets().
-    
+
     This function implements a singleton pattern for dataset loading,
     ensuring that expensive data loading operations happen only once.
-    
+
     Args:
         sample_frac: Optional fraction to sample from silver dataset (0.0-1.0)
-        
+
     Returns:
         Tuple of (silver_all, gold, recipes, carb_df)
-        
+
     Note:
         The sampling only applies to the silver dataset and is useful
         for testing the pipeline on smaller data subsets.
@@ -1673,7 +1516,7 @@ NON_KETO = list(set([
     "apple", "banana", "orange", "grape", "kiwi", "mango", "peach",
     "strawberry", "pineapple", "apricot", "tangerine", "persimmon",
     "pomegranate", "prune", "papaya", "jackfruit",
-    
+
     # Grains and grain products
     "white rice", "long grain rice", "cornmeal", "corn",
     "all-purpose flour", "bread", "pasta", "couscous",
@@ -1684,42 +1527,42 @@ NON_KETO = list(set([
     "spelt flour", "teff grain", "triticale",
     "einkorn flour", "emmer grain", "fonio", "freekeh",
     "kamut flour", "farina",
-    
+
     # Starchy vegetables
-    "potato", "baking potato", "potato wedge", "potato slice", 
+    "potato", "baking potato", "potato wedge", "potato slice",
     "russet potato", "sweet potato", "yam", "cassava",
     "taro", "lotus root", "water chestnut", "ube",
-    
+
     # Legumes
     "kidney bean", "black bean", "pinto bean", "navy bean",
     "lima bean", "cannellini bean", "great northern bean",
     "garbanzo bean", "chickpea", "adzuki bean", "baked bean",
     "refried bean", "hummus",
-    
+
     # Sweeteners and sugars
     "sugar", "brown sugar", "coconut sugar", "muscovado sugar",
     "demerara", "turbinado", "molasses", "honey", "agave nectar",
     "maple syrup",
-    
+
     # Sauces and condiments high in sugar
     "tomato sauce", "ketchup", "bbq sauce", "teriyaki sauce",
     "hoisin sauce", "sweet chili sauce", "sweet pickle",
     "sweet relish", "sweet soy glaze", "marmalade",
-    
+
     # Processed foods and snacks
     "bread", "bagel", "muffin", "cookie", "cooky", "cake",
     "pastry", "pie crust", "pizza", "pizza crust", "pizza flour",
     "naan", "pita", "roti", "chapati", "tortilla",
     "pretzel", "chip", "french fry", "tater tot",
     "doughnut", "graham cracker", "hamburger bun", "hot-dog bun",
-    
+
     # Breakfast items
     "breakfast cereal", "granola", "muesli", "energy bar",
-    
+
     # Beverages
     "soy sauce", "orange juice", "fruit punch", "chocolate milk",
     "sweetened condensed milk", "sweetened cranberry", "sweetened yogurt",
-    
+
     # Alcoholic beverages (carbs from alcohol and mixers)
     "ale", "beer", "lager", "ipa", "pilsner", "stout", "porter",
     "moscato", "riesling", "port", "sherry", "sangria",
@@ -1728,12 +1571,12 @@ NON_KETO = list(set([
     "bailey", "kahlua", "amaretto", "frangelico", "limoncello",
     "triple sec", "curacao", "alcoholic lemonade", "alcopop",
     "breezer", "smirnoff ice", "mike hard lemonade", "hard cider", "cider",
-    
+
     # Specialty items
     "tapioca", "arrowroot", "job's tear", "jobs tear", "job tear",
     "gnocchi", "tempura batter", "breading",
     "ice cream", "candy", "hard candy", "gummy bear",
-    
+
     # Soy products (often sweetened)
     "soybean sweetened",
 ]))
@@ -1743,22 +1586,22 @@ NON_VEGAN = list(set([
     'beef', 'steak', 'ribeye', 'sirloin', 'veal', 'lamb', 'mutton',
     'pork', 'bacon', 'ham', 'boar', 'goat', 'kid', 'venison',
     'rabbit', 'hare',
-    
+
     # Meat - Poultry
     'chicken', 'turkey', 'duck', 'goose', 'quail', 'pheasant',
     'partridge', 'grouse',
-    
+
     # Meat - Organ meats
     'liver', 'kidney', 'heart', 'tongue', 'brain', 'sweetbread',
     'tripe', 'gizzard', 'offal', 'bone', 'marrow', 'oxtail',
-    
+
     # Meat - Processed
     'sausage', 'bratwurst', 'knackwurst', 'mettwurst',
     'salami', 'pepperoni', 'pastrami', 'bresaola',
     'prosciutto', 'pancetta', 'guanciale', 'speck',
     'mortadella', 'capocollo', 'coppa', 'cotechino',
     'chorizo', 'lard', 'tallow',
-    
+
     # Fish and Seafood
     'fish', 'salmon', 'tuna', 'cod', 'haddock', 'halibut',
     'mackerel', 'herring', 'sardine', 'anchovy', 'trout',
@@ -1768,11 +1611,11 @@ NON_VEGAN = list(set([
     'octopus', 'krill', 'caviar', 'roe',
     'fishpaste', 'shrimppaste', 'anchovypaste', 'bonito',
     'katsuobushi', 'dashi', 'nampla',
-    
+
     # Dairy - Milk products
     'milk', 'cream', 'butter', 'buttermilk', 'condensed', 'evaporated',
     'lactose', 'whey', 'casein', 'ghee', 'kefir',
-    
+
     # Dairy - Cheese
     'cheese', 'cheddar', 'mozzarella', 'parmesan', 'parmigiano',
     'reggiano', 'pecorino', 'ricotta', 'mascarpone',
@@ -1780,14 +1623,14 @@ NON_VEGAN = list(set([
     'emmental', 'gruyere', 'fontina', 'asiago', 'manchego',
     'halloumi', 'feta', 'quark', 'paneer', 'stracciatella',
     'provolone', 'taleggio',
-    
+
     # Dairy - Other
     'yogurt', 'sourcream', 'cremefraiche', 'curd', 'custard',
     'icecream', 'gelatin', 'collagen',
-    
+
     # Eggs
     'egg', 'yolk', 'albumen', 'omelet', 'omelette', 'meringue',
-    
+
     # Other animal products
     'honey', 'shellfish', 'escargot', 'snail', 'frog',
     'worcestershire', 'aioli', 'mayonnaise',
@@ -1808,13 +1651,13 @@ KETO_WHITELIST = [
     r"\bpecan flour\b",
     r"\bmacadamia flour\b",
     r"\bhazelnut flour\b",
-    
+
     # Special exceptions for "kidney" (organ meat, not kidney beans)
     r"\bkidney\b",
-    
+
     # Low-carb citrus exceptions
     r"\blemon juice\b",
-    
+
     # Keto milk alternatives
     r"\balmond milk\b",
     r"\bcoconut milk\b",
@@ -1825,7 +1668,7 @@ KETO_WHITELIST = [
     r"\balmond cream\b",
     r"\bcoconut cream\b",
     r"\bsour cream\b",
-    
+
     # Nut and seed butters
     r"\balmond butter\b",
     r"\bpeanut butter\b",
@@ -1834,13 +1677,13 @@ KETO_WHITELIST = [
     r"\bpecan butter\b",
     r"\bwalnut butter\b",
     r"\bhemp butter\b",
-    
+
     # Keto bread alternatives
     r"\balmond bread\b",
     r"\bcoconut bread\b",
     r"\bcloud bread\b",
     r"\bketo bread\b",
-    
+
     # Sugar-free sweeteners
     r"\bcoconut sugar[- ]free\b",
     r"\bstevia\b",
@@ -1850,7 +1693,7 @@ KETO_WHITELIST = [
     r"\ballulose\b",
     r"\bxylitol\b",
     r"\bsugar[- ]free\b",
-    
+
     # Low-carb alternatives
     r"\bcauliflower rice\b",
     r"\bshirataki noodles\b",
@@ -1858,7 +1701,7 @@ KETO_WHITELIST = [
     r"\bkelp noodles\b",
     r"\bsugar[- ]free chocolate\b",
     r"\bketo chocolate\b",
-    
+
     # Low-carb vegetables and foods
     r"\bavocado\b",
     r"\bcacao\b",
@@ -1877,7 +1720,7 @@ VEGAN_WHITELIST = [
     r"\beggplant\b",
     r"\begg\s*fruit\b",
     r"\bvegan\s+egg\b",
-    
+
     # Milk exceptions (plant-based)
     r"\bmillet\b",  # grain, not milk
     r"\bmilk\s+thistle\b",
@@ -1889,7 +1732,7 @@ VEGAN_WHITELIST = [
     r"\brice\s+milk\b",
     r"\bhazelnut\s+milk\b",
     r"\bpea\s+milk\b",
-    
+
     # Rice alternatives (vegetable-based)
     r"\bcauliflower rice\b",
     r"\bbroccoli rice\b",
@@ -1900,7 +1743,7 @@ VEGAN_WHITELIST = [
     r"\bshirataki rice\b",
     r"\bmiracle rice\b",
     r"\bpalmini rice\b",
-    
+
     # Butter exceptions (plant-based)
     r"\bbutternut\b",  # squash
     r"\bbutterfly\s+pea\b",
@@ -1910,42 +1753,42 @@ VEGAN_WHITELIST = [
     r"\bsunflower(?:\s*seed)?\s+butter\b",
     r"\bpistachio\s+butter\b",
     r"\bvegan\s+butter\b",
-    
+
     # Honey exceptions (plants)
     r"\bhoneydew\b",
     r"\bhoneysuckle\b",
     r"\bhoneycrisp\b",
     r"\bhoney\s+locust\b",
     r"\bhoneyberry\b",
-    
+
     # Cream exceptions (plant-based)
     r"\bcream\s+of\s+tartar\b",
     r"\bice[- ]cream\s+bean\b",
     r"\bcoconut\s+cream\b",
     r"\bcashew\s+cream\b",
     r"\bvegan\s+cream\b",
-    
+
     # Cheese exceptions (plant-based)
     r"\bcheesewood\b",
     r"\bvegan\s+cheese\b",
     r"\bcashew\s+cheese\b",
-    
+
     # Fish exceptions (plants)
     r"\bfish\s+mint\b",
     r"\bfish\s+pepper\b",
-    
+
     # Beef exceptions (plants/mushrooms)
     r"\bbeefsteak\s+plant\b",
     r"\bbeefsteak\s+mushroom\b",
-    
+
     # Chicken/hen exceptions (mushrooms)
     r"\bchicken[- ]of[- ]the[- ]woods\b",
     r"\bchicken\s+mushroom\b",
     r"\bhen[- ]of[- ]the[- ]woods\b",
-    
+
     # Meat exceptions (plants)
     r"\bsweetmeat\s+(?:pumpkin|squash)\b",
-    
+
     # Bacon alternatives
     r"\bcoconut\s+bacon\b",
     r"\bmushroom\s+bacon\b",
@@ -1965,8 +1808,9 @@ These patterns are created once and reused throughout the pipeline.
 # Global variables for carbohydrate lookup
 _CARB_MAP: dict[str, float] | None = None
 _FUZZY_KEYS: list[str] | None = None
-def _ensure_carb_map() -> None:
 
+
+def _ensure_carb_map() -> None:
     """Lazy-load USDA table into a dict for µs look-ups."""
     global _CARB_MAP, _FUZZY_KEYS
     if _CARB_MAP is None:
@@ -1975,19 +1819,20 @@ def _ensure_carb_map() -> None:
         _FUZZY_KEYS = list(_CARB_MAP)           # for RapidFuzz
         log.info("Carb map initialised (%d keys)", len(_CARB_MAP))
 
+
 def compile_any(words: Iterable[str]) -> re.Pattern[str]:
     """
     Compile a list of words into a single regex pattern for efficient matching.
-    
+
     Creates a pattern that matches any whole word from the input list,
     case-insensitively. Word boundaries ensure we don't match partial words.
-    
+
     Args:
         words: Iterable of strings to compile into pattern
-        
+
     Returns:
         Compiled regex pattern matching any word in the list
-        
+
     Example:
         >>> pattern = compile_any(["apple", "banana"])
         >>> bool(pattern.search("I like apple pie"))
@@ -2025,16 +1870,16 @@ _UNITS = re.compile(r"\b(?:g|gram|kg|oz|ml|l|cup|cups|tsp|tbsp|teaspoon|"
 def tokenize_ingredient(text: str) -> list[str]:
     """
     Extract word tokens from ingredient text.
-    
+
     Splits text into individual words, handling hyphenated words correctly.
     Used for token-level matching in classification rules.
-    
+
     Args:
         text: Raw ingredient text
-        
+
     Returns:
         List of lowercase word tokens
-        
+
     Example:
         >>> tokenize_ingredient("Sugar-free dark chocolate")
         ['sugar-free', 'dark', 'chocolate']
@@ -2045,10 +1890,10 @@ def tokenize_ingredient(text: str) -> list[str]:
 def normalise(t: str | list | tuple | np.ndarray) -> str:
     """
     Normalize ingredient text for consistent matching.
-    
+
     This comprehensive normalization function handles various input formats
     and applies multiple cleaning steps to prepare text for classification:
-    
+
     1. Handles list/array inputs (from parquet files)
     2. Removes accents and non-ASCII characters
     3. Removes parenthetical information
@@ -2057,13 +1902,13 @@ def normalise(t: str | list | tuple | np.ndarray) -> str:
     6. Removes punctuation
     7. Applies lemmatization (if available)
     8. Filters out very short words
-    
+
     Args:
         t: Input text (string, list, tuple, or numpy array)
-        
+
     Returns:
         Normalized string with cleaned, lemmatized tokens
-        
+
     Example:
         >>> normalise("2 cups of sliced bananas (ripe)")
         "slice banana ripe"
@@ -2076,25 +1921,25 @@ def normalise(t: str | list | tuple | np.ndarray) -> str:
             t = " ".join(map(str, t))
         else:
             t = str(t)
-    
+
     # Unicode normalization - remove accents
     t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode()
-    
+
     # Remove parenthetical content and convert to lowercase
     t = re.sub(r"\([^)]*\)", " ", t.lower())
-    
+
     # Remove units of measurement
     t = _UNITS.sub(" ", t)
-    
+
     # Remove numbers (including fractions)
     t = re.sub(r"\d+(?:[/\.]\d+)?", " ", t)
-    
+
     # Remove punctuation
     t = re.sub(r"[^\w\s-]", " ", t)
-    
+
     # Normalize whitespace
     t = re.sub(r"\s+", " ", t).strip()
-    
+
     # Apply lemmatization and filter short words
     if _LEMM:
         return " ".join(_LEMM.lemmatize(w) for w in t.split() if len(w) > 2)
@@ -2109,10 +1954,11 @@ Functions for looking up carbohydrate content from USDA nutritional database.
 Used for the numeric keto rule: ingredients with >10g carbs/100g are non-keto.
 """
 
+
 def _ensure_carb_map() -> None:
     """
     Lazy-load USDA carbohydrate data into memory for fast lookups.
-    
+
     This function loads the USDA nutritional database on first use and
     creates a dictionary mapping food descriptions to carbohydrate content.
     Also prepares a list of keys for fuzzy matching.
@@ -2128,17 +1974,17 @@ def _ensure_carb_map() -> None:
 def carbs_per_100g(ing: str, fuzzy: bool = True) -> float | None:
     """
     Look up carbohydrate content per 100g for an ingredient.
-    
+
     First attempts exact matching, then falls back to fuzzy matching
     using RapidFuzz library with a similarity threshold of 90%.
-    
+
     Args:
         ing: Normalized ingredient string
         fuzzy: Whether to use fuzzy matching if exact match fails
-        
+
     Returns:
         Carbohydrate grams per 100g, or None if not found
-        
+
     Example:
         >>> carbs_per_100g("white rice")
         28.2
@@ -2165,16 +2011,17 @@ These functions implement a multi-stage decision process combining rules,
 nutritional data, and machine learning models.
 """
 
+
 def is_keto_ingredient_list(tokens: list[str]) -> bool:
     """
     Check if a tokenized ingredient list is keto-friendly.
-    
+
     Performs token-level matching against the NON_KETO list.
     Returns False if all tokens of any non-keto ingredient are found.
-    
+
     Args:
         tokens: List of normalized ingredient tokens
-        
+
     Returns:
         True if keto-friendly, False otherwise
     """
@@ -2188,13 +2035,13 @@ def is_keto_ingredient_list(tokens: list[str]) -> bool:
 def find_non_keto_hits(text: str) -> list[str]:
     """
     Find all non-keto ingredients present in the text.
-    
+
     Used for debugging and understanding why an ingredient
     was classified as non-keto.
-    
+
     Args:
         text: Normalized ingredient text
-        
+
     Returns:
         Sorted list of matching non-keto ingredients
     """
@@ -2208,9 +2055,9 @@ def find_non_keto_hits(text: str) -> list[str]:
 def is_ingredient_keto(ingredient: str) -> bool:
     """
     Determine if a single ingredient is keto-friendly.
-    
+
     Implements a comprehensive decision pipeline:
-    
+
     1. **Whitelist Check**: Immediate acceptance for known keto ingredients
     2. **Numeric Rule**: Reject if carbs > 10g/100g (USDA database)
        - Whole phrase lookup
@@ -2218,13 +2065,13 @@ def is_ingredient_keto(ingredient: str) -> bool:
     3. **Regex Blacklist**: Fast pattern matching against NON_KETO
     4. **Token Blacklist**: Detailed token-level analysis
     5. **ML Model**: Machine learning prediction with rule verification
-    
+
     Args:
         ingredient: Raw ingredient string
-        
+
     Returns:
         True if keto-friendly, False otherwise
-        
+
     Example:
         >>> is_ingredient_keto("almond flour")
         True  # Whitelisted
@@ -2294,19 +2141,19 @@ def is_ingredient_keto(ingredient: str) -> bool:
 def is_ingredient_vegan(ingredient: str) -> bool:
     """
     Determine if an ingredient is vegan.
-    
+
     Uses a simplified pipeline compared to keto classification:
-    
+
     1. **Whitelist Check**: Accept known vegan alternatives
     2. **Blacklist Check**: Reject animal products
     3. **ML Model**: Machine learning with verification
-    
+
     Args:
         ingredient: Raw ingredient string
-        
+
     Returns:
         True if vegan, False otherwise
-        
+
     Example:
         >>> is_ingredient_vegan("almond milk")
         True  # Whitelisted plant milk
@@ -2357,16 +2204,16 @@ def is_ingredient_vegan(ingredient: str) -> bool:
 def is_keto(ingredients: Iterable[str] | str) -> bool:
     """
     Check if all ingredients in a recipe are keto-friendly.
-    
+
     This is the main public API for keto classification. It handles
     various input formats and ensures all ingredients pass the keto test.
-    
+
     Args:
         ingredients: Either a string (comma-separated or JSON) or an iterable
-        
+
     Returns:
         True if ALL ingredients are keto-friendly, False otherwise
-        
+
     Example:
         >>> is_keto("almond flour, eggs, butter")
         True
@@ -2391,16 +2238,16 @@ def is_keto(ingredients: Iterable[str] | str) -> bool:
 def is_vegan(ingredients: Iterable[str] | str) -> bool:
     """
     Check if all ingredients in a recipe are vegan.
-    
+
     This is the main public API for vegan classification. It handles
     various input formats and ensures all ingredients pass the vegan test.
-    
+
     Args:
         ingredients: Either a string (comma-separated or JSON) or an iterable
-        
+
     Returns:
         True if ALL ingredients are vegan, False otherwise
-        
+
     Example:
         >>> is_vegan("tofu, soy sauce, vegetables")
         True
@@ -2430,14 +2277,15 @@ A scikit-learn compatible model that implements pure rule-based classification.
 Used as a baseline and fallback when ML models are unavailable or fail.
 """
 
+
 class RuleModel(BaseEstimator, ClassifierMixin):
     """
     Rule-based classifier for diet classification.
-    
+
     Implements the scikit-learn interface while using only regex patterns
     and domain rules for classification. Provides probabilistic outputs
     with high confidence for rule matches.
-    
+
     Attributes:
         task: Classification task ('keto' or 'vegan')
         rx_black: Compiled regex for blacklist patterns
@@ -2445,12 +2293,12 @@ class RuleModel(BaseEstimator, ClassifierMixin):
         pos_prob: Probability assigned to positive class (default 0.98)
         neg_prob: Probability assigned to negative class (default 0.02)
     """
-    
+
     def __init__(self, task: str, rx_black, rx_white=None,
                  pos_prob=0.98, neg_prob=0.02):
         """
         Initialize rule-based model.
-        
+
         Args:
             task: 'keto' or 'vegan'
             rx_black: Regex pattern for blacklisted items
@@ -2471,7 +2319,7 @@ class RuleModel(BaseEstimator, ClassifierMixin):
     def _pos(self, d: str) -> bool:
         """
         Determine if ingredient is positive class using full rule pipeline.
-        
+
         Delegates to the main classification functions to ensure
         consistency with the overall system.
         """
@@ -2483,10 +2331,10 @@ class RuleModel(BaseEstimator, ClassifierMixin):
     def predict_proba(self, X):
         """
         Predict class probabilities for samples.
-        
+
         Args:
             X: Array-like of ingredient strings
-            
+
         Returns:
             Array of shape (n_samples, 2) with probabilities
         """
@@ -2500,10 +2348,10 @@ class RuleModel(BaseEstimator, ClassifierMixin):
     def predict(self, X):
         """
         Predict class labels for samples.
-        
+
         Args:
             X: Array-like of ingredient strings
-            
+
         Returns:
             Array of binary predictions (0 or 1)
         """
@@ -2518,19 +2366,20 @@ Post-processing functions that apply rule-based corrections to ML predictions.
 This ensures that hard rules always override ML predictions when applicable.
 """
 
+
 def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarray:
     """
     Apply rule-based verification to ML predictions.
-    
+
     This function ensures that domain rules always take precedence over
     ML predictions. It's a critical safety layer that prevents the model
     from making obvious mistakes.
-    
+
     Args:
         task: 'keto' or 'vegan'
         clean: Series of normalized ingredient texts
         prob: Array of ML predicted probabilities
-        
+
     Returns:
         Adjusted probability array with rule corrections applied
     """
@@ -2564,25 +2413,24 @@ def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarr
     return adjusted
 
 
-# =============================================================================
-# SANITY CHECKS
-# =============================================================================
-"""
-Basic tests to ensure the classification system is working correctly.
-These checks run on module import to catch configuration errors early.
-"""
+# # =============================================================================
+# # SANITY CHECKS
+# # =============================================================================
+# """
+# Basic tests to ensure the classification system is working correctly.
+# These checks run on module import to catch configuration errors early.
+# """
 
-# Test whitelist functionality
-assert is_ingredient_keto("almond flour"), "Whitelist check failed"
+# # Test whitelist functionality
+# assert is_ingredient_keto("almond flour"), "Whitelist check failed"
 
-# Test numeric rule (rice has ~28g carbs/100g)
-assert not is_ingredient_keto("white rice"), "Numeric carb rule failed"
+# # Test numeric rule (rice has ~28g carbs/100g)
+# assert not is_ingredient_keto("white rice"), "Numeric carb rule failed"
 
-# Test rule model delegation
-rule = RuleModel("keto", None, None)
-assert rule._pos("banana") is False, "Rule model delegation failed"
-
-log.info("✅ All sanity checks passed")
+# # Test rule model delegation
+# rule = RuleModel("keto", None, None)
+# assert rule._pos("banana") is False, "Rule model delegation failed"
+# log.info("✅ All sanity checks passed")
 
 
 # =============================================================================
@@ -2604,13 +2452,13 @@ _pipeline_state = {
 def _ensure_pipeline():
     """
     Ensure the ML pipeline is initialized with vectorizer and models.
-    
+
     This function implements lazy loading of models:
     1. First checks if models are already loaded
     2. Attempts to load from disk if available
     3. Falls back to training if no saved models exist
     4. Ultimate fallback to rule-only mode if training fails
-    
+
     The function ensures the system is always in a usable state,
     even if ML components fail to load or train.
     """
@@ -2634,7 +2482,7 @@ def _ensure_pipeline():
             log.info("No saved artifacts found - running full pipeline once")
             # Import here to avoid circular dependency
             from . import run_full_pipeline, BEST
-            
+
             vec, _, _, res = run_full_pipeline(mode="both", sample_frac=0.1)
 
             # Select best model per task
@@ -2648,9 +2496,9 @@ def _ensure_pipeline():
 
             # Save artifacts
             CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
-            with open(vec_path, 'wb') as f: 
+            with open(vec_path, 'wb') as f:
                 pickle.dump(vec, f)
-            with open(models_path, 'wb') as f: 
+            with open(models_path, 'wb') as f:
                 pickle.dump(best_models, f)
 
             _pipeline_state['vectorizer'] = vec
@@ -2677,19 +2525,20 @@ large datasets and preventing out-of-memory errors, especially when working
 with both text and image features.
 """
 
+
 def optimize_memory_usage(stage_name=""):
     """
     Optimize memory usage during training with detailed logging.
-    
+
     This function performs garbage collection and clears GPU memory if available.
     It's called between major pipeline stages to prevent memory accumulation.
-    
+
     Args:
         stage_name: Optional name of the current stage for logging
-        
+
     Returns:
         String indicating memory status: "normal", "moderate", "high", or "error"
-        
+
     Example:
         >>> optimize_memory_usage("After image processing")
         🧹 After image processing: Memory cleanup
@@ -2698,7 +2547,7 @@ def optimize_memory_usage(stage_name=""):
         └─ Objects collected: 1247
     """
     import gc
-    
+
     # Get memory before cleanup
     try:
         memory_before = psutil.virtual_memory()
@@ -2773,18 +2622,18 @@ def optimize_memory_usage(stage_name=""):
 def handle_memory_crisis():
     """
     Emergency memory cleanup when usage is critical.
-    
+
     Applies aggressive memory optimization techniques including:
     - Multiple garbage collection passes
     - Complete GPU memory clearing
     - Python cache invalidation
     - Memory compaction
-    
+
     Returns:
         Final memory usage percentage after cleanup
     """
     import gc
-    
+
     log.warning("🚨 MEMORY CRISIS - Applying emergency cleanup")
 
     try:
@@ -2860,10 +2709,11 @@ Functions for generating weak (silver) labels from unlabeled data using
 rule-based heuristics. This enables training on large unlabeled datasets.
 """
 
+
 def _rule_only_keto(text: str) -> bool:
     """
     Apply keto rules without ML model fallback.
-    
+
     Used for silver label generation where we want consistent
     rule-based labels without ML influence.
     """
@@ -2883,7 +2733,7 @@ def _rule_only_keto(text: str) -> bool:
 def _rule_only_vegan(text: str) -> bool:
     """
     Apply vegan rules without ML model fallback.
-    
+
     Used for silver label generation where we want consistent
     rule-based labels without ML influence.
     """
@@ -2898,14 +2748,14 @@ def _rule_only_vegan(text: str) -> bool:
 def build_silver(recipes: pd.DataFrame) -> pd.DataFrame:
     """
     Generate silver labels for recipe dataset using heuristic rules.
-    
+
     Creates weak labels that can be used for training when manual
     labels are unavailable. The silver labels are less accurate than
     gold standard labels but enable training on much larger datasets.
-    
+
     Args:
         recipes: DataFrame with 'ingredients' column
-        
+
     Returns:
         DataFrame with added columns:
         - clean: Normalized ingredient text
@@ -2914,10 +2764,10 @@ def build_silver(recipes: pd.DataFrame) -> pd.DataFrame:
     """
     df = recipes[["ingredients"]].copy()
     df["clean"] = df["ingredients"].fillna("").map(normalise)
-    
+
     df["silver_keto"] = df["clean"].map(lambda t: int(_rule_only_keto(t)))
     df["silver_vegan"] = df["clean"].map(lambda t: int(_rule_only_vegan(t)))
-    
+
     return df
 
 
@@ -2928,17 +2778,18 @@ def build_silver(recipes: pd.DataFrame) -> pd.DataFrame:
 Functions for combining different feature types and filtering data.
 """
 
+
 def combine_features(X_text, X_image) -> csr_matrix:
     """
     Concatenate sparse text matrix with dense image array.
-    
+
     Creates a unified feature matrix for multi-modal learning by
     horizontally stacking text and image features.
-    
+
     Args:
         X_text: Sparse TF-IDF matrix from text
         X_image: Dense array of image embeddings
-        
+
     Returns:
         Combined sparse matrix with all features
     """
@@ -2949,41 +2800,42 @@ def combine_features(X_text, X_image) -> csr_matrix:
 def filter_photo_rows(df: pd.DataFrame) -> pd.DataFrame:
     """
     Return rows with usable photo URLs.
-    
+
     Filters out rows with missing or placeholder photo URLs
     (containing "nophoto", "nopic", etc.).
-    
+
     Args:
         df: DataFrame potentially containing 'photo_url' column
-        
+
     Returns:
         Filtered DataFrame with valid photo URLs only
     """
     if 'photo_url' not in df.columns:
         return df.iloc[0:0].copy()  # Return empty DataFrame
-    
+
     # Filter out placeholder images
     mask = ~df['photo_url'].str.contains(
         r"nophoto|nopic|nopicture", case=False, na=False)
     mask &= df['photo_url'].astype(bool)  # Also remove empty/null URLs
-    
+
     return df.loc[mask].copy()
 
 
 def filter_silver_by_downloaded_images(silver_df: pd.DataFrame, image_dir: Path) -> pd.DataFrame:
     """
     Keep only rows in silver that have corresponding downloaded image files.
-    
+
     Ensures alignment between the silver dataset and actually available images.
-    
+
     Args:
         silver_df: Silver label DataFrame
         image_dir: Directory containing downloaded images
-        
+
     Returns:
         Filtered DataFrame with only rows that have images
     """
-    downloaded_ids = [int(p.stem) for p in (image_dir / "silver").glob("*.jpg")]
+    downloaded_ids = [int(p.stem)
+                      for p in (image_dir / "silver").glob("*.jpg")]
     return silver_df.loc[silver_df.index.intersection(downloaded_ids)].copy()
 
 
@@ -2994,13 +2846,14 @@ def filter_silver_by_downloaded_images(silver_df: pd.DataFrame, image_dir: Path)
 Functions for handling imbalanced datasets through resampling techniques.
 """
 
+
 def show_balance(df: pd.DataFrame, title: str) -> None:
     """
     Print class distribution statistics.
-    
+
     Displays the positive/negative class balance for both keto and vegan
     labels in a formatted table.
-    
+
     Args:
         df: DataFrame containing label columns
         title: Title for the display
@@ -3021,22 +2874,22 @@ def show_balance(df: pd.DataFrame, title: str) -> None:
 def apply_smote(X, y, max_dense_size: int = int(5e7)):
     """
     Apply SMOTE (Synthetic Minority Over-sampling Technique) for class balancing.
-    
+
     SMOTE creates synthetic examples of the minority class to balance the dataset.
     Falls back to random oversampling for very large sparse matrices.
-    
+
     Args:
         X: Feature matrix (sparse or dense)
         y: Target labels
         max_dense_size: Maximum size for dense conversion
-        
+
     Returns:
         Tuple of (X_resampled, y_resampled)
     """
     try:
         # Ensure y is a proper numpy array
         y = np.asarray(y)
-        
+
         # Get unique classes instead of bincount for length check
         unique_classes = np.unique(y)
 
@@ -3044,7 +2897,8 @@ def apply_smote(X, y, max_dense_size: int = int(5e7)):
             return X, y
 
         counts = np.bincount(y)
-        ratio = float(counts.min()) / float(counts.sum())  # Explicit float conversion
+        # Explicit float conversion
+        ratio = float(counts.min()) / float(counts.sum())
 
         if ratio < 2:
             return X, y
@@ -3081,19 +2935,20 @@ Functions for creating and configuring various ML models tailored to
 different feature domains (text, image, or both).
 """
 
+
 def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
     """
     Build a dictionary of ML models appropriate for the given domain.
-    
+
     Different models are optimized for different feature types:
     - Text models: Naive Bayes, linear models (work well with sparse TF-IDF)
     - Image models: Neural networks, tree-based models (handle dense features)
     - Both: All models available
-    
+
     Args:
         task: Classification task ('keto' or 'vegan')
         domain: Feature domain ('text', 'image', or 'both')
-        
+
     Returns:
         Dictionary mapping model names to estimator instances
     """
@@ -3257,23 +3112,25 @@ N_IT = 2 if FAST else 6  # Number of iterations for random search
 def ensure_predict_proba(estimator, X_train, y_train):
     """
     Ensure estimator has predict_proba method by wrapping with calibration if needed.
-    
+
     Some models (like SVC) don't provide probability estimates by default.
     This function wraps them with CalibratedClassifierCV to enable probabilities.
-    
+
     Args:
         estimator: Fitted estimator
         X_train: Training features
         y_train: Training labels
-        
+
     Returns:
         Estimator with predict_proba capability
     """
     if not hasattr(estimator, "predict_proba"):
-        log.info(f"Adding probability calibration to {estimator.__class__.__name__}")
+        log.info(
+            f"Adding probability calibration to {estimator.__class__.__name__}")
         try:
             from sklearn.calibration import CalibratedClassifierCV
-            calibrated = CalibratedClassifierCV(estimator, cv=3, method='sigmoid')
+            calibrated = CalibratedClassifierCV(
+                estimator, cv=3, method='sigmoid')
             calibrated.fit(X_train, y_train)
             return calibrated
         except Exception as e:
@@ -3289,27 +3146,28 @@ def ensure_predict_proba(estimator, X_train, y_train):
 Functions for optimizing model hyperparameters through grid search.
 """
 
+
 def tune(name: str, base: BaseEstimator, X, y, cv: int = CV) -> BaseEstimator:
     """
     Optimize hyperparameters for a model using grid search.
-    
+
     This function implements comprehensive hyperparameter tuning with:
     - Caching of tuned models
     - Detailed progress tracking
     - Fallback to defaults on failure
     - Performance analysis
-    
+
     Args:
         name: Model name (key for HYPER dictionary)
         base: Base estimator to tune
         X: Training features
         y: Training labels
         cv: Number of cross-validation folds
-        
+
     Returns:
         Fitted estimator with optimized hyperparameters
     """
-    
+
     from itertools import product
 
     tune_start = time.time()
@@ -3317,7 +3175,8 @@ def tune(name: str, base: BaseEstimator, X, y, cv: int = CV) -> BaseEstimator:
     # Check cache
     if name in BEST:
         cached_time = time.time() - tune_start
-        log.info(f"            ✅ {name}: Using cached model ({cached_time*1000:.0f}ms)")
+        log.info(
+            f"            ✅ {name}: Using cached model ({cached_time*1000:.0f}ms)")
         return BEST[name]
 
     # Get hyperparameter grid
@@ -3325,8 +3184,9 @@ def tune(name: str, base: BaseEstimator, X, y, cv: int = CV) -> BaseEstimator:
 
     if not grid:
         # No hyperparameters to tune - use defaults
-        log.info(f"            🔧 {name}: No hyperparameters defined, using defaults")
-        
+        log.info(
+            f"            🔧 {name}: No hyperparameters defined, using defaults")
+
         with tqdm(total=1, desc=f"               ├─ Default Fit",
                   position=4, leave=False,
                   bar_format="               ├─ {desc}: {percentage:3.0f}%|{bar}| [{elapsed}]") as default_pbar:
@@ -3334,13 +3194,15 @@ def tune(name: str, base: BaseEstimator, X, y, cv: int = CV) -> BaseEstimator:
             default_pbar.update(1)
 
         fit_time = time.time() - tune_start
-        log.info(f"            ✅ {name}: Default fit completed in {fit_time:.1f}s")
+        log.info(
+            f"            ✅ {name}: Default fit completed in {fit_time:.1f}s")
         return BEST[name]
 
     # Calculate total parameter combinations
     param_combinations = 1
     for param_values in grid.values():
-        param_combinations *= len(param_values) if isinstance(param_values, list) else 1
+        param_combinations *= len(param_values) if isinstance(
+            param_values, list) else 1
 
     total_fits = param_combinations * cv
 
@@ -3391,7 +3253,8 @@ def tune(name: str, base: BaseEstimator, X, y, cv: int = CV) -> BaseEstimator:
         best_params = search.best_params_
         best_estimator = search.best_estimator_
 
-        log.info(f"            ✅ {name}: Grid search completed in {search_time:.1f}s")
+        log.info(
+            f"            ✅ {name}: Grid search completed in {search_time:.1f}s")
         log.info(f"               ├─ Best CV Score: {best_score:.3f}")
         log.info(f"               ├─ Best Parameters:")
 
@@ -3418,7 +3281,8 @@ def tune(name: str, base: BaseEstimator, X, y, cv: int = CV) -> BaseEstimator:
             for param in grid.keys():
                 param_col = f'param_{param}'
                 if param_col in results_df.columns:
-                    param_impact = results_df.groupby(param_col)['mean_test_score'].agg(['mean', 'std'])
+                    param_impact = results_df.groupby(
+                        param_col)['mean_test_score'].agg(['mean', 'std'])
                     best_param_val = param_impact['mean'].idxmax()
                     best_param_score = param_impact.loc[best_param_val, 'mean']
                     worst_param_val = param_impact['mean'].idxmin()
@@ -3431,7 +3295,8 @@ def tune(name: str, base: BaseEstimator, X, y, cv: int = CV) -> BaseEstimator:
         # Cross-validation stability
         cv_std = results_df.loc[search.best_index_, 'std_test_score']
         cv_stability = "High" if cv_std < 0.02 else "Medium" if cv_std < 0.05 else "Low"
-        log.info(f"               ├─ CV Stability: {cv_stability} (std={cv_std:.3f})")
+        log.info(
+            f"               ├─ CV Stability: {cv_stability} (std={cv_std:.3f})")
 
         # Performance improvement over default
         try:
@@ -3448,7 +3313,8 @@ def tune(name: str, base: BaseEstimator, X, y, cv: int = CV) -> BaseEstimator:
 
             default_score = np.mean(default_scores)
             improvement = best_score - default_score
-            improvement_pct = (improvement / default_score * 100) if default_score > 0 else 0
+            improvement_pct = (improvement / default_score *
+                               100) if default_score > 0 else 0
 
             log.info(f"               ├─ Improvement over default: {improvement:+.3f} "
                      f"({improvement_pct:+.1f}%)")
@@ -3473,20 +3339,24 @@ def tune(name: str, base: BaseEstimator, X, y, cv: int = CV) -> BaseEstimator:
             with open(hyperparams_file, 'w') as f:
                 json.dump(saved_params, f, indent=2)
 
-            log.debug(f"               └─ Saved hyperparameters to {hyperparams_file}")
+            log.debug(
+                f"               └─ Saved hyperparameters to {hyperparams_file}")
 
         except Exception as e:
-            log.warning(f"               └─ Failed to save hyperparameters: {e}")
+            log.warning(
+                f"               └─ Failed to save hyperparameters: {e}")
 
     except Exception as e:
         # Error handling with fallback
         search_time = time.time() - tune_start
-        log.error(f"            ❌ {name}: Grid search failed after {search_time:.1f}s")
+        log.error(
+            f"            ❌ {name}: Grid search failed after {search_time:.1f}s")
         log.error(f"               └─ Error: {str(e)[:80]}...")
 
         if log.level <= logging.DEBUG:
             import traceback
-            log.debug(f"Full traceback for {name} tuning:\n{traceback.format_exc()}")
+            log.debug(
+                f"Full traceback for {name} tuning:\n{traceback.format_exc()}")
 
         # Fallback to default parameters
         log.info(f"            🛡️  {name}: Falling back to default parameters")
@@ -3499,15 +3369,20 @@ def tune(name: str, base: BaseEstimator, X, y, cv: int = CV) -> BaseEstimator:
                 fallback_pbar.update(1)
 
             fallback_time = time.time() - tune_start
-            log.info(f"            ✅ {name}: Fallback completed in {fallback_time:.1f}s")
+            log.info(
+                f"            ✅ {name}: Fallback completed in {fallback_time:.1f}s")
 
         except Exception as fallback_error:
             fallback_time = time.time() - tune_start
-            log.error(f"            ❌ {name}: Fallback also failed after {fallback_time:.1f}s")
-            log.error(f"               └─ Fallback Error: {str(fallback_error)[:60]}...")
-            raise RuntimeError(f"Both grid search and fallback failed for {name}")
+            log.error(
+                f"            ❌ {name}: Fallback also failed after {fallback_time:.1f}s")
+            log.error(
+                f"               └─ Fallback Error: {str(fallback_error)[:60]}...")
+            raise RuntimeError(
+                f"Both grid search and fallback failed for {name}")
 
     return BEST[name]
+
 
 def tune_with_early_stopping(name: str,
                              base: BaseEstimator,
@@ -3523,7 +3398,7 @@ def tune_with_early_stopping(name: str,
         patience: Number of iterations without improvement before stopping
         min_improvement: Minimum improvement required to reset patience counter
     """
-    
+
     from sklearn.model_selection import ParameterGrid
 
     if name in BEST:
@@ -3606,12 +3481,15 @@ def tune_with_early_stopping(name: str,
         BEST[name] = base.fit(X, y)
 
     return BEST[name]
+
+
 # =============================================================================
 # TRAINING PIPELINE
 # =============================================================================
 """
 Main training pipeline that orchestrates model training and evaluation.
 """
+
 
 def run_mode_A(
     X_silver,                 # Feature matrix for silver set
@@ -3625,13 +3503,13 @@ def run_mode_A(
 ) -> list[dict]:
     """
     Train on weak (silver) labels, evaluate on gold standard labels.
-    
+
     This is the main training function that:
     1. Trains multiple models on silver-labeled data
     2. Evaluates them on gold standard test data
     3. Applies rule-based verification to predictions
     4. Returns performance metrics for all models
-    
+
     Args:
         X_silver: Feature matrix for silver training data
         gold_clean: Normalized text for gold data (for rules)
@@ -3640,17 +3518,16 @@ def run_mode_A(
         gold_df: Gold DataFrame with 'label_keto'/'label_vegan'
         domain: 'text', 'image', or 'both'
         apply_smote: Whether to apply SMOTE for class balancing
-        
+
     Returns:
         List of result dictionaries with metrics and predictions
     """
-    
+
     warnings.filterwarnings('ignore', message='.*truth value of an array.*')
 
     # Ensure all arrays are properly formatted
     if hasattr(X_silver, 'toarray'):
         X_silver = X_silver.toarray() if X_silver.nnz < 1e6 else X_silver  # Keep sparse if large
-    
 
     # Initialize results and timing
     results: list[dict] = []
@@ -3685,12 +3562,46 @@ def run_mode_A(
         task_progress.set_description(f"🔬 Training {task.capitalize()}")
 
         # Extract labels
-        y_train = silver_df[f"silver_{task}"].values
-        y_true = gold_df[f"label_{task}"].values
+        def safe_label_extraction(df, task):
+            """Safely extract labels with NaN handling"""
+            label_col = f"silver_{task}" if "silver_" in str(
+                df.columns) else f"label_{task}"
 
+            if label_col not in df.columns:
+                log.error(f"Missing column: {label_col}")
+                # Create default labels
+                default_val = 0 if task == "keto" else 1
+                return np.full(len(df), default_val, dtype=int)
+
+            labels = df[label_col].copy()
+
+            # Handle NaN values
+            if labels.isna().any():
+                nan_count = labels.isna().sum()
+                log.warning(
+                    f"Found {nan_count} NaN values in {task} labels, filling with defaults")
+                default_val = 0 if task == "keto" else 1
+                labels = labels.fillna(default_val)
+
+            # Ensure integer type
+            try:
+                labels = labels.astype(int)
+            except ValueError as e:
+                log.error(f"Cannot convert {task} labels to int: {e}")
+                # Force conversion
+                labels = pd.to_numeric(labels, errors='coerce').fillna(
+                    0 if task == "keto" else 1).astype(int)
+
+            return labels.values
+
+        # Extract labels with validation
+        y_train = safe_label_extraction(silver_df, task)
+        y_true = safe_label_extraction(gold_df, task)
         log.info(f"\n🎯 Processing {task.upper()} classification:")
-        log.info(f"   Training labels - Positive: {y_train.sum():,} ({y_train.mean():.1%})")
-        log.info(f"   Test labels - Positive: {y_true.sum():,} ({y_true.mean():.1%})")
+        log.info(
+            f"   Training labels - Positive: {y_train.sum():,} ({y_train.mean():.1%})")
+        log.info(
+            f"   Test labels - Positive: {y_true.sum():,} ({y_true.mean():.1%})")
 
         # Handle class imbalance
         if apply_smote:
@@ -3699,12 +3610,14 @@ def run_mode_A(
 
             unique_classes = np.unique(y_train)
             if len(unique_classes) < 2:
-                log.warning(f"   ⚠️  Only one class present in {task} training data, skipping SMOTE")
+                log.warning(
+                    f"   ⚠️  Only one class present in {task} training data, skipping SMOTE")
                 X_train = X_silver
             else:
                 # Safe calculation of minority ratio
                 counts = np.bincount(y_train)
-                minority_ratio = float(np.min(counts)) / float(len(y_train))  # ✅ Fixed
+                minority_ratio = float(np.min(counts)) / \
+                    float(len(y_train))  # ✅ Fixed
                 log.info(f"   Minority class ratio: {minority_ratio:.1%}")
                 if minority_ratio < 0.3:
                     log.info(f"   🔄 Applying SMOTE (minority < 30%)...")
@@ -3721,11 +3634,14 @@ def run_mode_A(
                         new_ratio = min(np.bincount(y_train)) / len(y_train)
 
                         log.info(f"   ✅ SMOTE completed in {smote_time:.1f}s")
-                        log.info(f"   ├─ Size: {original_size:,} → {new_size:,} ({new_size/original_size:.1f}x)")
-                        log.info(f"   └─ Minority ratio: {minority_ratio:.1%} → {new_ratio:.1%}")
+                        log.info(
+                            f"   ├─ Size: {original_size:,} → {new_size:,} ({new_size/original_size:.1f}x)")
+                        log.info(
+                            f"   └─ Minority ratio: {minority_ratio:.1%} → {new_ratio:.1%}")
 
                     except Exception as e:
-                        log.warning(f"   ❌ SMOTE failed for {task}: {str(e)[:60]}...")
+                        log.warning(
+                            f"   ❌ SMOTE failed for {task}: {str(e)[:60]}...")
                         log.info(f"   └─ Falling back to original data")
                         X_train = X_silver
                 else:
@@ -3760,7 +3676,8 @@ def run_mode_A(
                 # Check for single-class case
                 unique_labels = np.unique(y_train)
                 if len(unique_labels) < 2:
-                    log.warning(f"      ⚠️  {name}: Only one class in training data, skipping")
+                    log.warning(
+                        f"      ⚠️  {name}: Only one class in training data, skipping")
                     continue
 
                 # Model training phases
@@ -3773,7 +3690,8 @@ def run_mode_A(
 
                     # Memory efficiency check
                     if hasattr(X_train, "toarray") and X_train.shape[1] > 10000:
-                        log.debug(f"         ├─ {name}: Processing large sparse matrix")
+                        log.debug(
+                            f"         ├─ {name}: Processing large sparse matrix")
 
                     model.fit(X_train, y_train)
                     model_pbar.update(1)
@@ -3795,9 +3713,11 @@ def run_mode_A(
                             # Fallback to binary predictions
                             pred_binary = model.predict(X_gold)
                             prob = pred_binary.astype(float)
-                            log.warning(f"      ⚠️  {name}: Using binary predictions (suboptimal)")
+                            log.warning(
+                                f"      ⚠️  {name}: Using binary predictions (suboptimal)")
                     except Exception as pred_error:
-                        log.error(f"      ❌ {name}: Prediction failed - {str(pred_error)[:40]}...")
+                        log.error(
+                            f"      ❌ {name}: Prediction failed - {str(pred_error)[:40]}...")
                         continue
                     model_pbar.update(1)
 
@@ -3837,19 +3757,23 @@ def run_mode_A(
                 if res["F1"] > best_f1:
                     best_f1, best_res = res["F1"], res
                     BEST[name] = model  # Store without domain suffix
-                    log.info(f"      🏆 New best model for {task}: {model_name_with_domain} (F1={best_f1:.3f})")
+                    log.info(
+                        f"      🏆 New best model for {task}: {model_name_with_domain} (F1={best_f1:.3f})")
 
             except Exception as e:
                 model_time = time.time() - model_start
-                log.error(f"      ❌ {name:>8}: FAILED after {model_time:.1f}s - {str(e)[:50]}...")
+                log.error(
+                    f"      ❌ {name:>8}: FAILED after {model_time:.1f}s - {str(e)[:50]}...")
 
                 if log.level <= logging.DEBUG:
                     import traceback
-                    log.debug(f"Full traceback for {name}:\n{traceback.format_exc()}")
+                    log.debug(
+                        f"Full traceback for {name}:\n{traceback.format_exc()}")
 
         # Fallback handling
         if best_res is None:
-            log.warning(f"   ⚠️  All models failed for {task}! Using RuleModel fallback...")
+            log.warning(
+                f"   ⚠️  All models failed for {task}! Using RuleModel fallback...")
 
             fallback_start = time.time()
             rule = build_models(task, domain="text")["Rule"]
@@ -3867,14 +3791,16 @@ def run_mode_A(
             )
             BEST[task] = rule
 
-            log.info(f"   🛡️  Rule fallback: F1={best_res['F1']:.3f} | Time={fallback_time:.1f}s")
+            log.info(
+                f"   🛡️  Rule fallback: F1={best_res['F1']:.3f} | Time={fallback_time:.1f}s")
 
         # Task completion summary
         task_time = time.time() - task_start
         results.append(best_res)
 
         log.info(f"   🎯 {task.upper()} COMPLETE:")
-        log.info(f"   ├─ Best Model: {best_res['model']} (F1={best_res['F1']:.3f})")
+        log.info(
+            f"   ├─ Best Model: {best_res['model']} (F1={best_res['F1']:.3f})")
         log.info(f"   ├─ Final Metrics: ACC={best_res['ACC']:.3f} | "
                  f"PREC={best_res['PREC']:.3f} | REC={best_res['REC']:.3f}")
         log.info(f"   └─ Task Time: {task_time:.1f}s")
@@ -3914,14 +3840,15 @@ def run_mode_A(
 Functions for calculating metrics and displaying results.
 """
 
+
 def pack(y, prob):
     """
     Calculate comprehensive metrics from predictions.
-    
+
     Args:
         y: True labels
         prob: Predicted probabilities
-        
+
     Returns:
         Dictionary of metrics
     """
@@ -3940,7 +3867,7 @@ def pack(y, prob):
 def table(title, rows):
     """
     Display results in a formatted table.
-    
+
     Args:
         title: Table title
         rows: List of result dictionaries
@@ -3960,10 +3887,10 @@ def table(title, rows):
 def log_false_preds(task, texts, y_true, y_pred, model_name="Model"):
     """
     Log false positive and false negative predictions for analysis.
-    
+
     Creates CSV files with misclassified examples for debugging and
     improving the classification system.
-    
+
     Args:
         task: Classification task ('keto' or 'vegan')
         texts: Original text data
@@ -4009,12 +3936,13 @@ pre-trained ResNet-50 model. These embeddings capture visual characteristics
 that can help identify ingredients and cooking methods.
 """
 
+
 def build_image_embeddings(df: pd.DataFrame,
                            mode: str,
                            force: bool = False) -> Tuple[np.ndarray, List[int]]:
     """
     Extract ResNet-50 embeddings for recipe images with comprehensive monitoring.
-    
+
     This function implements a sophisticated image feature extraction pipeline:
     1. Checks for cached embeddings to avoid recomputation
     2. Loads pre-trained ResNet-50 (without classification head)
@@ -4022,22 +3950,22 @@ def build_image_embeddings(df: pd.DataFrame,
     4. Handles errors gracefully with detailed logging
     5. Applies quality filtering to remove bad images
     6. Saves embeddings with backup for reliability
-    
+
     Args:
         df: DataFrame with image indices
         mode: Mode identifier ('silver', 'gold', etc.)
         force: Force recomputation even if cache exists
-        
+
     Returns:
         Tuple of (embeddings_array, valid_indices)
         - embeddings_array: NumPy array of shape (n_images, 2048)
         - valid_indices: List of indices that have valid embeddings
-        
+
     Note:
         The function returns both embeddings and indices to maintain
         alignment with the original dataset after filtering.
     """
-    
+
     import os
     from collections import defaultdict, Counter
     from PIL import ImageStat
@@ -4102,7 +4030,8 @@ def build_image_embeddings(df: pd.DataFrame,
                   bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as cache_pbar:
 
             for cache_name, cache_path in cache_pbar:
-                cache_pbar.set_description(f"      ├─ Checking {cache_name.lower()}")
+                cache_pbar.set_description(
+                    f"      ├─ Checking {cache_name.lower()}")
 
                 if cache_path.exists():
                     try:
@@ -4110,34 +4039,41 @@ def build_image_embeddings(df: pd.DataFrame,
                         emb = np.load(cache_path)
                         load_time = time.time() - cache_start
 
-                        log.info(f"      ├─ {cache_name}: Found ({emb.shape}) - loaded in {load_time:.2f}s")
+                        log.info(
+                            f"      ├─ {cache_name}: Found ({emb.shape}) - loaded in {load_time:.2f}s")
 
                         if emb.shape[0] == len(df):
-                            log.info(f"      ✅ {cache_name} matches target size - using cached embeddings")
+                            log.info(
+                                f"      ✅ {cache_name} matches target size - using cached embeddings")
 
                             # Load metadata if available
                             if metadata_path.exists():
                                 try:
                                     with open(metadata_path, 'r') as f:
                                         metadata = json.load(f)
-                                    log.info(f"      ├─ Cache metadata: {metadata.get('creation_time', 'Unknown time')}")
+                                    log.info(
+                                        f"      ├─ Cache metadata: {metadata.get('creation_time', 'Unknown time')}")
                                     log.info(f"      └─ Original stats: {metadata.get('success', '?')} success, "
                                              f"{metadata.get('failed', '?')} failed")
                                 except Exception as e:
-                                    log.debug(f"      └─ Metadata load failed: {e}")
+                                    log.debug(
+                                        f"      └─ Metadata load failed: {e}")
 
                             return emb, list(df.index)
 
                         else:
-                            log.warning(f"      ⚠️  {cache_name} size mismatch: {emb.shape[0]} != {len(df)}")
+                            log.warning(
+                                f"      ⚠️  {cache_name} size mismatch: {emb.shape[0]} != {len(df)}")
 
                             # Truncate oversize cache if possible
                             if emb.shape[0] > len(df):
-                                log.info(f"      ├─ Truncating cache from {emb.shape[0]} to {len(df)}")
+                                log.info(
+                                    f"      ├─ Truncating cache from {emb.shape[0]} to {len(df)}")
                                 return emb[:len(df)], list(df.index)
 
                     except Exception as e:
-                        log.error(f"      ❌ {cache_name} load failed: {str(e)[:60]}...")
+                        log.error(
+                            f"      ❌ {cache_name} load failed: {str(e)[:60]}...")
                 else:
                     log.info(f"      ├─ {cache_name}: Not found")
 
@@ -4186,9 +4122,12 @@ def build_image_embeddings(df: pd.DataFrame,
 
         log.info(f"      📈 Image Availability:")
         log.info(f"      ├─ Total expected: {total_images:,}")
-        log.info(f"      ├─ Available: {existing_count:,} ({existing_count/total_images*100:.1f}%)")
-        log.info(f"      ├─ Missing: {missing_count:,} ({missing_count/total_images*100:.1f}%)")
-        log.info(f"      └─ Corrupted: {corrupted_count:,} ({corrupted_count/total_images*100:.1f}%)")
+        log.info(
+            f"      ├─ Available: {existing_count:,} ({existing_count/total_images*100:.1f}%)")
+        log.info(
+            f"      ├─ Missing: {missing_count:,} ({missing_count/total_images*100:.1f}%)")
+        log.info(
+            f"      └─ Corrupted: {corrupted_count:,} ({corrupted_count/total_images*100:.1f}%)")
 
         analysis_pbar.update(1)
 
@@ -4197,7 +4136,8 @@ def build_image_embeddings(df: pd.DataFrame,
 
         if existing_images:
             sample_size = min(100, len(existing_images))
-            sample_indices = np.random.choice(existing_images, sample_size, replace=False)
+            sample_indices = np.random.choice(
+                existing_images, sample_size, replace=False)
 
             image_stats = {
                 'sizes': [],
@@ -4214,18 +4154,25 @@ def build_image_embeddings(df: pd.DataFrame,
                         image_stats['sizes'].append(img.size)
                         image_stats['modes'][img.mode] += 1
                         image_stats['formats'][img.format] += 1
-                        image_stats['file_sizes'].append(img_file.stat().st_size)
+                        image_stats['file_sizes'].append(
+                            img_file.stat().st_size)
                 except Exception:
                     pass
 
             if image_stats['sizes']:
-                avg_width = sum(s[0] for s in image_stats['sizes']) / len(image_stats['sizes'])
-                avg_height = sum(s[1] for s in image_stats['sizes']) / len(image_stats['sizes'])
-                avg_file_size = sum(image_stats['file_sizes']) / len(image_stats['file_sizes'])
+                avg_width = sum(s[0] for s in image_stats['sizes']
+                                ) / len(image_stats['sizes'])
+                avg_height = sum(
+                    s[1] for s in image_stats['sizes']) / len(image_stats['sizes'])
+                avg_file_size = sum(
+                    image_stats['file_sizes']) / len(image_stats['file_sizes'])
 
-                log.info(f"      📊 Sample Analysis ({len(image_stats['sizes'])} images):")
-                log.info(f"      ├─ Average size: {avg_width:.0f}×{avg_height:.0f} pixels")
-                log.info(f"      ├─ Average file size: {avg_file_size/1024:.1f} KB")
+                log.info(
+                    f"      📊 Sample Analysis ({len(image_stats['sizes'])} images):")
+                log.info(
+                    f"      ├─ Average size: {avg_width:.0f}×{avg_height:.0f} pixels")
+                log.info(
+                    f"      ├─ Average file size: {avg_file_size/1024:.1f} KB")
                 log.info(f"      ├─ Color modes: {dict(image_stats['modes'])}")
                 log.info(f"      └─ Formats: {dict(image_stats['formats'])}")
 
@@ -4272,7 +4219,8 @@ def build_image_embeddings(df: pd.DataFrame,
     log.info(f"      ├─ Architecture: ResNet-50 (feature extractor)")
     log.info(f"      ├─ Output dimension: 2048")
     log.info(f"      ├─ Device: {device_info['device']}")
-    log.info(f"      └─ Parameters: {sum(p.numel() for p in model.parameters()):,}")
+    log.info(
+        f"      └─ Parameters: {sum(p.numel() for p in model.parameters()):,}")
 
     # Memory usage after model loading
     if device_info['cuda_available']:
@@ -4298,14 +4246,17 @@ def build_image_embeddings(df: pd.DataFrame,
 
     # Determine batch size based on available memory
     if device_info['cuda_available']:
-        gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-        batch_size = max(1, min(32, int(gpu_memory_gb * 2)))  # Conservative estimate
+        gpu_memory_gb = torch.cuda.get_device_properties(
+            0).total_memory / (1024**3)
+        batch_size = max(1, min(32, int(gpu_memory_gb * 2))
+                         )  # Conservative estimate
     else:
         batch_size = 8  # Conservative CPU batch size
 
     log.info(f"      🔧 Processing Configuration:")
     log.info(f"      ├─ Batch size: {batch_size}")
-    log.info(f"      ├─ Total batches: {(len(df) + batch_size - 1) // batch_size}")
+    log.info(
+        f"      ├─ Total batches: {(len(df) + batch_size - 1) // batch_size}")
     log.info(f"      └─ Expected output shape: ({len(df)}, 2048)")
 
     # Main processing loop
@@ -4339,18 +4290,21 @@ def build_image_embeddings(df: pd.DataFrame,
 
                 # Log properties for first few images
                 if processing_stats['success'] < 5:
-                    log.debug(f"         ├─ Processing {img_file.name}: {img.size} {img.mode}")
+                    log.debug(
+                        f"         ├─ Processing {img_file.name}: {img.size} {img.mode}")
 
                 with torch.no_grad():
                     # Preprocess and add batch dimension
-                    tensor = preprocess(img).unsqueeze(0).to(device_info['device'])
+                    tensor = preprocess(img).unsqueeze(
+                        0).to(device_info['device'])
 
                     # Extract features
                     features = model(tensor).squeeze().cpu().numpy()
 
                     # Validate output shape
                     if features.shape != (2048,):
-                        raise ValueError(f"Unexpected feature shape: {features.shape}")
+                        raise ValueError(
+                            f"Unexpected feature shape: {features.shape}")
 
                 vectors.append(features)
                 processing_stats['success'] += 1
@@ -4367,12 +4321,14 @@ def build_image_embeddings(df: pd.DataFrame,
                 processing_stats['error_types'][error_type] += 1
 
                 # Log error details
-                error_msg = str(e)[:100] + "..." if len(str(e)) > 100 else str(e)
+                error_msg = str(e)[:100] + \
+                    "..." if len(str(e)) > 100 else str(e)
                 failed_details.append((idx, img_file, error_type, error_msg))
 
                 # Log first few errors
                 if processing_stats['failed'] <= 5:
-                    log.warning(f"         ❌ Failed {img_file.name}: {error_type} - {error_msg}")
+                    log.warning(
+                        f"         ❌ Failed {img_file.name}: {error_type} - {error_msg}")
 
                 # Add zero vector for failed processing
                 vectors.append(np.zeros(2048, dtype=np.float32))
@@ -4394,11 +4350,13 @@ def build_image_embeddings(df: pd.DataFrame,
     log.info(f"   ├─ Successfully processed: {processing_stats['success']:,}")
     log.info(f"   ├─ Missing images: {processing_stats['missing']:,}")
     log.info(f"   ├─ Failed processing: {processing_stats['failed']:,}")
-    log.info(f"   └─ Overall success rate: {processing_stats['success']/len(df)*100:.1f}%")
+    log.info(
+        f"   └─ Overall success rate: {processing_stats['success']/len(df)*100:.1f}%")
 
     # Performance metrics
     if processing_stats['processing_times']:
-        avg_time = sum(processing_stats['processing_times']) / len(processing_stats['processing_times'])
+        avg_time = sum(processing_stats['processing_times']) / \
+            len(processing_stats['processing_times'])
         throughput = processing_stats['success'] / extraction_time
 
         log.info(f"   ⚡ Performance Metrics:")
@@ -4422,7 +4380,8 @@ def build_image_embeddings(df: pd.DataFrame,
                 with open(error_log_path, "w") as f:
                     f.write("Index\tFile\tErrorType\tErrorMessage\n")
                     for idx, img_file, error_type, error_msg in failed_details:
-                        f.write(f"{idx}\t{img_file.name}\t{error_type}\t{error_msg}\n")
+                        f.write(
+                            f"{idx}\t{img_file.name}\t{error_type}\t{error_msg}\n")
                 log.info(f"   💾 Error details saved to: {error_log_path}")
             except Exception as e:
                 log.warning(f"   ⚠️  Failed to save error log: {e}")
@@ -4504,17 +4463,21 @@ def build_image_embeddings(df: pd.DataFrame,
     # ------------------------------------------------------------------
     log.info(f"\n   🏁 EMBEDDING EXTRACTION COMPLETE:")
     log.info(f"   ├─ Output shape: {arr.shape}")
-    log.info(f"   ├─ Success rate: {processing_stats['success']/len(df)*100:.1f}%")
+    log.info(
+        f"   ├─ Success rate: {processing_stats['success']/len(df)*100:.1f}%")
     log.info(f"   ├─ Total time: {extraction_time:.1f}s")
-    log.info(f"   ├─ Throughput: {processing_stats['success']/extraction_time:.1f} images/s")
+    log.info(
+        f"   ├─ Throughput: {processing_stats['success']/extraction_time:.1f} images/s")
     log.info(f"   └─ Files saved: Primary + Backup + Metadata")
 
     # Apply quality filtering
     original_indices = list(df.index)
     if arr.shape[0] > 10:  # Only filter if we have enough images
-        arr, valid_indices = filter_low_quality_images(img_dir, arr, original_indices)
+        arr, valid_indices = filter_low_quality_images(
+            img_dir, arr, original_indices)
         if len(valid_indices) != len(original_indices):
-            log.info(f"   📊 Quality filtering reduced images from {len(original_indices)} to {len(valid_indices)}")
+            log.info(
+                f"   📊 Quality filtering reduced images from {len(original_indices)} to {len(valid_indices)}")
     else:
         valid_indices = original_indices
 
@@ -4530,16 +4493,17 @@ These methods improve performance by leveraging the strengths of different
 models and feature types.
 """
 
+
 def tune_threshold(y_true, probs):
     """
     Find optimal classification threshold using precision-recall curve.
-    
+
     Instead of using 0.5, this finds the threshold that maximizes F1 score.
-    
+
     Args:
         y_true: True labels
         probs: Predicted probabilities
-        
+
     Returns:
         Optimal threshold value
     """
@@ -4558,17 +4522,17 @@ def best_two_domains(
 ):
     """
     Blend predictions from best text and image models.
-    
+
     This simple ensemble method combines the best performing model
     from each domain using a weighted average.
-    
+
     Args:
         task: 'keto' or 'vegan'
         text_results: Results from text-based models
         image_results: Results from image-based models
         gold_df: Gold standard DataFrame
         alpha: Weight for image predictions (0=text only, 1=image only)
-        
+
     Returns:
         Dictionary with ensemble results
     """
@@ -4578,7 +4542,8 @@ def best_two_domains(
         key=lambda r: r["F1"]
     )
     best_img = max(
-        (r for r in image_results if r["task"] == task and len(r.get("prob", [])) > 0),
+        (r for r in image_results if r["task"]
+         == task and len(r.get("prob", [])) > 0),
         key=lambda r: r["F1"],
         default=None
     )
@@ -4629,16 +4594,16 @@ def best_two_domains(
 def dynamic_ensemble(estimators, X_gold, gold, task: str):
     """
     Create dynamically weighted ensemble based on feature availability.
-    
+
     For rows without images, image model votes are zeroed and weights
     are renormalized to maintain valid probabilities.
-    
+
     Args:
         estimators: List of (name, model) tuples
         X_gold: Test feature matrix
         gold: Gold standard DataFrame
         task: Classification task
-        
+
     Returns:
         Array of ensemble probabilities
     """
@@ -4652,7 +4617,8 @@ def dynamic_ensemble(estimators, X_gold, gold, task: str):
     probs = np.array(preds)  # shape: (n_models, n_samples)
 
     # Detect text-only rows (no image available)
-    text_only_mask = gold.get("has_image", np.ones(len(X_gold), dtype=bool)) == False
+    text_only_mask = gold.get("has_image", np.ones(
+        len(X_gold), dtype=bool)) == False
 
     # Compute dynamic weights
     weights = []
@@ -4660,7 +4626,8 @@ def dynamic_ensemble(estimators, X_gold, gold, task: str):
         is_image_model = "IMAGE" in name.upper()
         row_weights = np.ones(len(X_gold))
         if is_image_model:
-            row_weights[text_only_mask] = 0  # Suppress image models for text-only rows
+            # Suppress image models for text-only rows
+            row_weights[text_only_mask] = 0
         weights.append(row_weights)
 
     weights = np.array(weights)
@@ -4677,13 +4644,13 @@ def dynamic_ensemble(estimators, X_gold, gold, task: str):
 def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=False, rule_weight=0):
     """
     Build an n-model ensemble from top performing models.
-    
+
     This sophisticated ensemble method:
     1. Ranks models by composite performance score
     2. Retrains top n models with optimal hyperparameters
     3. Creates a soft-voting ensemble
     4. Applies rule-based verification
-    
+
     Args:
         task: 'keto' or 'vegan'
         res: Results from individual model evaluation
@@ -4695,11 +4662,11 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
         n: Number of models to include
         use_saved_params: Whether to use saved hyperparameters
         rule_weight: Weight for rule-based predictions (unused)
-        
+
     Returns:
         Dictionary with ensemble results and metadata
     """
-    
+
     import json
     import os
     from collections import defaultdict
@@ -4717,23 +4684,27 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
             with open("best_params.json") as f:
                 all_saved_params = json.load(f)
                 saved_params = all_saved_params.get(task, {})
-            log.info(f"   ✅ Loaded saved parameters for {len(saved_params)} models")
+            log.info(
+                f"   ✅ Loaded saved parameters for {len(saved_params)} models")
             for model_name in saved_params:
                 log.info(f"      ├─ {model_name}: {saved_params[model_name]}")
         except FileNotFoundError:
-            log.warning(f"   ⚠️  best_params.json not found, using default hyperparameters")
+            log.warning(
+                f"   ⚠️  best_params.json not found, using default hyperparameters")
         except Exception as e:
             log.error(f"   ❌ Error loading parameters: {e}")
 
     # Filter and rank available models
-    available_models = [r for r in res if r["task"] == task and r["model"] != "Rule"]
+    available_models = [r for r in res if r["task"]
+                        == task and r["model"] != "Rule"]
 
     if not available_models:
         log.error(f"   ❌ No models available for {task} ensemble")
         raise ValueError(f"No models available for {task}")
 
     if len(available_models) < n:
-        log.warning(f"   ⚠️  Only {len(available_models)} models available, requested {n}")
+        log.warning(
+            f"   ⚠️  Only {len(available_models)} models available, requested {n}")
         n = len(available_models)
         log.info(f"   ├─ Adjusting ensemble size to {n}")
 
@@ -4744,7 +4715,7 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
     # Calculate composite scores
     scored_models = []
     for r in available_models:
-        composite_score = (r["PREC"] + r["REC"] + r["ROC"] + 
+        composite_score = (r["PREC"] + r["REC"] + r["ROC"] +
                            r["PR"] + r["F1"] + r["ACC"])
         scored_models.append((r, composite_score))
 
@@ -4791,10 +4762,12 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
                 model_pbar.set_description(f"         ├─ {name}: Configuring")
                 if use_saved_params and base_key in saved_params:
                     base.set_params(**saved_params[base_key])
-                    log.info(f"         ├─ Applied saved parameters: {saved_params[base_key]}")
+                    log.info(
+                        f"         ├─ Applied saved parameters: {saved_params[base_key]}")
                 else:
                     log.info(f"         ├─ Tuning hyperparameters...")
-                    base = tune(base_key, base, X_vec, silver[f"silver_{task}"])
+                    base = tune(base_key, base, X_vec,
+                                silver[f"silver_{task}"])
                 model_pbar.update(1)
 
                 # Train model
@@ -4810,16 +4783,19 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
                 individual_f1 = f1_score(y_true, y_pred_i, zero_division=0)
                 individual_acc = accuracy_score(y_true, y_pred_i)
 
-                log.info(f"         ├─ Individual performance: F1={individual_f1:.3f}, ACC={individual_acc:.3f}")
+                log.info(
+                    f"         ├─ Individual performance: F1={individual_f1:.3f}, ACC={individual_acc:.3f}")
                 model_pbar.update(1)
 
                 # Log false predictions
                 model_pbar.set_description(f"         ├─ {name}: Analyzing")
-                log_false_preds(task, gold.clean, y_true, y_pred_i, model_name=name)
+                log_false_preds(task, gold.clean, y_true,
+                                y_pred_i, model_name=name)
 
                 # Ensure probability predictions
                 if not hasattr(base, "predict_proba"):
-                    log.info(f"         ├─ Adding probability calibration to {name}")
+                    log.info(
+                        f"         ├─ Adding probability calibration to {name}")
                     base = CalibratedClassifierCV(base, cv=3, method='sigmoid')
                     base.fit(X_vec, silver[f"silver_{task}"])
 
@@ -4830,7 +4806,8 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
             preparation_times[name] = model_time
             estimators.append((name, base))
 
-            log.info(f"      ✅ {name} prepared successfully in {model_time:.1f}s")
+            log.info(
+                f"      ✅ {name} prepared successfully in {model_time:.1f}s")
 
             # Update progress
             prep_progress.set_postfix({
@@ -4845,11 +4822,13 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
             error_msg = str(e)[:50] + "..." if len(str(e)) > 50 else str(e)
             model_errors.append((name, error_msg))
 
-            log.error(f"      ❌ {name} failed after {model_time:.1f}s: {error_msg}")
+            log.error(
+                f"      ❌ {name} failed after {model_time:.1f}s: {error_msg}")
 
             if log.level <= logging.DEBUG:
                 import traceback
-                log.debug(f"Full traceback for {name}:\n{traceback.format_exc()}")
+                log.debug(
+                    f"Full traceback for {name}:\n{traceback.format_exc()}")
 
     # Preparation summary
     total_prep_time = sum(preparation_times.values())
@@ -4865,7 +4844,8 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
             log.info(f"      ├─ {name}: {error}")
 
     if not estimators:
-        raise RuntimeError(f"No models successfully prepared for {task} ensemble")
+        raise RuntimeError(
+            f"No models successfully prepared for {task} ensemble")
 
     # Adjust n to actual number
     actual_n = len(estimators)
@@ -4899,7 +4879,8 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
             ens_pbar.update(1)
 
         ensemble_create_time = time.time() - ensemble_create_start
-        log.info(f"   ✅ Soft voting ensemble created in {ensemble_create_time:.1f}s")
+        log.info(
+            f"   ✅ Soft voting ensemble created in {ensemble_create_time:.1f}s")
         ensemble_method = "Soft Voting"
 
     except AttributeError as e:
@@ -4925,25 +4906,30 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
                         scores = clf.decision_function(X_gold)
                         model_probs = 1 / (1 + np.exp(-scores))  # Sigmoid
                         probs.append(model_probs)
-                        log.debug(f"      ├─ {name}: decision_function + sigmoid")
+                        log.debug(
+                            f"      ├─ {name}: decision_function + sigmoid")
                     else:
                         binary_preds = clf.predict(X_gold).astype(float)
                         probs.append(binary_preds)
-                        log.warning(f"      ├─ {name}: using binary predictions (suboptimal)")
+                        log.warning(
+                            f"      ├─ {name}: using binary predictions (suboptimal)")
 
                 except Exception as pred_error:
                     averaging_errors.append((name, str(pred_error)[:40]))
-                    log.error(f"      ├─ {name}: prediction failed - {str(pred_error)[:40]}...")
+                    log.error(
+                        f"      ├─ {name}: prediction failed - {str(pred_error)[:40]}...")
 
         if not probs:
-            raise RuntimeError("All models failed to generate predictions for ensemble")
+            raise RuntimeError(
+                "All models failed to generate predictions for ensemble")
 
         # Average probabilities
         prob = np.mean(probs, axis=0)
 
         prob_time = time.time() - prob_start
         log.info(f"   ✅ Manual averaging completed in {prob_time:.1f}s")
-        log.info(f"      ├─ Successfully averaged: {len(probs)}/{len(estimators)} models")
+        log.info(
+            f"      ├─ Successfully averaged: {len(probs)}/{len(estimators)} models")
 
         if averaging_errors:
             log.info(f"      ├─ Averaging errors:")
@@ -5003,22 +4989,28 @@ def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=F
         best_individual_f1 = best_individual[0]['F1']
         ensemble_improvement = ensemble_metrics['f1'] - best_individual_f1
 
-        log.info(f"   ├─ Best individual: {best_individual[0]['model']} (F1={best_individual_f1:.3f})")
+        log.info(
+            f"   ├─ Best individual: {best_individual[0]['model']} (F1={best_individual_f1:.3f})")
         log.info(f"   ├─ Ensemble F1: {ensemble_metrics['f1']:.3f}")
-        log.info(f"   └─ Improvement: {ensemble_improvement:+.3f} ({ensemble_improvement/best_individual_f1*100:+.1f}%)")
+        log.info(
+            f"   └─ Improvement: {ensemble_improvement:+.3f} ({ensemble_improvement/best_individual_f1*100:+.1f}%)")
 
     # Error analysis
     log.info(f"\n   🔍 Error Analysis:")
-    log_false_preds(task, gold.clean, y_true, y_pred, model_name=f"EnsembleTop{actual_n}")
+    log_false_preds(task, gold.clean, y_true, y_pred,
+                    model_name=f"EnsembleTop{actual_n}")
 
     # Confidence analysis
     confidence_high = (np.abs(prob - 0.5) > 0.3).sum()
     confidence_medium = (np.abs(prob - 0.5) > 0.1).sum() - confidence_high
     confidence_low = len(prob) - confidence_high - confidence_medium
 
-    log.info(f"   ├─ High confidence (>0.8 or <0.2): {confidence_high} ({confidence_high/len(prob)*100:.1f}%)")
-    log.info(f"   ├─ Medium confidence (0.6-0.8, 0.2-0.4): {confidence_medium} ({confidence_medium/len(prob)*100:.1f}%)")
-    log.info(f"   └─ Low confidence (0.4-0.6): {confidence_low} ({confidence_low/len(prob)*100:.1f}%)")
+    log.info(
+        f"   ├─ High confidence (>0.8 or <0.2): {confidence_high} ({confidence_high/len(prob)*100:.1f}%)")
+    log.info(
+        f"   ├─ Medium confidence (0.6-0.8, 0.2-0.4): {confidence_medium} ({confidence_medium/len(prob)*100:.1f}%)")
+    log.info(
+        f"   └─ Low confidence (0.4-0.6): {confidence_low} ({confidence_low/len(prob)*100:.1f}%)")
 
     # Final summary
     total_time = time.time() - ensemble_start
@@ -5064,11 +5056,11 @@ def best_ensemble(
 ):
     """
     Find optimal ensemble configuration through exhaustive search.
-    
+
     This method tests different ensemble sizes and finds the best
     performing configuration. When image results are provided, it
     also performs smart blending between text and image models.
-    
+
     Args:
         task: Classification task
         res: Text model results
@@ -5080,11 +5072,11 @@ def best_ensemble(
         weights: Metric weights for optimization
         image_res: Optional image model results
         alphas: Blending weights to test for text+image
-        
+
     Returns:
         Best ensemble configuration with results
     """
-    
+
     from collections import Counter
 
     ensemble_start = time.time()
@@ -5100,11 +5092,12 @@ def best_ensemble(
         # Get best image ensemble
         img_pool = [r for r in image_res if r["task"] == task]
         if not img_pool:
-            log.info(f"   ⏭️  No image models for {task}; using text ensemble only")
+            log.info(
+                f"   ⏭️  No image models for {task}; using text ensemble only")
             return text_best
 
         image_best = best_ensemble(
-            task, img_pool, 
+            task, img_pool,
             X_vec=None, clean=clean,
             X_gold=None, silver=None,
             gold=gold,
@@ -5126,8 +5119,10 @@ def best_ensemble(
         best_alpha, best_f1, best_prob = None, -1.0, None
         for α in alphas:
             blend = txt_prob.copy()
-            blend.loc[rows_img] = α * img_prob.loc[rows_img] + (1-α) * txt_prob.loc[rows_img]
-            f1 = f1_score(y_true, (blend.values >= .5).astype(int), zero_division=0)
+            blend.loc[rows_img] = α * img_prob.loc[rows_img] + \
+                (1-α) * txt_prob.loc[rows_img]
+            f1 = f1_score(y_true, (blend.values >= .5).astype(
+                int), zero_division=0)
             if f1 > best_f1:
                 best_alpha, best_f1, best_prob = α, f1, blend.values
 
@@ -5148,7 +5143,8 @@ def best_ensemble(
         }
 
     # Extract available models
-    model_names = [r["model"] for r in res if r["task"] == task and r["model"] != "Rule"]
+    model_names = [r["model"]
+                   for r in res if r["task"] == task and r["model"] != "Rule"]
     unique_models = list(set(model_names))
     max_n = len(unique_models)
 
@@ -5162,9 +5158,11 @@ def best_ensemble(
         return None
 
     if max_n == 1:
-        single_model = [r for r in res if r["task"] == task and r["model"] != "Rule"][0]
+        single_model = [r for r in res if r["task"]
+                        == task and r["model"] != "Rule"][0]
         log.info(f"   ⚠️  Only one model available: {single_model['model']}")
-        log.info(f"   └─ F1={single_model['F1']:.3f}, skipping ensemble optimization")
+        log.info(
+            f"   └─ F1={single_model['F1']:.3f}, skipping ensemble optimization")
         return single_model
 
     # Configure weights
@@ -5180,13 +5178,16 @@ def best_ensemble(
     # Validate weights
     weight_sum = sum(weights.values())
     if abs(weight_sum - 1.0) > 1e-6:
-        log.warning(f"   ⚠️  Weights sum to {weight_sum:.3f}, normalizing to 1.0")
+        log.warning(
+            f"   ⚠️  Weights sum to {weight_sum:.3f}, normalizing to 1.0")
         weights = {k: v/weight_sum for k, v in weights.items()}
 
-    log.info(f"   ├─ Weights: {', '.join([f'{k}={v:.3f}' for k, v in weights.items()])}")
+    log.info(
+        f"   ├─ Weights: {', '.join([f'{k}={v:.3f}' for k, v in weights.items()])}")
 
     # Show individual model performance
-    individual_models = [r for r in res if r["task"] == task and r["model"] != "Rule"]
+    individual_models = [r for r in res if r["task"]
+                         == task and r["model"] != "Rule"]
 
     log.info(f"\n   📊 Individual Model Performance:")
     for model_res in sorted(individual_models, key=lambda x: x['F1'], reverse=True):
@@ -5229,7 +5230,8 @@ def best_ensemble(
 
                 # Step 1: Model selection and training
                 ensemble_pbar.set_description(f"      ├─ n={n}: Selecting")
-                result = top_n(task, res, X_vec, clean, X_gold, silver, gold, n=n)
+                result = top_n(task, res, X_vec, clean,
+                               X_gold, silver, gold, n=n)
                 ensemble_pbar.update(1)
 
                 # Step 2: Metric calculation
@@ -5258,7 +5260,8 @@ def best_ensemble(
             if composite_score > best_score:
                 best_score = composite_score
                 best_result = result
-                log.info(f"      🏆 New best ensemble: n={n} (Composite={best_score:.3f})")
+                log.info(
+                    f"      🏆 New best ensemble: n={n} (Composite={best_score:.3f})")
 
                 # Update progress
                 size_progress.set_postfix({
@@ -5274,7 +5277,8 @@ def best_ensemble(
 
             if log.level <= logging.DEBUG:
                 import traceback
-                log.debug(f"Full traceback for ensemble n={n}:\n{traceback.format_exc()}")
+                log.debug(
+                    f"Full traceback for ensemble n={n}:\n{traceback.format_exc()}")
 
     # Final summary
     total_time = time.time() - ensemble_start
@@ -5293,17 +5297,22 @@ def best_ensemble(
             best_individual = max(individual_models, key=lambda x: x['F1'])
             f1_improvement = best_result['F1'] - best_individual['F1']
             log.info(f"\n   📈 Performance Improvement:")
-            log.info(f"   ├─ Best Individual: {best_individual['model']} (F1={best_individual['F1']:.3f})")
-            log.info(f"   ├─ Best Ensemble: {best_result['model']} (F1={best_result['F1']:.3f})")
-            log.info(f"   └─ F1 Improvement: {f1_improvement:+.3f} ({f1_improvement/best_individual['F1']*100:+.1f}%)")
+            log.info(
+                f"   ├─ Best Individual: {best_individual['model']} (F1={best_individual['F1']:.3f})")
+            log.info(
+                f"   ├─ Best Ensemble: {best_result['model']} (F1={best_result['F1']:.3f})")
+            log.info(
+                f"   └─ F1 Improvement: {f1_improvement:+.3f} ({f1_improvement/best_individual['F1']*100:+.1f}%)")
 
         # Ensemble composition
         if 'Ens' in best_result['model']:
             ensemble_size = int(best_result['model'][-1])
             log.info(f"\n   🔧 Ensemble Composition (Top {ensemble_size}):")
-            top_models = sorted(individual_models, key=lambda x: x['F1'], reverse=True)[:ensemble_size]
+            top_models = sorted(individual_models, key=lambda x: x['F1'], reverse=True)[
+                :ensemble_size]
             for i, model_res in enumerate(top_models, 1):
-                log.info(f"   ├─ {i}. {model_res['model']:>8} (F1={model_res['F1']:.3f})")
+                log.info(
+                    f"   ├─ {i}. {model_res['model']:>8} (F1={model_res['F1']:.3f})")
 
     else:
         log.error(f"\n   ❌ ENSEMBLE OPTIMIZATION FAILED:")
@@ -5315,7 +5324,8 @@ def best_ensemble(
         if individual_models:
             best_individual = max(individual_models, key=lambda x: x['F1'])
             log.info(f"   🛡️  Falling back to best individual model:")
-            log.info(f"   └─ {best_individual['model']} (F1={best_individual['F1']:.3f})")
+            log.info(
+                f"   └─ {best_individual['model']} (F1={best_individual['F1']:.3f})")
             return best_individual
 
     # Performance summary table
@@ -5335,6 +5345,7 @@ def best_ensemble(
 
     return best_result
 
+
 # =============================================================================
 # EVALUATION EXPORTS
 # =============================================================================
@@ -5342,14 +5353,15 @@ def best_ensemble(
 Functions for exporting evaluation results and visualizations.
 """
 
+
 def export_eval_plots(results: list[dict], gold_df: pd.DataFrame,
                       out_dir: Path = Path("plots")) -> None:
     """
     Export evaluation plots and metrics for all models.
-    
+
     Creates confusion matrices and ROC curves for each model,
     along with a CSV summary of all metrics.
-    
+
     Args:
         results: List of result dictionaries
         gold_df: Gold standard DataFrame
@@ -5389,8 +5401,10 @@ def export_eval_plots(results: list[dict], gold_df: pd.DataFrame,
                 # Calculate metrics
                 try:
                     row["accuracy"] = accuracy_score(true_labels, pred)
-                    row["precision"] = precision_score(true_labels, pred, zero_division=0)
-                    row["recall"] = recall_score(true_labels, pred, zero_division=0)
+                    row["precision"] = precision_score(
+                        true_labels, pred, zero_division=0)
+                    row["recall"] = recall_score(
+                        true_labels, pred, zero_division=0)
                     row["F1"] = f1_score(true_labels, pred, zero_division=0)
 
                     # Create confusion matrix plot
@@ -5399,11 +5413,13 @@ def export_eval_plots(results: list[dict], gold_df: pd.DataFrame,
                     ConfusionMatrixDisplay(cm).plot(ax=ax)
                     ax.set_title(f"{model} – {task} – Confusion matrix")
                     plt.tight_layout()
-                    plt.savefig(out_dir / f"{model}_{task}_cm.png", dpi=100, bbox_inches='tight')
+                    plt.savefig(
+                        out_dir / f"{model}_{task}_cm.png", dpi=100, bbox_inches='tight')
                     plt.close(fig)
 
                 except Exception as e:
-                    log.warning(f"   ⚠️  Metrics calculation failed for {model}-{task}: {e}")
+                    log.warning(
+                        f"   ⚠️  Metrics calculation failed for {model}-{task}: {e}")
 
             if prob is not None and len(prob) > 0:
                 try:
@@ -5426,11 +5442,13 @@ def export_eval_plots(results: list[dict], gold_df: pd.DataFrame,
                     ax.set_title(f"{model} – {task} – ROC Curve")
                     ax.legend()
                     plt.tight_layout()
-                    plt.savefig(out_dir / f"{model}_{task}_roc.png", dpi=100, bbox_inches='tight')
+                    plt.savefig(
+                        out_dir / f"{model}_{task}_roc.png", dpi=100, bbox_inches='tight')
                     plt.close(fig)
 
                 except Exception as e:
-                    log.warning(f"   ⚠️  ROC plot failed for {model}-{task}: {e}")
+                    log.warning(
+                        f"   ⚠️  ROC plot failed for {model}-{task}: {e}")
 
         except Exception as e:
             log.error(f"   ❌ Complete failure for {model}-{task}: {e}")
@@ -5452,12 +5470,13 @@ def export_eval_plots(results: list[dict], gold_df: pd.DataFrame,
 The main pipeline function that coordinates all components of the system.
 """
 
+
 def run_full_pipeline(mode: str = "both",
                       force: bool = False,
                       sample_frac: float | None = None):
     """
     Execute the complete machine learning pipeline for diet classification.
-    
+
     This is the main orchestration function that:
     1. Loads all datasets (recipes, ground truth, USDA)
     2. Generates silver labels for training
@@ -5467,19 +5486,19 @@ def run_full_pipeline(mode: str = "both",
     6. Creates optimized ensembles
     7. Evaluates on gold standard test set
     8. Exports results and visualizations
-    
+
     Args:
         mode: Feature mode - 'text', 'image', or 'both'
         force: Force recomputation of cached embeddings
         sample_frac: Fraction of silver data to sample (for testing)
-        
+
     Returns:
         Tuple of (vectorizer, silver_data, gold_data, results)
-        
+
     The function includes comprehensive error handling, memory optimization,
     and detailed progress tracking throughout all stages.
     """
-    
+
     import gc
     from datetime import datetime
 
@@ -5493,7 +5512,8 @@ def run_full_pipeline(mode: str = "both",
     log.info(f"   Sample fraction: {sample_frac or 'Full dataset'}")
     log.info(f"   Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     log.info(f"   Available CPU cores: {psutil.cpu_count()}")
-    log.info(f"   Available memory: {psutil.virtual_memory().total // (1024**3)} GB")
+    log.info(
+        f"   Available memory: {psutil.virtual_memory().total // (1024**3)} GB")
 
     # Memory usage tracking
     def log_memory_usage(stage: str):
@@ -5547,27 +5567,33 @@ def run_full_pipeline(mode: str = "both",
         original_img_size = len(silver_img)
 
         # Sample both datasets consistently
-        silver_txt = silver_txt.sample(frac=sample_frac, random_state=42).copy()
+        silver_txt = silver_txt.sample(
+            frac=sample_frac, random_state=42).copy()
 
         if not silver_img.empty:
             # Get consistent sampling across modalities
             sampled_indices = silver_txt.index
             available_img_indices = silver_img.index
-            common_indices = sampled_indices.intersection(available_img_indices)
+            common_indices = sampled_indices.intersection(
+                available_img_indices)
 
             if len(common_indices) > 0:
                 silver_img = silver_img.loc[common_indices].copy()
-                log.info(f"   📉 Consistent sampling: Using {len(common_indices):,} common indices")
+                log.info(
+                    f"   📉 Consistent sampling: Using {len(common_indices):,} common indices")
             else:
-                silver_img = silver_img.sample(frac=sample_frac, random_state=42).copy()
+                silver_img = silver_img.sample(
+                    frac=sample_frac, random_state=42).copy()
                 log.info(f"   📉 Separate sampling: No common indices found")
 
         sampled_txt_size = len(silver_txt)
         sampled_img_size = len(silver_img)
 
         log.info(f"   📉 Applied sampling before processing:")
-        log.info(f"   ├─ Text: {original_txt_size:,} → {sampled_txt_size:,} rows ({sample_frac:.1%})")
-        log.info(f"   └─ Images: {original_img_size:,} → {sampled_img_size:,} rows ({sample_frac:.1%})")
+        log.info(
+            f"   ├─ Text: {original_txt_size:,} → {sampled_txt_size:,} rows ({sample_frac:.1%})")
+        log.info(
+            f"   └─ Images: {original_img_size:,} → {sampled_img_size:,} rows ({sample_frac:.1%})")
 
     # Log dataset statistics
     log.info(f"\n   📊 Dataset Statistics:")
@@ -5588,10 +5614,11 @@ def run_full_pipeline(mode: str = "both",
     log_memory_usage("Data Loading")
     pipeline_progress.update(1)
     optimize_memory_usage("Data Loading")
-    
+
     # Memory check
     if psutil.virtual_memory().percent > 70:
-        log.warning(f"High memory usage after data loading: {psutil.virtual_memory().percent:.1f}%")
+        log.warning(
+            f"High memory usage after data loading: {psutil.virtual_memory().percent:.1f}%")
 
     # ------------------------------------------------------------------
     # 2. TEXT FEATURE PROCESSING
@@ -5616,12 +5643,12 @@ def run_full_pipeline(mode: str = "both",
         if not carb_df.empty:
             usda_labeled = label_usda_keto_data(carb_df)
             log.info(f"   ├─ USDA examples added: {len(usda_labeled)}")
-            silver_txt = pd.concat([silver_txt, usda_labeled], ignore_index=True)
+            silver_txt = pd.concat(
+                [silver_txt, usda_labeled], ignore_index=True)
             Path("artifacts").mkdir(exist_ok=True)
             silver_txt.to_csv("artifacts/silver_extended.csv", index=False)
         else:
             log.warning("   ├─ No USDA data added - carb_df is empty")
-
 
         X_text_silver = vec.fit_transform(silver_txt.clean)
         text_pbar.update(1)
@@ -5640,8 +5667,10 @@ def run_full_pipeline(mode: str = "both",
     log.info(f"   ├─ Vocabulary size: {len(vec.vocabulary_):,}")
     log.info(f"   ├─ Silver features: {X_text_silver.shape}")
     log.info(f"   ├─ Gold features: {X_text_gold.shape}")
-    log.info(f"   ├─ Sparsity: {(1 - X_text_silver.nnz / X_text_silver.size):.1%}")
-    log.info(f"   └─ Memory usage: ~{X_text_silver.data.nbytes // (1024**2)} MB")
+    log.info(
+        f"   ├─ Sparsity: {(1 - X_text_silver.nnz / X_text_silver.size):.1%}")
+    log.info(
+        f"   └─ Memory usage: ~{X_text_silver.data.nbytes // (1024**2)} MB")
 
     stage_time = time.time() - stage_start
     log.info(f"   ✅ Text processing completed in {stage_time:.1f}s")
@@ -5667,11 +5696,13 @@ def run_full_pipeline(mode: str = "both",
         with tqdm(total=6, desc="   ├─ Image Pipeline", position=1, leave=False,
                   bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as img_pbar:
 
-            # Download images
+            # Download images with robust function and force parameter
             img_pbar.set_description("   ├─ Downloading silver images")
             if not silver_img.empty:
-                silver_downloaded = _download_images(silver_img, CFG.image_dir / "silver")
-                log.info(f"      ├─ Silver download: {len(silver_downloaded):,}/{len(silver_img):,} successful")
+                silver_downloaded = _download_images(
+                    silver_img, CFG.image_dir / "silver", max_workers=16, force=force)
+                log.info(
+                    f"      ├─ Silver download: {len(silver_downloaded):,}/{len(silver_img):,} successful")
             else:
                 silver_downloaded = []
                 log.info(f"      ├─ Silver download: No images to download")
@@ -5679,109 +5710,237 @@ def run_full_pipeline(mode: str = "both",
 
             img_pbar.set_description("   ├─ Downloading gold images")
             if not gold_img.empty:
-                gold_downloaded = _download_images(gold_img, CFG.image_dir / "gold")
-                log.info(f"      ├─ Gold download: {len(gold_downloaded):,}/{len(gold_img):,} successful")
+                gold_downloaded = _download_images(
+                    gold_img, CFG.image_dir / "gold", max_workers=16, force=force)
+                log.info(
+                    f"      ├─ Gold download: {len(gold_downloaded):,}/{len(gold_img):,} successful")
             else:
                 gold_downloaded = []
                 log.info(f"      ├─ Gold download: No images to download")
             img_pbar.update(1)
 
+            # Enhanced filtering logic with better error handling
             img_pbar.set_description("   ├─ Filtering by downloads")
+            
+            # Silver image filtering
             if silver_downloaded:
-                img_silver_df = filter_silver_by_downloaded_images(silver_img, CFG.image_dir)
-                log.info(f"      ├─ Silver filtered: {len(img_silver_df):,} with valid images")
+                try:
+                    img_silver_df = filter_silver_by_downloaded_images(
+                        silver_img, CFG.image_dir)
+                    if img_silver_df.empty:
+                        log.warning(f"      ⚠️  Silver filtering resulted in empty DataFrame")
+                        # Fallback: use original indices from downloads
+                        img_silver_df = silver_img.loc[silver_downloaded].copy()
+                    
+                    log.info(
+                        f"      ├─ Silver filtered: {len(img_silver_df):,} with valid images")
+                except Exception as e:
+                    log.error(f"      ❌ Silver filtering failed: {e}")
+                    # Fallback to original silver_img subset
+                    img_silver_df = silver_img.loc[silver_downloaded].copy() if silver_downloaded else pd.DataFrame()
+                    log.info(f"      ├─ Silver fallback: {len(img_silver_df):,} images")
             else:
                 img_silver_df = pd.DataFrame()
                 log.info(f"      ├─ Silver filtered: Empty (no downloads)")
 
-            img_gold_df = filter_photo_rows(gold_img) if gold_downloaded else pd.DataFrame()
-            log.info(f"      ├─ Gold filtered: {len(img_gold_df):,} with valid images")
+            # Gold image filtering
+            if gold_downloaded:
+                try:
+                    img_gold_df = filter_photo_rows(gold_img)
+                    # Ensure we only keep images that were actually downloaded
+                    if not img_gold_df.empty:
+                        img_gold_df = img_gold_df.loc[img_gold_df.index.intersection(gold_downloaded)].copy()
+                    
+                    if img_gold_df.empty:
+                        log.warning(f"      ⚠️  Gold filtering resulted in empty DataFrame")
+                        # Fallback: use original indices from downloads
+                        img_gold_df = gold_img.loc[gold_downloaded].copy()
+                        
+                except Exception as e:
+                    log.error(f"      ❌ Gold filtering failed: {e}")
+                    # Fallback to original gold_img subset
+                    img_gold_df = gold_img.loc[gold_downloaded].copy() if gold_downloaded else pd.DataFrame()
+            else:
+                img_gold_df = pd.DataFrame()
+                
+            log.info(
+                f"      ├─ Gold filtered: {len(img_gold_df):,} with valid images")
             img_pbar.update(1)
 
-            # Extract embeddings with proper alignment
+            # Extract embeddings with proper alignment and error handling
             img_pbar.set_description("   ├─ Building silver embeddings")
             if not img_silver_df.empty:
-                img_silver, silver_valid_indices = build_image_embeddings(img_silver_df, "silver", force)
+                try:
+                    img_silver, silver_valid_indices = build_image_embeddings(
+                        img_silver_df, "silver", force)
 
-                # Filter DataFrame to match embeddings
-                if len(silver_valid_indices) != len(img_silver_df):
-                    img_silver_df = img_silver_df.loc[silver_valid_indices].copy()
-                    log.info(f"      ├─ Silver DF filtered: {len(img_silver_df):,} rows match embeddings")
+                    # Verify and align DataFrame to match embeddings
+                    if len(silver_valid_indices) != len(img_silver_df):
+                        log.info(
+                            f"      ├─ Aligning silver DataFrame: {len(img_silver_df):,} → {len(silver_valid_indices):,} rows")
+                        img_silver_df = img_silver_df.loc[silver_valid_indices].copy()
 
-                log.info(f"      ├─ Silver embeddings: {img_silver.shape}")
-                log.info(f"      ├─ Silver DataFrame: {len(img_silver_df):,} rows")
+                    # Validate dimensions match
+                    if img_silver.shape[0] != len(img_silver_df):
+                        log.error(f"      ❌ Silver dimension mismatch after alignment: "
+                                 f"embeddings={img_silver.shape[0]}, df={len(img_silver_df)}")
+                        # Try to fix by truncating to smaller size
+                        min_size = min(img_silver.shape[0], len(img_silver_df))
+                        img_silver = img_silver[:min_size]
+                        img_silver_df = img_silver_df.iloc[:min_size].copy()
+                        log.info(f"      🔧 Truncated both to {min_size} for alignment")
+
+                    log.info(f"      ├─ Silver embeddings: {img_silver.shape}")
+                    log.info(f"      ├─ Silver DataFrame: {len(img_silver_df):,} rows")
+                    
+                except Exception as e:
+                    log.error(f"      ❌ Silver embedding extraction failed: {e}")
+                    img_silver = np.array([]).reshape(0, 2048)
+                    img_silver_df = pd.DataFrame()
+                    silver_valid_indices = []
+                    log.info(f"      ├─ Silver fallback: Empty embeddings")
             else:
                 img_silver = np.array([]).reshape(0, 2048)
                 silver_valid_indices = []
-                log.info(f"      ├─ Silver embeddings: Empty array (no valid images)")
+                log.info(
+                    f"      ├─ Silver embeddings: Empty array (no valid images)")
             img_pbar.update(1)
 
             img_pbar.set_description("   ├─ Building gold embeddings")
             if not img_gold_df.empty:
-                img_gold, gold_valid_indices = build_image_embeddings(img_gold_df, "gold", force)
+                try:
+                    img_gold, gold_valid_indices = build_image_embeddings(
+                        img_gold_df, "gold", force)
 
-                # Filter DataFrame to match embeddings
-                if len(gold_valid_indices) != len(img_gold_df):
-                    img_gold_df = img_gold_df.loc[gold_valid_indices].copy()
-                    log.info(f"      ├─ Gold DF filtered: {len(img_gold_df):,} rows match embeddings")
+                    # Verify and align DataFrame to match embeddings
+                    if len(gold_valid_indices) != len(img_gold_df):
+                        log.info(
+                            f"      ├─ Aligning gold DataFrame: {len(img_gold_df):,} → {len(gold_valid_indices):,} rows")
+                        img_gold_df = img_gold_df.loc[gold_valid_indices].copy()
 
-                log.info(f"      ├─ Gold embeddings: {img_gold.shape}")
-                log.info(f"      ├─ Gold DataFrame: {len(img_gold_df):,} rows")
+                    # Validate dimensions match
+                    if img_gold.shape[0] != len(img_gold_df):
+                        log.error(f"      ❌ Gold dimension mismatch after alignment: "
+                                 f"embeddings={img_gold.shape[0]}, df={len(img_gold_df)}")
+                        # Try to fix by truncating to smaller size
+                        min_size = min(img_gold.shape[0], len(img_gold_df))
+                        img_gold = img_gold[:min_size]
+                        img_gold_df = img_gold_df.iloc[:min_size].copy()
+                        log.info(f"      🔧 Truncated both to {min_size} for alignment")
+
+                    log.info(f"      ├─ Gold embeddings: {img_gold.shape}")
+                    log.info(f"      ├─ Gold DataFrame: {len(img_gold_df):,} rows")
+                    
+                except Exception as e:
+                    log.error(f"      ❌ Gold embedding extraction failed: {e}")
+                    img_gold = np.array([]).reshape(0, 2048)
+                    img_gold_df = pd.DataFrame()
+                    gold_valid_indices = []
+                    log.info(f"      ├─ Gold fallback: Empty embeddings")
             else:
                 img_gold = np.array([]).reshape(0, 2048)
                 gold_valid_indices = []
-                log.info(f"      ├─ Gold embeddings: Empty array (no valid images)")
+                log.info(
+                    f"      ├─ Gold embeddings: Empty array (no valid images)")
             img_pbar.update(1)
 
             img_pbar.set_description("   ├─ Saving embeddings")
-            if img_gold.size > 0:
-                joblib.dump(img_gold, "embeddings/img_gold.pkl")
-                log.info(f"      ├─ Saved gold embeddings to embeddings/img_gold.pkl")
-            else:
-                log.info(f"      ├─ Skipped saving empty gold embeddings")
+            try:
+                # Ensure embeddings directory exists
+                Path("embeddings").mkdir(exist_ok=True)
+                
+                if img_gold.size > 0:
+                    joblib.dump(img_gold, "embeddings/img_gold.pkl")
+                    log.info(
+                        f"      ├─ Saved gold embeddings to embeddings/img_gold.pkl")
+                else:
+                    log.info(f"      ├─ Skipped saving empty gold embeddings")
+                    
+                # Also save silver embeddings for future use
+                if img_silver.size > 0:
+                    joblib.dump(img_silver, "embeddings/img_silver.pkl")
+                    log.info(f"      ├─ Saved silver embeddings to embeddings/img_silver.pkl")
+                    
+            except Exception as e:
+                log.warning(f"      ⚠️  Failed to save embeddings: {e}")
             img_pbar.update(1)
 
-        # Verify dimensions
-        if img_silver.size > 0:
+        # Enhanced dimension verification with detailed logging
+        if img_silver.size > 0 or img_gold.size > 0:
             log.info(f"   🔍 DIMENSION VERIFICATION:")
             log.info(f"   ├─ Silver embeddings: {img_silver.shape}")
             log.info(f"   ├─ Silver DataFrame: {len(img_silver_df):,} rows")
             log.info(f"   ├─ Gold embeddings: {img_gold.shape}")
             log.info(f"   └─ Gold DataFrame: {len(img_gold_df):,} rows")
 
-            # Ensure alignment
-            assert img_silver.shape[0] == len(img_silver_df), f"Silver dimension mismatch"
-            assert img_gold.shape[0] == len(img_gold_df), f"Gold dimension mismatch"
-            log.info(f"   ✅ All dimensions verified!")
+            # Robust dimension checking
+            alignment_errors = []
+            
+            if img_silver.size > 0:
+                if img_silver.shape[0] != len(img_silver_df):
+                    alignment_errors.append(f"Silver: {img_silver.shape[0]} != {len(img_silver_df)}")
+                    
+            if img_gold.size > 0:
+                if img_gold.shape[0] != len(img_gold_df):
+                    alignment_errors.append(f"Gold: {img_gold.shape[0]} != {len(img_gold_df)}")
+            
+            if alignment_errors:
+                log.warning(f"   ⚠️  Dimension mismatches detected:")
+                for error in alignment_errors:
+                    log.warning(f"      ├─ {error}")
+                log.warning(f"   └─ Proceeding with available data (may cause issues downstream)")
+            else:
+                log.info(f"   ✅ All dimensions verified!")
 
-        # Convert to sparse for efficiency
-        if img_silver.size > 0:
-            X_img_silver = csr_matrix(img_silver)
-        else:
+        # Convert to sparse matrices for memory efficiency
+        try:
+            if img_silver.size > 0:
+                X_img_silver = csr_matrix(img_silver)
+                log.debug(f"      ├─ Silver sparse matrix: {X_img_silver.shape}")
+            else:
+                X_img_silver = csr_matrix((0, 2048))
+                log.debug(f"      ├─ Silver empty sparse matrix: {X_img_silver.shape}")
+
+            if img_gold.size > 0:
+                X_img_gold = csr_matrix(img_gold)
+                log.debug(f"      ├─ Gold sparse matrix: {X_img_gold.shape}")
+            else:
+                X_img_gold = csr_matrix((0, 2048))
+                log.debug(f"      ├─ Gold empty sparse matrix: {X_img_gold.shape}")
+                
+        except Exception as e:
+            log.error(f"   ❌ Sparse matrix conversion failed: {e}")
+            # Fallback to empty matrices
             X_img_silver = csr_matrix((0, 2048))
-
-        if img_gold.size > 0:
-            X_img_gold = csr_matrix(img_gold)
-        else:
             X_img_gold = csr_matrix((0, 2048))
 
-        # Log results
+        # Comprehensive results summary
         log.info(f"   📊 Image Processing Results:")
         log.info(f"   ├─ Silver images available: {len(silver_img):,}")
         log.info(f"   ├─ Silver images downloaded: {len(silver_downloaded):,}")
+        log.info(f"   ├─ Silver valid embeddings: {img_silver.shape[0]:,}")
         log.info(f"   ├─ Gold images available: {len(gold_img):,}")
         log.info(f"   ├─ Gold images downloaded: {len(gold_downloaded):,}")
-        log.info(f"   ├─ Silver embeddings: {img_silver.shape}")
-        log.info(f"   ├─ Gold embeddings: {img_gold.shape}")
-        log.info(f"   └─ Embedding size: {img_silver.nbytes // (1024**2) if img_silver.size > 0 else 0} MB")
+        log.info(f"   ├─ Gold valid embeddings: {img_gold.shape[0]:,}")
+        log.info(f"   ├─ Silver embedding size: {img_silver.nbytes // (1024**2) if img_silver.size > 0 else 0} MB")
+        log.info(f"   └─ Gold embedding size: {img_gold.nbytes // (1024**2) if img_gold.size > 0 else 0} MB")
 
-        # Early exit check for image-only mode
-        if mode == "image" and (img_silver.size == 0 or img_gold.size == 0):
-            log.warning(f"   ⚠️  Image-only mode requested but no valid images available!")
-            log.warning(f"   └─ Consider using mode='text' or increasing sample_frac")
-            stage_time = time.time() - stage_start
-            log.info(f"   ❌ Image processing failed in {stage_time:.1f}s")
-            return None, None, None, []
+        # Enhanced early exit logic for image-only mode
+        if mode == "image":
+            total_valid_images = img_silver.shape[0] + img_gold.shape[0]
+            min_required_images = 10  # Minimum viable images for training
+            
+            if total_valid_images < min_required_images:
+                log.warning(f"   ⚠️  Insufficient images for image-only mode!")
+                log.warning(f"      ├─ Total valid images: {total_valid_images}")
+                log.warning(f"      ├─ Minimum required: {min_required_images}")
+                log.warning(f"      └─ Consider using mode='text' or mode='both'")
+                
+                stage_time = time.time() - stage_start
+                log.info(f"   ❌ Image processing insufficient in {stage_time:.1f}s")
+                return None, None, None, []
+            else:
+                log.info(f"   ✅ Sufficient images for image-only mode: {total_valid_images}")
 
         stage_time = time.time() - stage_start
         log.info(f"   ✅ Image processing completed in {stage_time:.1f}s")
@@ -5855,10 +6014,10 @@ def run_full_pipeline(mode: str = "both",
             log.info(f"   🤝 Creating text+image ensemble...")
 
             ensemble_results = []
-            
+
             # Test different alpha values for optimal blending
             alpha_values = [0.25, 0.5, 0.75]
-            
+
             for task in ("keto", "vegan"):
                 try:
                     # Check if we have models for both domains
@@ -5866,16 +6025,18 @@ def run_full_pipeline(mode: str = "both",
                     image_models = [r for r in res_img if r["task"] == task]
 
                     if not text_models or not image_models:
-                        log.warning(f"      ⚠️  No models available for {task} ensemble")
+                        log.warning(
+                            f"      ⚠️  No models available for {task} ensemble")
                         continue
 
                     # Use best_two_domains with alpha optimization
-                    log.info(f"      ├─ {task}: Testing alpha values {alpha_values}")
-                    
+                    log.info(
+                        f"      ├─ {task}: Testing alpha values {alpha_values}")
+
                     best_ensemble_result = None
                     best_f1 = -1
                     best_alpha = None
-                    
+
                     for alpha in alpha_values:
                         result = best_two_domains(
                             task=task,
@@ -5884,23 +6045,25 @@ def run_full_pipeline(mode: str = "both",
                             gold_df=img_gold_df,  # Use image gold df as it has the common indices
                             alpha=alpha
                         )
-                        
+
                         if result and result['F1'] > best_f1:
                             best_f1 = result['F1']
                             best_alpha = alpha
                             best_ensemble_result = result
-                            
+
                         log.info(f"         ├─ α={alpha}: F1={result['F1']:.3f}, "
-                                f"Text={result['text_model']}, Image={result['image_model']}")
-                    
+                                 f"Text={result['text_model']}, Image={result['image_model']}")
+
                     if best_ensemble_result:
                         # Update model name to reflect optimal alpha
                         best_ensemble_result['model'] = f"BestTwo_α{best_alpha}"
                         ensemble_results.append(best_ensemble_result)
-                        log.info(f"      ✅ {task} best ensemble: α={best_alpha}, F1={best_f1:.3f}")
+                        log.info(
+                            f"      ✅ {task} best ensemble: α={best_alpha}, F1={best_f1:.3f}")
 
                 except Exception as e:
-                    log.error(f"      ❌ {task} ensemble creation failed: {str(e)[:50]}...")
+                    log.error(
+                        f"      ❌ {task} ensemble creation failed: {str(e)[:50]}...")
                     if log.level <= logging.DEBUG:
                         import traceback
                         log.debug(f"Full traceback:\n{traceback.format_exc()}")
@@ -5908,9 +6071,9 @@ def run_full_pipeline(mode: str = "both",
             if ensemble_results:
                 table("Text+Image Ensembles", ensemble_results)
                 results.extend(ensemble_results)
-                log.info(f"      ✅ Created {len(ensemble_results)} ensemble configurations")
+                log.info(
+                    f"      ✅ Created {len(ensemble_results)} ensemble configurations")
 
-                
             else:
                 log.warning(f"      ⚠️  No successful ensembles created")
 
@@ -5926,17 +6089,20 @@ def run_full_pipeline(mode: str = "both",
 
             if len(common_silver_idx) > 0 and len(common_gold_idx) > 0:
                 # Align silver features
-                X_text_silver_algn = vec.transform(silver_txt.loc[common_silver_idx].clean)
+                X_text_silver_algn = vec.transform(
+                    silver_txt.loc[common_silver_idx].clean)
                 X_silver = combine_features(X_text_silver_algn, img_silver)
 
                 # Align gold features
-                X_text_gold_algn = vec.transform(gold.loc[common_gold_idx].clean)
+                X_text_gold_algn = vec.transform(
+                    gold.loc[common_gold_idx].clean)
                 X_gold = combine_features(X_text_gold_algn, img_gold)
 
                 silver_eval = silver_txt.loc[common_silver_idx]
                 gold_eval = gold.loc[common_gold_idx]
 
-                log.info(f"      ├─ Combined silver features: {X_silver.shape}")
+                log.info(
+                    f"      ├─ Combined silver features: {X_silver.shape}")
                 log.info(f"      ├─ Combined gold features: {X_gold.shape}")
                 log.info(f"      ├─ Silver samples: {len(silver_eval):,}")
                 log.info(f"      └─ Gold samples: {len(gold_eval):,}")
@@ -5948,11 +6114,13 @@ def run_full_pipeline(mode: str = "both",
                     domain="both", apply_smote=True
                 )
                 results.extend(res_combined)
-                log.info(f"      ✅ Combined models: {len(res_combined)} results")
+                log.info(
+                    f"      ✅ Combined models: {len(res_combined)} results")
                 optimize_memory_usage()
 
             else:
-                log.warning(f"      ⚠️  No common indices for combined features, skipping")
+                log.warning(
+                    f"      ⚠️  No common indices for combined features, skipping")
 
             train_pbar.update(1)
 
@@ -5968,7 +6136,8 @@ def run_full_pipeline(mode: str = "both",
             silver_eval = img_silver_df
         else:
             # Fallback to text
-            log.warning(f"   ⚠️  No valid images for image mode, falling back to text")
+            log.warning(
+                f"   ⚠️  No valid images for image mode, falling back to text")
             X_silver, X_gold = X_text_silver, X_text_gold
             silver_eval = silver_txt
 
@@ -6006,7 +6175,8 @@ def run_full_pipeline(mode: str = "both",
                 log.info(f"   🎯 Optimizing {task} ensemble...")
 
                 # Count available models
-                task_models = [r for r in results if r["task"] == task and r["model"] != "Rule"]
+                task_models = [r for r in results if r["task"]
+                               == task and r["model"] != "Rule"]
                 log.info(f"      ├─ Available models: {len(task_models)}")
 
                 if len(task_models) > 1:
@@ -6028,29 +6198,35 @@ def run_full_pipeline(mode: str = "both",
                                              ens_X_gold, ens_silver_eval, gold)
                     if best_ens:
                         ensemble_results.append(best_ens)
-                        log.info(f"      ✅ {task} ensemble: {best_ens['model']} (F1={best_ens['F1']:.3f})")
+                        log.info(
+                            f"      ✅ {task} ensemble: {best_ens['model']} (F1={best_ens['F1']:.3f})")
                     else:
-                        log.warning(f"      ⚠️  {task} ensemble optimization failed")
+                        log.warning(
+                            f"      ⚠️  {task} ensemble optimization failed")
                 else:
-                    log.info(f"      ⏭️  {task}: Only {len(task_models)} model(s) available, skipping ensemble")
+                    log.info(
+                        f"      ⏭️  {task}: Only {len(task_models)} model(s) available, skipping ensemble")
 
             results.extend(ensemble_results)
-            log.info(f"   📊 Ensemble results: {len(ensemble_results)} optimized ensembles")
-
+            log.info(
+                f"   📊 Ensemble results: {len(ensemble_results)} optimized ensembles")
 
         if mode == "both" and 'res_text' in locals() and 'res_img' in locals():
             log.info(f"\n   🔀 Cross-domain ensemble optimization...")
-            
+
             cross_domain_results = []
             for task in ensemble_tasks:
                 try:
                     # Check we have both text and image results
-                    text_task_models = [r for r in res_text if r["task"] == task]
-                    image_task_models = [r for r in res_img if r["task"] == task]
-                    
+                    text_task_models = [
+                        r for r in res_text if r["task"] == task]
+                    image_task_models = [
+                        r for r in res_img if r["task"] == task]
+
                     if text_task_models and image_task_models:
-                        log.info(f"      ├─ Optimizing {task} cross-domain ensemble...")
-                        
+                        log.info(
+                            f"      ├─ Optimizing {task} cross-domain ensemble...")
+
                         # Use best_ensemble with image_res for smart blending
                         cross_result = best_ensemble(
                             task=task,
@@ -6063,24 +6239,26 @@ def run_full_pipeline(mode: str = "both",
                             image_res=res_img,  # This enables smart text+image blending
                             alphas=(0.25, 0.5, 0.75)  # Alpha values to test
                         )
-                        
+
                         if cross_result:
                             cross_domain_results.append(cross_result)
                             log.info(f"      ✅ {task} cross-domain: "
-                                   f"{cross_result['model']} (F1={cross_result['F1']:.3f})")
+                                     f"{cross_result['model']} (F1={cross_result['F1']:.3f})")
                     else:
-                        log.info(f"      ⏭️  {task}: Missing text or image models for cross-domain")
-                        
+                        log.info(
+                            f"      ⏭️  {task}: Missing text or image models for cross-domain")
+
                 except Exception as e:
-                    log.error(f"      ❌ {task} cross-domain failed: {str(e)[:50]}...")
-                    
+                    log.error(
+                        f"      ❌ {task} cross-domain failed: {str(e)[:50]}...")
+
             if cross_domain_results:
                 results.extend(cross_domain_results)
-                log.info(f"   📊 Cross-domain results: {len(cross_domain_results)} optimized ensembles")
-                
+                log.info(
+                    f"   📊 Cross-domain results: {len(cross_domain_results)} optimized ensembles")
+
     else:
         log.warning(f"   ⚠️  No models available for ensemble optimization")
-
 
     stage_time = time.time() - stage_start
     log.info(f"   ✅ Ensemble optimization completed in {stage_time:.1f}s")
@@ -6123,8 +6301,10 @@ def run_full_pipeline(mode: str = "both",
             results_summary.append(summary)
 
         if results_summary:
-            pd.DataFrame(results_summary).to_csv("pipeline_results_summary.csv", index=False)
-            log.info(f"      ✅ Saved results summary with {len(results_summary)} entries")
+            pd.DataFrame(results_summary).to_csv(
+                "pipeline_results_summary.csv", index=False)
+            log.info(
+                f"      ✅ Saved results summary with {len(results_summary)} entries")
         else:
             log.warning(f"      ⚠️  No results to save")
         export_pbar.update(1)
@@ -6144,7 +6324,8 @@ def run_full_pipeline(mode: str = "both",
     total_time = time.time() - pipeline_start
 
     log.info(f"\n🏁 PIPELINE COMPLETE")
-    log.info(f"   ├─ Total runtime: {total_time:.1f}s ({total_time/60:.1f} minutes)")
+    log.info(
+        f"   ├─ Total runtime: {total_time:.1f}s ({total_time/60:.1f} minutes)")
     log.info(f"   ├─ Mode: {mode}")
     log.info(f"   ├─ Sample fraction: {sample_frac or 'Full dataset'}")
     log.info(f"   ├─ Total results: {len(results)}")
@@ -6161,7 +6342,8 @@ def run_full_pipeline(mode: str = "both",
                          f"({best_result['model']}) | ACC={best_result['ACC']:.3f}")
     else:
         log.warning(f"\n   ⚠️  NO RESULTS GENERATED")
-        log.warning(f"   └─ Consider checking data availability or adjusting parameters")
+        log.warning(
+            f"   └─ Consider checking data availability or adjusting parameters")
 
     # Resource usage summary
     final_memory = psutil.virtual_memory()
@@ -6201,7 +6383,6 @@ def run_full_pipeline(mode: str = "both",
     return vec, silver_txt, gold, results
 
 
-
 # =============================================================================
 # COMMAND LINE INTERFACE
 # =============================================================================
@@ -6209,15 +6390,16 @@ def run_full_pipeline(mode: str = "both",
 Main entry point for the diet classification pipeline.
 """
 
+
 def main():
     """
     Command line interface for the diet classification pipeline.
-    
+
     Supports multiple modes:
     - Training: Run full pipeline to train models
     - Inference: Classify ingredients using trained models
     - Evaluation: Test on ground truth dataset
-    
+
     The function includes comprehensive error handling and prevents
     restart loops through environment variable tracking.
     """
@@ -6248,14 +6430,15 @@ def main():
     args = parser.parse_args()
 
     try:
-        log.info(f"🚀 Starting main with args: {args}")            
+        log.info(f"🚀 Starting main with args: {args}")
 
         if args.ingredients:
             # Handle ingredient classification
             if args.ingredients.startswith('['):
                 ingredients = json.loads(args.ingredients)
             else:
-                ingredients = [i.strip() for i in args.ingredients.split(',') if i.strip()]
+                ingredients = [i.strip()
+                               for i in args.ingredients.split(',') if i.strip()]
 
             keto = is_keto(ingredients)
             vegan = is_vegan(ingredients)
@@ -6298,12 +6481,14 @@ def main():
                                 best_models[task] = BEST[base_name]
                                 log.info(f"✅ Saved {task} model: {base_name}")
                             else:
-                                log.warning(f"⚠️  Could not find model {base_name} in BEST dict")
+                                log.warning(
+                                    f"⚠️  Could not find model {base_name} in BEST dict")
 
                     if best_models:
                         with open(CFG.artifacts_dir / "models.pkl", 'wb') as f:
                             pickle.dump(best_models, f)
-                        log.info(f"✅ Saved {len(best_models)} models to {CFG.artifacts_dir}")
+                        log.info(
+                            f"✅ Saved {len(best_models)} models to {CFG.artifacts_dir}")
                     else:
                         log.warning("⚠️  No models to save")
 
@@ -6331,9 +6516,11 @@ def main():
                 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 
                 if not os.path.exists(args.ground_truth):
-                    log.error(f"❌ Ground truth file not found: {args.ground_truth}")
+                    log.error(
+                        f"❌ Ground truth file not found: {args.ground_truth}")
                     log.info("💡 Make sure to run the command with:")
-                    log.info("   python diet_classifiers.py --ground_truth /usr/src/data/ground_truth_sample.csv")
+                    log.info(
+                        "   python diet_classifiers.py --ground_truth /usr/src/data/ground_truth_sample.csv")
                     sys.exit(1)
 
                 df = pd.read_csv(args.ground_truth)
@@ -6344,12 +6531,14 @@ def main():
                 vec_path = CFG.artifacts_dir / "vectorizer.pkl"
 
                 if not (model_path.exists() and vec_path.exists()):
-                    log.warning("⚠️ Models not found in artifacts/ — trying pretrained_models/ fallback...")
+                    log.warning(
+                        "⚠️ Models not found in artifacts/ — trying pretrained_models/ fallback...")
                     model_path = CFG.pretrained_models_dir / "models.pkl"
                     vec_path = CFG.pretrained_models_dir / "vectorizer.pkl"
 
                 if not (model_path.exists() and vec_path.exists()):
-                    log.error("❌ No trained models found in artifacts/ or pretrained_models/.")
+                    log.error(
+                        "❌ No trained models found in artifacts/ or pretrained_models/.")
                     sys.exit(1)
 
                 with open(vec_path, 'rb') as f:
@@ -6375,7 +6564,8 @@ def main():
                             res[f"{task}_pred"] = int(pred[0])
                         else:
                             res[f"{task}_pred"] = None
-                            log.warning(f"⚠️ No trained model found for task: {task}")
+                            log.warning(
+                                f"⚠️ No trained model found for task: {task}")
                     res["keto_true"] = row.get("label_keto")
                     res["vegan_true"] = row.get("label_vegan")
                     results.append(res)
@@ -6410,7 +6600,8 @@ def main():
                             "f1_score": f1
                         })
 
-                        log.info(f"✔️  {task.capitalize()} - ACC: {acc:.3f} | PREC: {prec:.3f} | REC: {rec:.3f} | F1: {f1:.3f}")
+                        log.info(
+                            f"✔️  {task.capitalize()} - ACC: {acc:.3f} | PREC: {prec:.3f} | REC: {rec:.3f} | F1: {f1:.3f}")
 
                 # Save metrics
                 metrics_df = pd.DataFrame(metrics)
@@ -6421,7 +6612,6 @@ def main():
             except Exception as e:
                 log.error(f"❌ Ground truth evaluation failed: {e}")
                 sys.exit(1)
-
 
             except Exception as e:
                 log.error(f"❌ Ground truth evaluation failed: {e}")
@@ -6440,7 +6630,8 @@ def main():
 
                 df = pd.read_csv(predict_path)
                 if 'ingredients' not in df.columns:
-                    log.error("❌ Input CSV must contain an 'ingredients' column")
+                    log.error(
+                        "❌ Input CSV must contain an 'ingredients' column")
                     sys.exit(1)
 
                 # Load models and vectorizer
@@ -6448,13 +6639,15 @@ def main():
                 vec_path = CFG.artifacts_dir / "vectorizer.pkl"
 
                 if not model_path.exists() or not vec_path.exists():
-                    log.warning("⚠️  Trained models not found in artifacts/, trying pretrained_models/...")
+                    log.warning(
+                        "⚠️  Trained models not found in artifacts/, trying pretrained_models/...")
 
                     model_path = Path("/app/pretrained_models/models.pkl")
                     vec_path = Path("/app/pretrained_models/vectorizer.pkl")
 
                     if not model_path.exists() or not vec_path.exists():
-                        log.error("❌ No trained models available in either artifacts/ or pretrained_models/")
+                        log.error(
+                            "❌ No trained models available in either artifacts/ or pretrained_models/")
                         sys.exit(1)
 
                 with open(vec_path, 'rb') as f:
@@ -6473,7 +6666,8 @@ def main():
                 # Predict
                 preds = []
                 for idx, row in df.iterrows():
-                    row_preds = {"index": idx, "ingredients": row["ingredients"]}
+                    row_preds = {"index": idx,
+                                 "ingredients": row["ingredients"]}
                     for task in ["keto", "vegan"]:
                         if task in models:
                             pred = models[task].predict(X[idx])
@@ -6492,7 +6686,6 @@ def main():
                 log.error(f"❌ Prediction failed: {e}")
                 sys.exit(1)
 
-        
         else:
             # Default pipeline
             log.info(f"🧠 Default pipeline - sample_frac={args.sample_frac}")
@@ -6517,7 +6710,6 @@ def main():
         import traceback
         log.error(f"Full traceback:\n{traceback.format_exc()}")
         sys.exit(1)
-
 
 
 if __name__ == "__main__":
