@@ -498,9 +498,9 @@ def filter_low_quality_images():
    - Fallback 2: Use rule-based model
 
 2. **Feature Extraction Fallbacks**
-   - Primary: Compute fresh embeddings
-   - Fallback 1: Use cached embeddings
-   - Fallback 2: Use backup cache
+   - Primary: Use cached embeddings (if available)
+   - Fallback 1: Use backup cache
+   - Fallback 2: Compute fresh embeddings
    - Fallback 3: Return zero vectors
 
 3. **Ensemble Creation Fallbacks**
