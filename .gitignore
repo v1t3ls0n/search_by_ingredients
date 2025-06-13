@@ -1,6 +1,13 @@
-# Byte-compiled / optimized / DLL files
 *.npy
-"embeddings_backup/"
+embeddings/
+embeddings_backup/
+dataset/
+
+
+# Byte-compiled / optimized / DLL files
+
+
+
 __pycache__/
 *.py[cod]
 artifacts/
