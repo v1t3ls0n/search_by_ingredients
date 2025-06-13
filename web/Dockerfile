@@ -44,16 +44,16 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy and extract pretrained models if they exist
-COPY . /app/
-RUN if [ -d "/app/pretrained_models" ] && [ -f "/app/pretrained_models/models.zip" ]; then \
+RUN mkdir -p /app/pretrained_models
+COPY --chmod=755 . /app/
+RUN if [ -f "/app/pretrained_models/models.zip" ]; then \
         echo "🔓 Extracting pretrained models..." && \
         unzip -o /app/pretrained_models/models.zip -d /app/pretrained_models && \
         rm /app/pretrained_models/models.zip; \
     else \
-        echo "✅ No pretrained models found, skipping extraction." && \
-        mkdir -p /app/pretrained_models; \
+        echo "✅ No pretrained models found, skipping extraction."; \
     fi
-
+    
 # Configure container networking and startup
 EXPOSE 8080
 
