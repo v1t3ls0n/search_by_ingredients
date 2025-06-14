@@ -2501,6 +2501,72 @@ def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarr
     return adjusted
 
 
+class EnsembleWrapper(BaseEstimator, ClassifierMixin):
+    """Comprehensive wrapper for all ensemble types with dynamic weighting."""
+    
+    def __init__(self, ensemble_type, models, weights=None, alpha=None, task=None):
+        self.ensemble_type = ensemble_type
+        self.models = models
+        self.weights = weights
+        self.alpha = alpha
+        self.task = task
+        
+    def fit(self, X, y):
+        # Already fitted
+        return self
+        
+    def predict_proba(self, X):
+        if self.ensemble_type == 'voting':
+            # Delegate to sklearn VotingClassifier
+            return self.models.predict_proba(X)
+            
+        elif self.ensemble_type == 'averaging':
+            # Manual averaging
+            probs = []
+            for name, model in self.models.items():
+                if hasattr(model, 'predict_proba'):
+                    probs.append(model.predict_proba(X)[:, 1])
+                else:
+                    # Handle models without predict_proba
+                    scores = model.decision_function(X) if hasattr(model, 'decision_function') else model.predict(X)
+                    probs.append(1 / (1 + np.exp(-scores)))
+            
+            mean_prob = np.mean(probs, axis=0)
+            return np.c_[1 - mean_prob, mean_prob]
+            
+        elif self.ensemble_type == 'best_two':
+            # Alpha blending
+            text_model = self.models.get('text')
+            image_model = self.models.get('image')
+            
+            text_prob = text_model.predict_proba(X)[:, 1] if text_model else 0.5
+            image_prob = image_model.predict_proba(X)[:, 1] if image_model else text_prob
+            
+            blended = self.alpha * image_prob + (1 - self.alpha) * text_prob
+            return np.c_[1 - blended, blended]
+            
+        elif self.ensemble_type == 'smart_ensemble':
+            # Recursive ensemble blending
+            text_ens = self.models.get('text_ensemble')
+            image_ens = self.models.get('image_ensemble')
+            
+            if text_ens and image_ens:
+                text_prob = text_ens.predict_proba(X)[:, 1]
+                image_prob = image_ens.predict_proba(X)[:, 1]
+                blended = self.alpha * image_prob + (1 - self.alpha) * text_prob
+            elif text_ens:
+                blended = text_ens.predict_proba(X)[:, 1]
+            else:
+                # Fallback
+                blended = np.full(X.shape[0], 0.5)
+                
+            return np.c_[1 - blended, blended]
+            
+    def predict(self, X):
+        return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
+        
+    def __repr__(self):
+        return f"EnsembleWrapper(type={self.ensemble_type}, n_models={len(self.models)}, alpha={self.alpha})"
 # # =============================================================================
 # # SANITY CHECKS
 # # =============================================================================
@@ -4584,6 +4650,7 @@ def build_image_embeddings(df: pd.DataFrame,
     return arr, valid_indices
 
 
+
 # =============================================================================
 # ENSEMBLE METHODS
 # =============================================================================
@@ -4593,17 +4660,68 @@ These methods improve performance by leveraging the strengths of different
 models and feature types.
 """
 
+# Add after the RuleModel class (around line 1250)
+
+class EnsembleWrapper(BaseEstimator, ClassifierMixin):
+    """Wrapper to make ensemble models serializable."""
+    
+    def __init__(self, ensemble_type, models, weights=None, alpha=None, task=None):
+        self.ensemble_type = ensemble_type  # 'voting', 'best_two', etc.
+        self.models = models  # Dict of model_name: model
+        self.weights = weights
+        self.alpha = alpha
+        self.task = task
+        self.vectorizer = None  # Will be set during save
+        
+    def fit(self, X, y):
+        # Already fitted
+        return self
+        
+    def predict_proba(self, X):
+        if self.ensemble_type == 'voting':
+            # Weighted average of predictions
+            probs = []
+            for name, model in self.models.items():
+                prob = model.predict_proba(X)[:, 1]
+                probs.append(prob)
+            
+            probs = np.array(probs)
+            if self.weights is not None:
+                weighted_probs = (probs.T * self.weights).T
+                return np.c_[1 - weighted_probs.mean(axis=0), weighted_probs.mean(axis=0)]
+            else:
+                mean_prob = probs.mean(axis=0)
+                return np.c_[1 - mean_prob, mean_prob]
+                
+        elif self.ensemble_type == 'best_two':
+            # Alpha blending of text and image models
+            text_model = self.models.get('text')
+            image_model = self.models.get('image')
+            
+            if text_model and image_model:
+                text_prob = text_model.predict_proba(X)[:, 1]
+                image_prob = image_model.predict_proba(X)[:, 1]
+                blended = self.alpha * image_prob + (1 - self.alpha) * text_prob
+                return np.c_[1 - blended, blended]
+            elif text_model:
+                return text_model.predict_proba(X)
+            else:
+                raise ValueError("No valid models in ensemble")
+                
+    def predict(self, X):
+        return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
+    
 
 def tune_threshold(y_true, probs):
     """
     Find optimal classification threshold using precision-recall curve.
-
+    
     Instead of using 0.5, this finds the threshold that maximizes F1 score.
-
+    
     Args:
         y_true: True labels
         probs: Predicted probabilities
-
+        
     Returns:
         Optimal threshold value
     """
@@ -4622,17 +4740,17 @@ def best_two_domains(
 ):
     """
     Blend predictions from best text and image models.
-
+    
     This simple ensemble method combines the best performing model
     from each domain using a weighted average.
-
+    
     Args:
         task: 'keto' or 'vegan'
         text_results: Results from text-based models
         image_results: Results from image-based models
         gold_df: Gold standard DataFrame
         alpha: Weight for image predictions (0=text only, 1=image only)
-
+        
     Returns:
         Dictionary with ensemble results
     """
@@ -4642,8 +4760,7 @@ def best_two_domains(
         key=lambda r: r["F1"]
     )
     best_img = max(
-        (r for r in image_results if r["task"]
-         == task and len(r.get("prob", [])) > 0),
+        (r for r in image_results if r["task"] == task and len(r.get("prob", [])) > 0),
         key=lambda r: r["F1"],
         default=None
     )
@@ -4678,11 +4795,24 @@ def best_two_domains(
     final_pred = (final_prob >= 0.5).astype(int)
     y_true = gold_df[f"label_{task}"].values
 
+
+    # Create ensemble wrapper that can handle missing images
+    ensemble_model = EnsembleWrapper(
+        ensemble_type='best_two',
+        models={
+            'text': BEST[best_text['model'].split('_')[0]],  # Get actual model
+            'image': BEST[best_img['model'].split('_')[0]] if best_img else None
+        },
+        alpha=alpha,
+        task=task
+    )
+
     return pack(y_true, final_prob) | {
         "model": f"BestTwo(alpha={alpha})",
         "task": task,
         "prob": final_prob,
         "pred": final_pred,
+        "ensemble_model": ensemble_model,
         "text_model": best_text["model"],
         "image_model": best_img["model"] if best_img else None,
         "alpha": alpha,
@@ -4694,6 +4824,18 @@ def best_two_domains(
 def dynamic_ensemble(estimators, X_gold, gold, task: str):
     """
     Create dynamically weighted ensemble based on feature availability.
+    
+    For rows without images, image model votes are zeroed and weights
+    are renormalized to maintain valid probabilities.
+    
+    Args:
+        estimators: List of (name, model) tuples
+        X_gold: Test feature matrix
+        gold: Gold standard DataFrame
+        task: Classification task
+        
+    Returns:
+        Array of ensemble probabilities
     """
     # Collect individual predictions
     preds = []
@@ -4704,11 +4846,8 @@ def dynamic_ensemble(estimators, X_gold, gold, task: str):
 
     probs = np.array(preds)  # shape: (n_models, n_samples)
 
-    # Detect text-only rows (no image available) - FIX THE COMPARISON
-    if "has_image" in gold.columns:
-        text_only_mask = (gold["has_image"] == False).values  # Use .values to get numpy array
-    else:
-        text_only_mask = np.zeros(len(X_gold), dtype=bool)
+    # Detect text-only rows (no image available)
+    text_only_mask = gold.get("has_image", np.ones(len(X_gold), dtype=bool)) == False
 
     # Compute dynamic weights
     weights = []
@@ -4716,8 +4855,7 @@ def dynamic_ensemble(estimators, X_gold, gold, task: str):
         is_image_model = "IMAGE" in name.upper()
         row_weights = np.ones(len(X_gold))
         if is_image_model:
-            # Suppress image models for text-only rows
-            row_weights[text_only_mask] = 0
+            row_weights[text_only_mask] = 0  # Suppress image models for text-only rows
         weights.append(row_weights)
 
     weights = np.array(weights)
@@ -4729,6 +4867,702 @@ def dynamic_ensemble(estimators, X_gold, gold, task: str):
     final_probs = (normalized_weights * probs).sum(axis=0)
 
     return final_probs
+
+
+def top_n(task, res, X_vec, clean, X_gold, silver, gold, n=3, use_saved_params=False, rule_weight=0):
+    """
+    Build an n-model ensemble from top performing models.
+    
+    This sophisticated ensemble method:
+    1. Ranks models by composite performance score
+    2. Retrains top n models with optimal hyperparameters
+    3. Creates a soft-voting ensemble
+    4. Applies rule-based verification
+    
+    Args:
+        task: 'keto' or 'vegan'
+        res: Results from individual model evaluation
+        X_vec: Training feature matrix
+        clean: Normalized text for rule verification
+        X_gold: Test feature matrix
+        silver: Silver training data
+        gold: Gold test data
+        n: Number of models to include
+        use_saved_params: Whether to use saved hyperparameters
+        rule_weight: Weight for rule-based predictions (unused)
+        
+    Returns:
+        Dictionary with ensemble results and metadata
+    """
+    
+    import json
+    import os
+    from collections import defaultdict
+
+    ensemble_start = time.time()
+
+    log.info(f"\n🎯 BUILDING TOP-{n} ENSEMBLE for {task.upper()}")
+    log.info(f"   Target ensemble size: {n} models")
+    log.info(f"   Use saved parameters: {use_saved_params}")
+
+    # Load saved parameters if requested
+    saved_params = {}
+    if use_saved_params:
+        try:
+            with open("best_params.json") as f:
+                all_saved_params = json.load(f)
+                saved_params = all_saved_params.get(task, {})
+            log.info(f"   ✅ Loaded saved parameters for {len(saved_params)} models")
+            for model_name in saved_params:
+                log.info(f"      ├─ {model_name}: {saved_params[model_name]}")
+        except FileNotFoundError:
+            log.warning(f"   ⚠️  best_params.json not found, using default hyperparameters")
+        except Exception as e:
+            log.error(f"   ❌ Error loading parameters: {e}")
+
+    # Filter and rank available models
+    available_models = [r for r in res if r["task"] == task and r["model"] != "Rule"]
+
+    if not available_models:
+        log.error(f"   ❌ No models available for {task} ensemble")
+        raise ValueError(f"No models available for {task}")
+
+    if len(available_models) < n:
+        log.warning(f"   ⚠️  Only {len(available_models)} models available, requested {n}")
+        n = len(available_models)
+        log.info(f"   ├─ Adjusting ensemble size to {n}")
+
+    log.info(f"\n   📊 Model Selection Analysis:")
+    log.info(f"   ├─ Available models: {len(available_models)}")
+    log.info(f"   └─ Selection criteria: Combined metric scoring")
+
+    # Calculate composite scores
+    scored_models = []
+    for r in available_models:
+        composite_score = (r["PREC"] + r["REC"] + r["ROC"] + 
+                           r["PR"] + r["F1"] + r["ACC"])
+        scored_models.append((r, composite_score))
+
+    # Select top N models
+    top_models = sorted(scored_models, key=lambda x: x[1], reverse=True)[:n]
+
+    log.info(f"\n   🏆 Top {n} Model Rankings:")
+    for i, (model_res, score) in enumerate(top_models, 1):
+        log.info(f"   {i:2d}. {model_res['model']:>10} | "
+                 f"F1={model_res['F1']:.3f} | "
+                 f"Composite={score:.3f} | "
+                 f"ACC={model_res['ACC']:.3f}")
+
+    # Prepare models for ensemble
+    log.info(f"\n   🔧 Model Preparation Pipeline:")
+
+    estimators = []
+    preparation_times = {}
+    model_errors = []
+
+    # Progress bar for model preparation
+    prep_progress = tqdm(top_models, desc="   ├─ Preparing Models",
+                         position=0, leave=False,
+                         bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}]")
+
+    for model_res, composite_score in prep_progress:
+        name = model_res["model"]  # e.g., 'Softmax_TEXT'
+        base_key = name.split('_')[0]  # Extract base model name
+        prep_progress.set_description(f"   ├─ {name}")
+        model_start = time.time()
+
+        try:
+            log.info(f"      ├─ Processing {name} (F1={model_res['F1']:.3f})")
+
+            # Get base model and prepare
+            with tqdm(total=5, desc=f"         ├─ {name}", position=1, leave=False,
+                      bar_format="         ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as model_pbar:
+
+                model_pbar.set_description(f"         ├─ {name}: Loading")
+                base = build_models(task)[base_key]
+                model_pbar.update(1)
+
+                # Apply hyperparameters
+                model_pbar.set_description(f"         ├─ {name}: Configuring")
+                if use_saved_params and base_key in saved_params:
+                    base.set_params(**saved_params[base_key])
+                    log.info(f"         ├─ Applied saved parameters: {saved_params[base_key]}")
+                else:
+                    log.info(f"         ├─ Tuning hyperparameters...")
+                    base = tune(base_key, base, X_vec, silver[f"silver_{task}"])
+                model_pbar.update(1)
+
+                # Train model
+                model_pbar.set_description(f"         ├─ {name}: Training")
+                base.fit(X_vec, silver[f"silver_{task}"])
+                model_pbar.update(1)
+
+                # Evaluate individual performance
+                model_pbar.set_description(f"         ├─ {name}: Evaluating")
+                y_pred_i = base.predict(X_gold)
+                y_true = gold[f"label_{task}"].values
+
+                individual_f1 = f1_score(y_true, y_pred_i, zero_division=0)
+                individual_acc = accuracy_score(y_true, y_pred_i)
+
+                log.info(f"         ├─ Individual performance: F1={individual_f1:.3f}, ACC={individual_acc:.3f}")
+                model_pbar.update(1)
+
+                # Log false predictions
+                model_pbar.set_description(f"         ├─ {name}: Analyzing")
+                log_false_preds(task, gold.clean, y_true, y_pred_i, model_name=name)
+
+                # Ensure probability predictions
+                if not hasattr(base, "predict_proba"):
+                    log.info(f"         ├─ Adding probability calibration to {name}")
+                    base = CalibratedClassifierCV(base, cv=3, method='sigmoid')
+                    base.fit(X_vec, silver[f"silver_{task}"])
+
+                model_pbar.update(1)
+
+            # Record successful preparation
+            model_time = time.time() - model_start
+            preparation_times[name] = model_time
+            estimators.append((name, base))
+
+            log.info(f"      ✅ {name} prepared successfully in {model_time:.1f}s")
+
+            # Update progress
+            prep_progress.set_postfix({
+                'Success': len(estimators),
+                'Failed': len(model_errors),
+                'Current': f"{model_time:.1f}s"
+            })
+
+        except Exception as e:
+            model_time = time.time() - model_start
+            preparation_times[name] = model_time
+            error_msg = str(e)[:50] + "..." if len(str(e)) > 50 else str(e)
+            model_errors.append((name, error_msg))
+
+            log.error(f"      ❌ {name} failed after {model_time:.1f}s: {error_msg}")
+
+            if log.level <= logging.DEBUG:
+                import traceback
+                log.debug(f"Full traceback for {name}:\n{traceback.format_exc()}")
+
+    # Preparation summary
+    total_prep_time = sum(preparation_times.values())
+
+    log.info(f"\n   📋 Preparation Summary:")
+    log.info(f"   ├─ Successfully prepared: {len(estimators)}/{n}")
+    log.info(f"   ├─ Failed preparations: {len(model_errors)}")
+    log.info(f"   └─ Total preparation time: {total_prep_time:.1f}s")
+
+    if model_errors:
+        log.info(f"   ⚠️  Failed models:")
+        for name, error in model_errors:
+            log.info(f"      ├─ {name}: {error}")
+
+    if not estimators:
+        raise RuntimeError(f"No models successfully prepared for {task} ensemble")
+
+    # Adjust n to actual number
+    actual_n = len(estimators)
+    if actual_n != n:
+        log.info(f"   ├─ Adjusted ensemble size: {n} → {actual_n}")
+
+    # Create ensemble
+    log.info(f"\n   🤝 Ensemble Creation:")
+    log.info(f"   ├─ Method: Soft voting classifier")
+    log.info(f"   ├─ Models: {[name for name, _ in estimators]}")
+    log.info(f"   └─ Target: {task} classification")
+
+    ensemble_create_start = time.time()
+
+    try:
+        # Try soft voting ensemble
+        with tqdm(total=3, desc="   ├─ Ensemble Creation", position=0, leave=False,
+                  bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as ens_pbar:
+
+            ens_pbar.set_description("   ├─ Creating VotingClassifier")
+            ens = VotingClassifier(estimators, voting="soft", n_jobs=-1)
+            ens_pbar.update(1)
+
+            ens_pbar.set_description("   ├─ Training Ensemble")
+            ens.fit(X_vec, silver[f"silver_{task}"])
+            ens_pbar.update(1)
+
+            ens_pbar.set_description("   ├─ Generating Predictions")
+            # Use dynamic weighting for mixed feature types
+            prob = dynamic_ensemble(estimators, X_gold, gold, task=task)
+            ens_pbar.update(1)
+
+        ensemble_create_time = time.time() - ensemble_create_start
+        log.info(f"   ✅ Soft voting ensemble created in {ensemble_create_time:.1f}s")
+        ensemble_method = "Soft Voting"
+
+    except AttributeError as e:
+        # Fallback to manual averaging
+        log.warning(f"   ⚠️  Soft voting failed: {str(e)[:60]}...")
+        log.info(f"   ├─ Falling back to manual probability averaging")
+
+        prob_start = time.time()
+        probs = []
+        averaging_errors = []
+
+        with tqdm(estimators, desc="   ├─ Manual Averaging", position=0, leave=False,
+                  bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as avg_pbar:
+
+            for name, clf in avg_pbar:
+                avg_pbar.set_description(f"   ├─ Averaging {name}")
+                try:
+                    if hasattr(clf, "predict_proba"):
+                        model_probs = clf.predict_proba(X_gold)[:, 1]
+                        probs.append(model_probs)
+                        log.debug(f"      ├─ {name}: predict_proba successful")
+                    elif hasattr(clf, "decision_function"):
+                        scores = clf.decision_function(X_gold)
+                        model_probs = 1 / (1 + np.exp(-scores))  # Sigmoid
+                        probs.append(model_probs)
+                        log.debug(f"      ├─ {name}: decision_function + sigmoid")
+                    else:
+                        binary_preds = clf.predict(X_gold).astype(float)
+                        probs.append(binary_preds)
+                        log.warning(f"      ├─ {name}: using binary predictions (suboptimal)")
+
+                except Exception as pred_error:
+                    averaging_errors.append((name, str(pred_error)[:40]))
+                    log.error(f"      ├─ {name}: prediction failed - {str(pred_error)[:40]}...")
+
+        if not probs:
+            raise RuntimeError("All models failed to generate predictions for ensemble")
+
+        # Average probabilities
+        prob = np.mean(probs, axis=0)
+
+        prob_time = time.time() - prob_start
+        log.info(f"   ✅ Manual averaging completed in {prob_time:.1f}s")
+        log.info(f"      ├─ Successfully averaged: {len(probs)}/{len(estimators)} models")
+
+        if averaging_errors:
+            log.info(f"      ├─ Averaging errors:")
+            for name, error in averaging_errors:
+                log.info(f"      │  ├─ {name}: {error}")
+
+        ensemble_method = "Manual Averaging"
+
+    # Apply rule verification
+    log.info(f"\n   🔍 Rule-Based Verification:")
+    verification_start = time.time()
+
+    original_positives = (prob >= 0.5).sum()
+    prob_before_verification = prob.copy()
+
+    with tqdm(total=1, desc="   ├─ Applying Rules", position=0, leave=False,
+              bar_format="   ├─ {desc}: {percentage:3.0f}%|{bar}| [{elapsed}]") as verify_pbar:
+        prob = verify_with_rules(task, gold.clean, prob)
+        verify_pbar.update(1)
+
+    verification_time = time.time() - verification_start
+    final_positives = (prob >= 0.5).sum()
+    verification_changes = abs(final_positives - original_positives)
+
+    log.info(f"   ├─ Verification completed in {verification_time:.3f}s")
+    log.info(f"   ├─ Predictions before: {original_positives} positive")
+    log.info(f"   ├─ Predictions after: {final_positives} positive")
+    log.info(f"   └─ Rule changes: {verification_changes} predictions")
+
+    # Generate final predictions
+    y_pred = (prob >= 0.5).astype(int)
+    y_true = gold[f"label_{task}"].values
+
+    # Performance analysis
+    log.info(f"\n   📊 Ensemble Performance Analysis:")
+
+    ensemble_metrics = {
+        'accuracy': accuracy_score(y_true, y_pred),
+        'precision': precision_score(y_true, y_pred, zero_division=0),
+        'recall': recall_score(y_true, y_pred, zero_division=0),
+        'f1': f1_score(y_true, y_pred, zero_division=0),
+        'roc_auc': roc_auc_score(y_true, prob),
+        'pr_auc': average_precision_score(y_true, prob)
+    }
+
+    log.info(f"   ├─ Accuracy:  {ensemble_metrics['accuracy']:.3f}")
+    log.info(f"   ├─ Precision: {ensemble_metrics['precision']:.3f}")
+    log.info(f"   ├─ Recall:    {ensemble_metrics['recall']:.3f}")
+    log.info(f"   ├─ F1 Score:  {ensemble_metrics['f1']:.3f}")
+    log.info(f"   ├─ ROC AUC:   {ensemble_metrics['roc_auc']:.3f}")
+    log.info(f"   └─ PR AUC:    {ensemble_metrics['pr_auc']:.3f}")
+
+    # Compare with best individual
+    if len(estimators) > 1:
+        log.info(f"\n   📈 Ensemble vs Individual Comparison:")
+        best_individual = max(top_models, key=lambda x: x[0]['F1'])
+        best_individual_f1 = best_individual[0]['F1']
+        ensemble_improvement = ensemble_metrics['f1'] - best_individual_f1
+
+        log.info(f"   ├─ Best individual: {best_individual[0]['model']} (F1={best_individual_f1:.3f})")
+        log.info(f"   ├─ Ensemble F1: {ensemble_metrics['f1']:.3f}")
+        log.info(f"   └─ Improvement: {ensemble_improvement:+.3f} ({ensemble_improvement/best_individual_f1*100:+.1f}%)")
+
+    # Error analysis
+    log.info(f"\n   🔍 Error Analysis:")
+    log_false_preds(task, gold.clean, y_true, y_pred, model_name=f"EnsembleTop{actual_n}")
+
+    # Confidence analysis
+    confidence_high = (np.abs(prob - 0.5) > 0.3).sum()
+    confidence_medium = (np.abs(prob - 0.5) > 0.1).sum() - confidence_high
+    confidence_low = len(prob) - confidence_high - confidence_medium
+
+    log.info(f"   ├─ High confidence (>0.8 or <0.2): {confidence_high} ({confidence_high/len(prob)*100:.1f}%)")
+    log.info(f"   ├─ Medium confidence (0.6-0.8, 0.2-0.4): {confidence_medium} ({confidence_medium/len(prob)*100:.1f}%)")
+    log.info(f"   └─ Low confidence (0.4-0.6): {confidence_low} ({confidence_low/len(prob)*100:.1f}%)")
+
+    # Final summary
+    total_time = time.time() - ensemble_start
+
+    log.info(f"\n   🏁 ENSEMBLE COMPLETE:")
+    log.info(f"   ├─ Ensemble method: {ensemble_method}")
+    log.info(f"   ├─ Models used: {actual_n}/{n}")
+    log.info(f"   ├─ Final F1 score: {ensemble_metrics['f1']:.3f}")
+    log.info(f"   ├─ Rule changes: {verification_changes}")
+    log.info(f"   └─ Total time: {total_time:.1f}s")
+
+
+    if ensemble_method == "Soft Voting":
+        ensemble_model = ens  # The VotingClassifier
+    else:
+        # Create a custom ensemble wrapper for manual averaging
+        ensemble_model = EnsembleWrapper(
+                ensemble_type='averaging',
+                models={name: model for name, model in estimators},
+                weights=None,  # Equal weights for manual averaging
+                task=task
+            )
+
+    # Return results
+    return pack(y_true, prob) | {
+        "model": f"Ens{actual_n}",
+        "task": task,
+        "prob": prob,
+        "pred": y_pred,
+        "ensemble_model": ensemble_model, 
+        "ensemble_method": ensemble_method,
+        "models_used": [name for name, _ in estimators],
+        "preparation_times": preparation_times,
+        "verification_changes": verification_changes,
+        "total_time": total_time,
+        "confidence_distribution": {
+            "high": confidence_high,
+            "medium": confidence_medium,
+            "low": confidence_low
+        }
+    }
+
+
+def best_ensemble(
+    task,
+    res,
+    X_vec,
+    clean,
+    X_gold,
+    silver,
+    gold,
+    *,
+    weights=None,
+    image_res=None,
+    alphas=(0.25, 0.5, 0.75)
+):
+    """
+    Find optimal ensemble configuration through exhaustive search.
+    
+    This method tests different ensemble sizes and finds the best
+    performing configuration. When image results are provided, it
+    also performs smart blending between text and image models.
+    
+    Args:
+        task: Classification task
+        res: Text model results
+        X_vec: Training features
+        clean: Normalized text
+        X_gold: Test features
+        silver: Silver training data
+        gold: Gold test data
+        weights: Metric weights for optimization
+        image_res: Optional image model results
+        alphas: Blending weights to test for text+image
+        
+    Returns:
+        Best ensemble configuration with results
+    """
+    
+    from collections import Counter
+
+    ensemble_start = time.time()
+
+    # Handle text+image blending if image results provided
+    if image_res:
+        # Recursive call to get best text ensemble
+        text_best = best_ensemble(
+            task, res, X_vec, clean, X_gold, silver, gold,
+            weights=weights, image_res=None
+        )
+
+        # Get best image ensemble
+        img_pool = [r for r in image_res if r["task"] == task]
+        if not img_pool:
+            log.info(f"   ⏭️  No image models for {task}; using text ensemble only")
+            return text_best
+
+        image_best = best_ensemble(
+            task, img_pool, 
+            X_vec=None, clean=clean,
+            X_gold=None, silver=None,
+            gold=gold,
+            weights=weights,
+            image_res=None
+        )
+
+        # Build probability series
+        txt_prob = pd.Series(text_best["prob"], index=gold.index)
+        img_len = len(image_best["prob"])
+        img_idx = gold.index[:img_len]
+        img_prob = pd.Series(image_best["prob"], index=img_idx)
+
+        rows_img = img_idx
+        rows_txt = txt_prob.index.difference(rows_img)
+        y_true = gold[f"label_{task}"].values
+
+        # Grid search over alpha values
+        best_alpha, best_f1, best_prob = None, -1.0, None
+        for alpha_param in alphas:
+            blend = txt_prob.copy()
+            blend.loc[rows_img] = alpha_param * img_prob.loc[rows_img] + (1-alpha_param) * txt_prob.loc[rows_img]
+            f1 = f1_score(y_true, (blend.values >= .5).astype(int), zero_division=0)
+            if f1 > best_f1:
+                best_alpha, best_f1, best_prob = alpha_param, f1, blend.values
+
+        # Apply verification and return
+        best_prob = verify_with_rules(task, gold.clean, best_prob)
+        best_pred = (best_prob >= .5).astype(int)
+
+        # CREATE THE ENSEMBLE MODEL HERE - THIS WAS MISSING!
+        # Extract the actual model objects from the best results
+        text_model_name = text_best['model'].split('_')[0] if 'Ens' not in text_best['model'] else None
+        image_model_name = image_best['model'].split('_')[0] if 'Ens' not in image_best['model'] else None
+        
+        # Create the ensemble wrapper
+        ensemble_model = EnsembleWrapper(
+            ensemble_type='smart_ensemble',
+            models={
+                'text_ensemble': text_best.get('ensemble_model'),  # Could be an ensemble itself
+                'image_ensemble': image_best.get('ensemble_model'),  # Could be an ensemble itself
+                'text_model': BEST.get(text_model_name) if text_model_name else None,
+                'image_model': BEST.get(image_model_name) if image_model_name else None,
+            },
+            alpha=best_alpha,
+            task=task
+        )
+
+        return pack(y_true, best_prob) | {
+            "model": f"SmartEns(Text={text_best['model']},Img={image_best['model']},alpha={best_alpha})",
+            "task": task,
+            "prob": best_prob,
+            "pred": best_pred,
+            "ensemble_model": ensemble_model,  # NOW THIS VARIABLE EXISTS
+            "alpha": best_alpha,
+            "rows_image": len(rows_img),
+            "rows_text_only": len(rows_txt),
+            "text_model": text_best["model"],
+            "image_model": image_best["model"],
+        }
+
+    # Extract available models
+    model_names = [r["model"] for r in res if r["task"] == task and r["model"] != "Rule"]
+    unique_models = list(set(model_names))
+    max_n = len(unique_models)
+
+    log.info(f"\n🎯 ENSEMBLE OPTIMIZATION for {task.upper()}")
+    log.info(f"   Available models: {unique_models}")
+    log.info(f"   Maximum ensemble size: {max_n}")
+
+    # Handle edge cases
+    if max_n == 0:
+        log.warning(f"   ❌ No models available for {task} ensemble")
+        return None
+
+    if max_n == 1:
+        single_model = [r for r in res if r["task"] == task and r["model"] != "Rule"][0]
+        log.info(f"   ⚠️  Only one model available: {single_model['model']}")
+        log.info(f"   └─ F1={single_model['F1']:.3f}, skipping ensemble optimization")
+        return single_model
+
+    # Configure weights
+    if weights is None:
+        weights = {
+            'F1': 1/6, 'PREC': 1/6, 'REC': 1/6,
+            'ROC': 1/6, 'PR': 1/6, 'ACC': 1/6
+        }
+        log.info(f"   🎛️  Using default equal weighting for all metrics")
+    else:
+        log.info(f"   🎛️  Using custom metric weights")
+
+    # Validate weights
+    weight_sum = sum(weights.values())
+    if abs(weight_sum - 1.0) > 1e-6:
+        log.warning(f"   ⚠️  Weights sum to {weight_sum:.3f}, normalizing to 1.0")
+        weights = {k: v/weight_sum for k, v in weights.items()}
+
+    log.info(f"   ├─ Weights: {', '.join([f'{k}={v:.3f}' for k, v in weights.items()])}")
+
+    # Show individual model performance
+    individual_models = [r for r in res if r["task"] == task and r["model"] != "Rule"]
+
+    log.info(f"\n   📊 Individual Model Performance:")
+    for model_res in sorted(individual_models, key=lambda x: x['F1'], reverse=True):
+        composite = sum(weights.get(metric, 0) * model_res.get(metric, 0)
+                        for metric in weights.keys())
+        log.info(f"   ├─ {model_res['model']:>8}: F1={model_res['F1']:.3f} | "
+                 f"Composite={composite:.3f} | ACC={model_res['ACC']:.3f}")
+
+    # Check if we have feature matrices for retraining
+    if X_vec is None or X_gold is None or silver is None or gold is None:
+        log.info(f" ℹ️  No feature matrices supplied for '{task}' – "
+                 f"returning best existing model without re-fitting.")
+        best_existing = max(
+            (r for r in res if r['task'] == task and r['model'] != 'Rule'),
+            key=lambda r: r['F1']
+        )
+        return best_existing
+
+    # Test different ensemble sizes
+    log.info(f"\n   🔬 Testing ensemble sizes 1 to {max_n}...")
+
+    best_score = -1
+    best_result = None
+    ensemble_results = []
+
+    # Progress bar for ensemble optimization
+    size_progress = tqdm(range(1, max_n + 1),
+                         desc=f"   ├─ Ensemble Optimization ({task})",
+                         position=0, leave=False,
+                         bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}]")
+
+    for n in size_progress:
+        size_start = time.time()
+        size_progress.set_description(f"   ├─ Testing n={n} ({task})")
+
+        try:
+            # Create ensemble
+            with tqdm(total=3, desc=f"      ├─ n={n}", position=1, leave=False,
+                      bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as ensemble_pbar:
+
+                # Step 1: Model selection and training
+                ensemble_pbar.set_description(f"      ├─ n={n}: Selecting")
+                result = top_n(task, res, X_vec, clean, X_gold, silver, gold, n=n)
+                ensemble_pbar.update(1)
+
+                # Step 2: Metric calculation
+                ensemble_pbar.set_description(f"      ├─ n={n}: Evaluating")
+                composite_score = sum(
+                    weights.get(metric, 0) * result.get(metric, 0)
+                    for metric in weights.keys()
+                )
+                ensemble_pbar.update(1)
+
+                # Step 3: Result recording
+                ensemble_pbar.set_description(f"      ├─ n={n}: Recording")
+                result['composite_score'] = composite_score
+                result['ensemble_size'] = n
+                result['optimization_time'] = time.time() - size_start
+                ensemble_results.append(result)
+                ensemble_pbar.update(1)
+
+            # Log results
+            log.info(f"      ✅ n={n}: F1={result['F1']:.3f} | "
+                     f"Composite={composite_score:.3f} | "
+                     f"ACC={result['ACC']:.3f} | "
+                     f"Time={result['optimization_time']:.1f}s")
+
+            # Track best
+            if composite_score > best_score:
+                best_score = composite_score
+                best_result = result
+                log.info(f"      🏆 New best ensemble: n={n} (Composite={best_score:.3f})")
+
+                # Update progress
+                size_progress.set_postfix({
+                    'Best_n': n,
+                    'Best_F1': f"{result['F1']:.3f}",
+                    'Best_Comp': f"{composite_score:.3f}"
+                })
+
+        except Exception as e:
+            ensemble_time = time.time() - size_start
+            log.error(f"      ❌ n={n}: FAILED after {ensemble_time:.1f}s")
+            log.error(f"      └─ Error: {str(e)[:60]}...")
+
+            if log.level <= logging.DEBUG:
+                import traceback
+                log.debug(f"Full traceback for ensemble n={n}:\n{traceback.format_exc()}")
+
+    # Final summary
+    total_time = time.time() - ensemble_start
+
+    if best_result:
+        log.info(f"\n   🏆 ENSEMBLE OPTIMIZATION COMPLETE:")
+        log.info(f"   ├─ Best Size: n={best_result['ensemble_size']}")
+        log.info(f"   ├─ Best Model: {best_result['model']}")
+        log.info(f"   ├─ Composite Score: {best_score:.3f}")
+        log.info(f"   ├─ F1 Score: {best_result['F1']:.3f}")
+        log.info(f"   ├─ Accuracy: {best_result['ACC']:.3f}")
+        log.info(f"   └─ Total Time: {total_time:.1f}s")
+
+        # Performance improvement
+        if len(individual_models) > 0:
+            best_individual = max(individual_models, key=lambda x: x['F1'])
+            f1_improvement = best_result['F1'] - best_individual['F1']
+            log.info(f"\n   📈 Performance Improvement:")
+            log.info(f"   ├─ Best Individual: {best_individual['model']} (F1={best_individual['F1']:.3f})")
+            log.info(f"   ├─ Best Ensemble: {best_result['model']} (F1={best_result['F1']:.3f})")
+            log.info(f"   └─ F1 Improvement: {f1_improvement:+.3f} ({f1_improvement/best_individual['F1']*100:+.1f}%)")
+
+        # Ensemble composition
+        if 'Ens' in best_result['model']:
+            ensemble_size = int(best_result['model'][-1])
+            log.info(f"\n   🔧 Ensemble Composition (Top {ensemble_size}):")
+            top_models = sorted(individual_models, key=lambda x: x['F1'], reverse=True)[:ensemble_size]
+            for i, model_res in enumerate(top_models, 1):
+                log.info(f"   ├─ {i}. {model_res['model']:>8} (F1={model_res['F1']:.3f})")
+
+    else:
+        log.error(f"\n   ❌ ENSEMBLE OPTIMIZATION FAILED:")
+        log.error(f"   ├─ No valid ensembles found")
+        log.error(f"   ├─ Available models: {len(unique_models)}")
+        log.error(f"   └─ Total Time: {total_time:.1f}s")
+
+        # Fallback
+        if individual_models:
+            best_individual = max(individual_models, key=lambda x: x['F1'])
+            log.info(f"   🛡️  Falling back to best individual model:")
+            log.info(f"   └─ {best_individual['model']} (F1={best_individual['F1']:.3f})")
+            return best_individual
+
+    # Performance summary table
+    if ensemble_results:
+        log.info(f"\n   📊 Ensemble Size Performance Summary:")
+        log.info(f"   ┌─────┬──────────┬─────────┬─────────┬───────────┬──────────┐")
+        log.info(f"   │  n  │   F1     │   ACC   │  PREC   │    REC    │   COMP   │")
+        log.info(f"   ├─────┼──────────┼─────────┼─────────┼───────────┼──────────┤")
+
+        for result in sorted(ensemble_results, key=lambda x: x['ensemble_size']):
+            n = result['ensemble_size']
+            marker = " 🏆" if result == best_result else "   "
+            log.info(f"   │ {n:2d}{marker} │ {result['F1']:6.3f}   │ {result['ACC']:5.3f}   │ "
+                     f"{result['PREC']:5.3f}   │ {result['REC']:7.3f}   │ {result['composite_score']:6.3f}   │")
+
+        log.info(f"   └─────┴──────────┴─────────┴─────────┴───────────┴──────────┘")
+
+    # IMPORTANT: For non-image case, best_result should already have ensemble_model from top_n
+    # But we need to ensure it's passed through
+    return best_result
 
 # =============================================================================
 # MAIN PIPELINE ORCHESTRATION
@@ -5405,15 +6239,15 @@ def run_full_pipeline(mode: str = "both",
                             best_alpha = alpha
                             best_ensemble_result = result
 
-                        log.info(f"         ├─ α={alpha}: F1={result['F1']:.3f}, "
+                        log.info(f"         ├─ alpha_param={alpha}: F1={result['F1']:.3f}, "
                                  f"Text={result['text_model']}, Image={result['image_model']}")
 
                     if best_ensemble_result:
                         # Update model name to reflect optimal alpha
-                        best_ensemble_result['model'] = f"BestTwo_α{best_alpha}"
+                        best_ensemble_result['model'] = f"BestTwo_alpha_param{best_alpha}"
                         ensemble_results.append(best_ensemble_result)
                         log.info(
-                            f"      ✅ {task} best ensemble: α={best_alpha}, F1={best_f1:.3f}")
+                            f"      ✅ {task} best ensemble: alpha_param={best_alpha}, F1={best_f1:.3f}")
 
                 except Exception as e:
                     log.error(
@@ -5833,16 +6667,20 @@ def main():
                         task_res = [r for r in res if r['task'] == task]
                         if task_res:
                             best = max(task_res, key=lambda x: x['F1'])
-                            model_name = best['model']
-                            base_name = model_name.split('_')[0]
-
-                            if base_name in BEST:
-                                best_models[task] = BEST[base_name]
-                                log.info(f"✅ Saved {task} model: {base_name}")
+                            
+                            # Check for ensemble model
+                            if 'ensemble_model' in best and best['ensemble_model'] is not None:
+                                best_models[task] = best['ensemble_model']
+                                log.info(f"✅ Saved {task} ensemble: {best['model']} (F1={best['F1']:.3f})")
+                                log.info(f"   └─ Ensemble type: {best['ensemble_model'].ensemble_type}")
+                                log.info(f"   └─ Component models: {len(best['ensemble_model'].models)}")
                             else:
-                                log.warning(
-                                    f"⚠️  Could not find model {base_name} in BEST dict")
-
+                                # Fallback to single model
+                                model_name = best['model']
+                                base_name = model_name.split('_')[0]
+                                if base_name in BEST:
+                                    best_models[task] = BEST[base_name]
+                                    log.info(f"✅ Saved {task} single model: {base_name} (F1={best['F1']:.3f})")
                     if best_models:
                         with open(CFG.artifacts_dir / "models.pkl", 'wb') as f:
                             pickle.dump(best_models, f)
