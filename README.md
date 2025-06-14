@@ -188,233 +188,268 @@ silver_txt.to_csv("artifacts/silver_extended.csv", index=False)
 
 ---
 
-## 🎯 Advanced Ensemble Architecture
+# 🤖 Sophisticated Ensemble Methods in Diet Classifier Pipeline
 
-### Hierarchical Ensemble Pipeline
+This diet classification pipeline implements several advanced ensemble techniques that progressively combine models to achieve optimal performance. Let me break down the ensemble architecture in detail.
 
-The system implements a sophisticated 4-level hierarchical ensemble architecture that progressively combines models for optimal performance. Here's how the levels work conceptually and how they're actually implemented in the pipeline:
+## 📊 Overview of Ensemble Hierarchy
+
+The pipeline implements a multi-level ensemble strategy:
+
+1. **🎯 Individual Model Training** (text, image, or combined features)
+2. **🏢 Domain-Specific Ensembles** (best models within each feature type)
+3. **🔀 Cross-Domain Ensembles** (blending text and image models)
+4. **🧠 Smart Recursive Ensembles** (ensembles of ensembles)
+
+## 1️⃣ The EnsembleWrapper Class
+
+The foundation of the ensemble system is the `EnsembleWrapper` class, which provides a unified interface for different ensemble types:
 
 ```python
-# Conceptual Architecture (available functions):
-# Level 1: Individual Model Training (run_mode_A)
-# Level 2: Domain-Specific Ensembles (top_n) - called within best_ensemble
-# Level 3: Cross-Domain Blending (best_two_domains)
-# Level 4: Global Optimization (best_ensemble)
+class EnsembleWrapper(BaseEstimator, ClassifierMixin):
+    """Comprehensive wrapper for all ensemble types with dynamic weighting."""
 
-# Actual Pipeline Implementation:
-# Stage 4: Training & Initial Ensembles
-res_text = run_mode_A(...)  # Level 1
-res_img = run_mode_A(...)   # Level 1
-res_combined = run_mode_A(..., domain="both")  # Level 1
-best_two_domains(...) with alpha optimization  # Level 3
-
-# Stage 5: Advanced Ensemble Optimization
-best_ensemble(...)  # Level 4 (internally calls Level 2 top_n)
-best_ensemble(..., image_res=res_img)  # Level 4 with cross-domain
+    def __init__(self, ensemble_type, models, weights=None, alpha=None, task=None):
+        self.ensemble_type = ensemble_type
+        self.models = models
+        self.weights = weights
+        self.alpha = alpha
+        self.task = task
 ```
 
-### Implementation Details
+This wrapper supports four ensemble types:
+- `'voting'` 🗳️: Soft voting across multiple models
+- `'averaging'` ➗: Simple average of predictions
+- `'best_two'` 🤝: Alpha-blended combination of text and image models
+- `'smart_ensemble'` 🔄: Recursive ensemble of ensembles
 
-#### **Level 1: Individual Model Training (`run_mode_A`)**
-The pipeline trains diverse models across three domains:
+## 2️⃣ Top-N Ensemble (`top_n` function)
 
-1. **Text Models** (when `mode` in {"text", "both"}):
-   - Trained on TF-IDF features from text data
-   - Uses SMOTE for class imbalance handling
-   - Models: Logistic Regression, SGD, Ridge, Passive-Aggressive, etc.
+The most sophisticated single-level ensemble is the Top-N ensemble, which:
 
-2. **Image Models** (when `mode` in {"image", "both"}):
-   - Trained on pre-extracted image features (4096-dim)
-   - No SMOTE (images already balanced)
-   - Models: MLP, Random Forest, LightGBM, etc.
-
-3. **Combined Models** (when `mode` == "both"):
-   - Concatenates text and image features
-   - Trains on samples with both modalities
-   - Uses SMOTE for balance
+### 📈 Step 1: Model Selection and Ranking
 
 ```python
-# Actual code from run_full_pipeline Stage 4:
-# IMAGE MODELS
-if mode in {"image", "both"} and img_silver and img_silver.size > 0:
-    res_img = run_mode_A(X_img_silver, img_gold_df.clean, X_img_gold,
-                         img_silver_df, img_gold_df, domain="image", apply_smote=False)
-    results.extend(res_img)
-
-# TEXT MODELS
-if mode in {"text", "both"}:
-    res_text = run_mode_A(X_text_silver, gold.clean, X_text_gold,
-                          silver_txt, gold, domain="text", apply_smote=True)
-    results.extend(res_text)
-
-# COMBINED MODELS (both text and image features)
-if mode == "both" and img_silver and img_silver.size > 0:
-    res_combined = run_mode_A(X_silver, gold_eval.clean, X_gold,
-                              silver_eval, gold_eval, domain="both", apply_smote=True)
-    results.extend(res_combined)
-```
-
-#### **Level 2: Domain-Specific Ensembles (`top_n`)**
-
-The `top_n` function creates optimized ensembles within each domain. While not called directly in the pipeline, it's used internally by `best_ensemble`:
-
-1. **Model Selection**:
-   - Ranks models by composite score (sum of 6 metrics)
-   - Selects top n models for ensemble
-
-2. **Model Preparation**:
-   - Reloads base models with `build_models()`
-   - Applies hyperparameter tuning or uses saved parameters
-   - Retrains on full training data
-   - Ensures probability predictions (adds calibration if needed)
-
-3. **Ensemble Creation**:
-   - Attempts soft voting with `VotingClassifier`
-   - Falls back to manual probability averaging if needed
-   - Uses `dynamic_ensemble()` for intelligent weighting
-
-4. **Post-Processing**:
-   - Applies rule-based verification
-   - Logs detailed performance metrics
-
-```python
-# Called internally by best_ensemble:
-# Select top models
+# Calculate composite scores
 scored_models = []
 for r in available_models:
     composite_score = (r["PREC"] + r["REC"] + r["ROC"] + 
                        r["PR"] + r["F1"] + r["ACC"])
     scored_models.append((r, composite_score))
+
+# Select top N models
 top_models = sorted(scored_models, key=lambda x: x[1], reverse=True)[:n]
-
-# Create ensemble with dynamic weighting
-prob = dynamic_ensemble(estimators, X_gold, gold, task=task)
 ```
 
-#### **Level 3: Cross-Domain Blending (`best_two_domains`)**
+Models are ranked by a composite score considering all performance metrics.
 
-Used in Stage 4 to combine text and image models with optimized alpha blending:
+### 🔧 Step 2: Model Retraining with Optimal Hyperparameters
 
 ```python
-# Actual implementation in pipeline Stage 4:
-# Test different alpha values for optimal blending
-alpha_values = [0.25, 0.5, 0.75]
+# Apply hyperparameters
+if use_saved_params and base_key in saved_params:
+    base.set_params(**saved_params[base_key])
+    log.info(f"Applied saved parameters: {saved_params[base_key]}")
+else:
+    log.info(f"Tuning hyperparameters...")
+    base = tune(base_key, base, X_vec, silver[f"silver_{task}"])
+```
 
-for task in ("keto", "vegan"):
-    best_ensemble_result = None
-    best_f1 = -1
-    best_alpha = None
+Each selected model is retrained with either saved optimal parameters or freshly tuned hyperparameters.
+
+### 🗳️ Step 3: Soft Voting Ensemble Creation
+
+```python
+try:
+    # Try soft voting ensemble
+    ens = VotingClassifier(estimators, voting="soft", n_jobs=-1)
+    ens.fit(X_vec, silver[f"silver_{task}"])
     
-    for alpha in alpha_values:
-        result = best_two_domains(
-            task=task,
-            text_results=res_text,
-            image_results=res_img,
-            gold_df=img_gold_df,  # Use image gold df as it has the common indices
-            alpha=alpha
-        )
-        
-        if result and result['F1'] > best_f1:
-            best_f1 = result['F1']
-            best_alpha = alpha
-            best_ensemble_result = result
+    # Use dynamic weighting for mixed feature types
+    prob = dynamic_ensemble(estimators, X_gold, gold, task=task)
 ```
 
-The function implements smart blending:
-- Finds best single model from each domain
-- Tests multiple alpha values (0.25, 0.5, 0.75)
-- Only blends for samples with both modalities
-- Applies rule verification
+The ensemble uses soft voting (probability averaging) rather than hard voting for better performance.
 
-#### **Level 4: Global Optimization (`best_ensemble`)**
+## 3️⃣ Dynamic Weighting for Mixed Features
 
-The most sophisticated ensemble method, used in Stage 5 in two ways:
-
-**1. Standard Ensemble Optimization** (for each domain):
-```python
-# From Stage 5 - finds optimal ensemble size within domain
-best_ens = best_ensemble(task, results, ens_X_silver, gold.clean,
-                         ens_X_gold, ens_silver_eval, gold)
-```
-
-**2. Cross-Domain Smart Blending** (when mode=="both"):
-```python
-# From Stage 5 - sophisticated text+image blending
-cross_result = best_ensemble(
-    task=task,
-    res=res_text,  # Text results as primary
-    X_vec=X_text_silver,
-    clean=gold.clean,
-    X_gold=X_text_gold,
-    silver=silver_txt,
-    gold=gold,
-    image_res=res_img,  # This enables smart text+image blending
-    alphas=(0.25, 0.5, 0.75)  # Alpha values for blending optimization
-)
-```
-
-Key features:
-- **Exhaustive Size Search**: Tests ensemble sizes from 1 to max available models
-- **Smart Text+Image Handling**: When `image_res` provided, recursively optimizes both domains
-- **Composite Scoring**: Uses weighted average of 6 metrics for optimization
-- **Dynamic Feature Selection**: Uses appropriate features based on mode
-
-### Dynamic Weighting Strategy
-
-The `dynamic_ensemble` function (used within `top_n`) implements per-row adaptive weighting:
+The `dynamic_ensemble` function implements intelligent weighting based on feature availability:
 
 ```python
-def dynamic_ensemble(estimators, X_gold, gold, task):
+def dynamic_ensemble(estimators, X_gold, gold, task: str):
     # Detect text-only rows (no image available)
     text_only_mask = gold.get("has_image", np.ones(len(X_gold), dtype=bool)) == False
     
-    # Zero out image model weights for text-only rows
+    # Compute dynamic weights
+    weights = []
     for i, (name, _) in enumerate(estimators):
         is_image_model = "IMAGE" in name.upper()
         row_weights = np.ones(len(X_gold))
         if is_image_model:
+            # Suppress image models for text-only rows
             row_weights[text_only_mask] = 0
         weights.append(row_weights)
     
-    # Normalize and compute weighted average
-    normalized_weights = weights / weights.sum(axis=0)
+    # Normalize weights and compute final probabilities
+    weights = np.array(weights)
+    weights_sum = weights.sum(axis=0)
+    normalized_weights = weights / weights_sum
     final_probs = (normalized_weights * probs).sum(axis=0)
 ```
 
-### Actual Execution Flow in Pipeline
+This ensures image models don't vote on samples without images, preventing degraded performance.
 
-The pipeline executes the hierarchical architecture across two main stages:
+## 4️⃣ Cross-Domain Alpha Blending (`best_two_domains`)
 
-#### **Stage 4: Model Training & Initial Ensembles**
+For combining text and image models, the pipeline uses alpha blending:
+
 ```python
-# 1. Train individual models (Level 1)
-if mode in {"image", "both"}: 
-    res_img = run_mode_A(..., domain="image")
-if mode in {"text", "both"}: 
-    res_text = run_mode_A(..., domain="text")
-
-# 2. Train combined models for "both" mode (Level 1)
-if mode == "both": 
-    res_combined = run_mode_A(..., domain="both")
-
-# 3. Create text+image ensemble with alpha optimization (Level 3)
-if mode == "both" and len(res_text) > 0 and len(res_img) > 0:
-    for alpha in [0.25, 0.5, 0.75]:
-        result = best_two_domains(task, res_text, res_img, img_gold_df, alpha)
+def best_two_domains(task, text_results, image_results, gold_df, alpha=0.5):
+    # Find best models from each domain
+    best_text = max((r for r in text_results if r["task"] == task), 
+                    key=lambda r: r["F1"])
+    best_img = max((r for r in image_results if r["task"] == task), 
+                   key=lambda r: r["F1"], default=None)
+    
+    # Weighted average for rows with images
+    final_prob = txt_prob.copy()
+    final_prob.loc[rows_with_img] = (
+        alpha * img_prob.loc[rows_with_img] + 
+        (1 - alpha) * txt_prob.loc[rows_with_img]
+    )
 ```
 
-#### **Stage 5: Advanced Ensemble Optimization**
-```python
-# 1. Standard ensemble optimization (Level 4, internally uses Level 2)
-for task in ["keto", "vegan"]:
-    best_ens = best_ensemble(task, results, X_silver, gold.clean,
-                             X_gold, silver_eval, gold)
+The alpha parameter (0-1) controls the balance between text and image predictions.
 
-# 2. Cross-domain optimization for "both" mode (Level 4 with image_res)
-if mode == "both" and 'res_text' in locals() and 'res_img' in locals():
-    cross_result = best_ensemble(task, res=res_text, ..., 
-                                 image_res=res_img, alphas=(0.25, 0.5, 0.75))
+## 5️⃣ Recursive Smart Ensemble (`best_ensemble`)
+
+The most sophisticated ensemble method recursively creates ensembles of ensembles:
+
+```python
+def best_ensemble(task, res, X_vec, clean, X_gold, silver, gold, 
+                  weights=None, image_res=None, alphas=(0.25, 0.5, 0.75)):
+    
+    # Handle text+image blending if image results provided
+    if image_res:
+        # Recursive call to get best text ensemble
+        text_best = best_ensemble(task, res, X_vec, clean, X_gold, silver, gold,
+                                  weights=weights, image_res=None)
+        
+        # Get best image ensemble
+        image_best = best_ensemble(task, img_pool, X_vec=None, clean=clean,
+                                   X_gold=None, silver=None, gold=gold,
+                                   weights=weights, image_res=None)
+        
+        # Grid search over alpha values
+        best_alpha, best_f1, best_prob = None, -1.0, None
+        for alpha_param in alphas:
+            blend = txt_prob.copy()
+            blend.loc[rows_img] = (alpha_param * img_prob.loc[rows_img] + 
+                                   (1-alpha_param) * txt_prob.loc[rows_img])
+            f1 = f1_score(y_true, (blend.values >= .5).astype(int), zero_division=0)
+            if f1 > best_f1:
+                best_alpha, best_f1, best_prob = alpha_param, f1, blend.values
 ```
+
+This creates:
+1. ✅ Best ensemble of text models
+2. ✅ Best ensemble of image models
+3. ✅ Optimal alpha-blended combination of both ensembles
+
+## 6️⃣ Ensemble Size Optimization
+
+The pipeline automatically tests different ensemble sizes to find the optimal configuration:
+
+```python
+# Test different ensemble sizes
+for n in range(1, max_n + 1):
+    result = top_n(task, res, X_vec, clean, X_gold, silver, gold, n=n)
+    
+    # Calculate weighted composite score
+    composite_score = sum(
+        weights.get(metric, 0) * result.get(metric, 0)
+        for metric in weights.keys()
+    )
+    
+    # Track best configuration
+    if composite_score > best_score:
+        best_score = composite_score
+        best_result = result
+```
+
+## 7️⃣ Rule-Based Verification Layer
+
+All ensemble predictions pass through a verification layer that ensures domain rules are respected:
+
+```python
+def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarray:
+    adjusted = prob.copy()
+    
+    if task == "keto":
+        # Regex-based whitelist/blacklist
+        is_whitelisted = clean.str.contains(RX_WL_KETO)
+        is_blacklisted = clean.str.contains(RX_KETO)
+        forced_non_keto = is_blacklisted & ~is_whitelisted
+        adjusted[forced_non_keto.values] = 0.0
+```
+
+This ensures that hard rules (like "rice is never keto") always override ML predictions.
+
+## 8️⃣ Fallback Strategies
+
+The ensemble system includes multiple fallback strategies:
+
+```python
+# Fallback to manual averaging if soft voting fails
+except AttributeError as e:
+    log.warning(f"Soft voting failed: {str(e)[:60]}...")
+    log.info(f"Falling back to manual probability averaging")
+    
+    probs = []
+    for name, clf in estimators:
+        if hasattr(clf, "predict_proba"):
+            model_probs = clf.predict_proba(X_gold)[:, 1]
+            probs.append(model_probs)
+        elif hasattr(clf, "decision_function"):
+            scores = clf.decision_function(X_gold)
+            model_probs = 1 / (1 + np.exp(-scores))  # Sigmoid
+            probs.append(model_probs)
+    
+    prob = np.mean(probs, axis=0)
+```
+
+## 🏆 Performance Benefits
+
+The sophisticated ensemble approach provides several benefits:
+
+1. **🛡️ Robustness**: Multiple models reduce overfitting to specific patterns
+2. **🎭 Feature Complementarity**: Text captures ingredient names, images capture visual cues
+3. **⚖️ Adaptive Weighting**: Dynamic weights handle missing modalities gracefully
+4. **📚 Domain Knowledge Integration**: Rule verification ensures sensible predictions
+5. **🎯 Optimal Configuration**: Automatic selection of best ensemble size and alpha values
+
+## 💡 Example Ensemble Configuration
+
+A typical final ensemble might look like:
+
+```
+SmartEns(
+    Text=Ens3(Softmax_TEXT, SGD_TEXT, Ridge_TEXT),
+    Img=Ens2(MLP_IMAGE, RF_IMAGE),
+    alpha=0.75
+)
+```
+
+This represents:
+- 📝 A 3-model ensemble for text features
+- 🖼️ A 2-model ensemble for image features  
+- 🎚️ 75% weight on image predictions where available
+- 🔄 Automatic fallback to text-only for samples without images
+- ✅ Rule-based verification applied to final predictions
+
+The recursive nature and multiple optimization levels make this one of the most sophisticated ensemble implementations, achieving significant performance improvements over individual models.
+
+--- 
 
 ### Advanced Training Pipeline Features
 
