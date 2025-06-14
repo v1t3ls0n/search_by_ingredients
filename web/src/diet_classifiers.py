@@ -5279,11 +5279,11 @@ def run_full_pipeline(mode: str = "both",
     log.info("\n🤖 STAGE 4: MODEL TRAINING")
 
     training_subtasks = []
-    if mode in {"image", "both"} and img_silver and img_silver.size > 0:
+    if mode in {"image", "both"} and img_silver is not None and img_silver.size > 0:
         training_subtasks.append("Image Models")
     if mode in {"text", "both"}:
         training_subtasks.append("Text Models")
-    if mode == "both" and img_silver and img_silver.size > 0:
+    if mode == "both" and img_silver is not None and img_silver.size > 0:
         training_subtasks.append("Text+Image Ensemble")
         training_subtasks.append("Final Combined")
 
@@ -5484,13 +5484,13 @@ def run_full_pipeline(mode: str = "both",
             train_pbar.update(1)
 
         # Setup feature matrices for ensemble creation
-        if mode == "both" and img_silver and img_silver.size > 0:
+        if mode == "both" and img_silver is not None and img_silver.size > 0:
             X_silver, X_gold = X_silver, X_gold
             silver_eval = silver_eval
         elif mode == "text":
             X_silver, X_gold = X_text_silver, X_text_gold
             silver_eval = silver_txt
-        elif mode == "image" and img_silver and img_silver.size > 0:
+        elif mode == "image" and img_silver is not None and img_silver.size > 0:
             X_silver, X_gold = csr_matrix(img_silver), csr_matrix(img_gold)
             silver_eval = img_silver_df
         else:
@@ -5540,11 +5540,11 @@ def run_full_pipeline(mode: str = "both",
 
                 if len(task_models) > 1:
                     # Use appropriate features
-                    if mode == "both" and img_silver and img_silver.size > 0:
+                    if mode == "both" and img_silver is not None and img_silver.size > 0:
                         ens_X_silver = X_silver
                         ens_X_gold = X_gold
                         ens_silver_eval = silver_eval
-                    elif mode == "image" and img_silver and img_silver.size > 0:
+                    elif mode == "image" and img_silver is not None and img_silver.size > 0:
                         ens_X_silver = csr_matrix(img_silver)
                         ens_X_gold = csr_matrix(img_gold)
                         ens_silver_eval = img_silver_df
