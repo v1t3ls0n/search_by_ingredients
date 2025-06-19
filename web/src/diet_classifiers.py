@@ -281,27 +281,77 @@ CFG = Config()
 """
 Direct write logging that bypasses buffering issues entirely.
 """
-# Make sure artifacts dir exists
-CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
 
-# Generate unique log filename with timestamp
-
-# Create timestamp and unique ID for this run
-run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-run_uuid = str(uuid.uuid4())[:8]  # First 8 chars of UUID for brevity
-log_filename = f"{run_timestamp}_{run_uuid}_pipeline.log"
-log_file = CFG.artifacts_dir / log_filename
-
-# Also create a symlink to latest log for convenience
-latest_log_link = CFG.artifacts_dir / "latest_pipeline.log"
-if latest_log_link.exists():
-    try:
-        latest_log_link.unlink()
-    except Exception:
-        pass
+# Global variables to ensure single log file per run
+_LOG_INITIALIZED = False
+_LOG_FILE = None
 
 # Thread lock for file writing
 file_lock = threading.Lock()
+
+
+def setup_logging():
+    """Set up logging with unique filename - called only once per run"""
+    global _LOG_INITIALIZED, _LOG_FILE
+
+    # If already initialized, return existing logger
+    if _LOG_INITIALIZED:
+        return logging.getLogger("PIPE")
+
+    # Make sure artifacts dir exists
+    CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    # Generate unique log filename with timestamp - ONLY ONCE
+    import uuid
+    from datetime import datetime
+
+    run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_uuid = str(uuid.uuid4())[:8]
+    log_filename = f"{run_timestamp}_{run_uuid}_pipeline.log"
+    _LOG_FILE = CFG.artifacts_dir / log_filename
+
+    # Also create a symlink to latest log for convenience
+    latest_log_link = CFG.artifacts_dir / "latest_pipeline.log"
+    if latest_log_link.exists():
+        try:
+            latest_log_link.unlink()
+        except Exception:
+            pass
+
+    # Set up logger
+    log = logging.getLogger("PIPE")
+    log.setLevel(logging.INFO)
+    log.handlers.clear()  # Clear any existing handlers
+
+    # Define formatter
+    formatter = logging.Formatter(
+        "%(asctime)s │ %(levelname)s │ %(message)s", datefmt="%H:%M:%S")
+
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    log.addHandler(console_handler)
+
+    # Direct write file handler
+    direct_handler = DirectWriteHandler(str(_LOG_FILE))
+    direct_handler.setFormatter(formatter)
+    log.addHandler(direct_handler)
+
+    # Create symlink to latest log (Unix/Linux only)
+    try:
+        if os.name != 'nt':  # Not Windows
+            latest_log_link.symlink_to(_LOG_FILE.name)
+    except Exception:
+        pass
+
+    # Mark as initialized
+    _LOG_INITIALIZED = True
+
+    # Test logging
+    log.info("Logging system initialized successfully")
+    log.info(f"Log file: {log_filename}")
+
+    return log
 
 
 class DirectWriteHandler(logging.Handler):
@@ -335,50 +385,22 @@ class DirectWriteHandler(logging.Handler):
             self.handleError(record)
 
 
-# Set up logger
-log = logging.getLogger("PIPE")
-log.setLevel(logging.INFO)
-log.handlers.clear()
-
-# Define formatter
-formatter = logging.Formatter(
-    "%(asctime)s │ %(levelname)s │ %(message)s", datefmt="%H:%M:%S")
-
-# Console handler (keep as is)
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(formatter)
-log.addHandler(console_handler)
-
-# Direct write file handler
-direct_handler = DirectWriteHandler(str(log_file))
-direct_handler.setFormatter(formatter)
-log.addHandler(direct_handler)
-
-# Create symlink to latest log (Unix/Linux only)
-try:
-    if os.name != 'nt':  # Not Windows
-        latest_log_link.symlink_to(log_file.name)
-except Exception:
-    pass  # Symlink creation is optional
-
 # Exception hook
-
-
 def log_exception_hook(exc_type, exc_value, exc_traceback):
     """Log uncaught exceptions"""
     if issubclass(exc_type, KeyboardInterrupt):
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
         return
 
+    log = logging.getLogger("PIPE")
     log.error("Uncaught exception:", exc_info=(
         exc_type, exc_value, exc_traceback))
 
 
 sys.excepthook = log_exception_hook
 
-# Test logging
-log.info("Logging system initialized successfully")
-log.info(f"Log file: {log_filename}")
+# Initialize logging once
+log = setup_logging()
 
 
 # =============================================================================
