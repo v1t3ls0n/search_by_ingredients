@@ -1,0 +1,6 @@
+================================================================================
+DIET CLASSIFIER PIPELINE - LOG INITIALIZED
+================================================================================
+19:28:34 │ INFO │ Logging system initialized successfully
+19:29:04 │ INFO │ USDA carb table loaded: 303 distinct food descriptions
+19:29:04 │ INFO │ Carb map initialised (303 keys)

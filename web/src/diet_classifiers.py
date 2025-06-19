@@ -274,85 +274,29 @@ class Config:
 
 
 CFG = Config()
+
+
 # =============================================================================
 # DIRECT WRITE LOGGING CONFIGURATION
 # =============================================================================
 """
 Direct write logging that bypasses buffering issues entirely.
 """
+# Make sure artifacts dir exists
+CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
 
+# Define log file path
+log_file = CFG.artifacts_dir / "pipeline.log"
+
+# Delete existing log file
+if log_file.exists():
+    try:
+        log_file.unlink()
+    except Exception:
+        pass
 
 # Thread lock for file writing
 file_lock = threading.Lock()
-
-
-class LogManager:
-    """Singleton log manager to ensure only one log file per run"""
-    _instance = None
-    _lock = threading.Lock()
-
-    def __new__(cls):
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
-        return cls._instance
-
-    def initialize(self):
-        """Initialize logging system once"""
-        if self._initialized:
-            return logging.getLogger("PIPE")
-
-        with self._lock:
-            if self._initialized:
-                return logging.getLogger("PIPE")
-
-            # Make sure artifacts dir exists
-            CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
-
-            # Generate unique log filename
-            run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            run_uuid = str(uuid.uuid4())[:8]
-            log_filename = f"{run_timestamp}_{run_uuid}_pipeline.log"
-            self.log_file = CFG.artifacts_dir / log_filename
-
-            # Set up logger
-            self.logger = logging.getLogger("PIPE")
-            self.logger.setLevel(logging.INFO)
-            self.logger.handlers.clear()
-
-            # Define formatter
-            formatter = logging.Formatter(
-                "%(asctime)s │ %(levelname)s │ %(message)s", datefmt="%H:%M:%S")
-
-            # Console handler
-            console_handler = logging.StreamHandler()
-            console_handler.setFormatter(formatter)
-            self.logger.addHandler(console_handler)
-
-            # File handler
-            direct_handler = DirectWriteHandler(str(self.log_file))
-            direct_handler.setFormatter(formatter)
-            self.logger.addHandler(direct_handler)
-
-            # Create symlink to latest log
-            latest_log_link = CFG.artifacts_dir / "latest_pipeline.log"
-            try:
-                if latest_log_link.exists():
-                    latest_log_link.unlink()
-                if os.name != 'nt':
-                    latest_log_link.symlink_to(self.log_file.name)
-            except Exception:
-                pass
-
-            self._initialized = True
-
-            # Initial log messages
-            self.logger.info("Logging system initialized successfully")
-            self.logger.info(f"Log file: {log_filename}")
-
-            return self.logger
 
 
 class DirectWriteHandler(logging.Handler):
@@ -361,48 +305,65 @@ class DirectWriteHandler(logging.Handler):
     def __init__(self, filename):
         super().__init__()
         self.filename = filename
-        # Write header only once
+        # Write header
+        self._write_direct("="*80 + "\n")
+        self._write_direct("DIET CLASSIFIER PIPELINE - LOG INITIALIZED\n")
+        self._write_direct("="*80 + "\n")
+
+    def _write_direct(self, msg):
+        """Write directly to file with no buffering"""
         with file_lock:
             with open(self.filename, 'a', encoding='utf-8') as f:
-                f.write("="*80 + "\n")
-                f.write("DIET CLASSIFIER PIPELINE - LOG INITIALIZED\n")
-                f.write(f"Log File: {Path(filename).name}\n")
-                f.write(
-                    f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                f.write("="*80 + "\n")
+                f.write(msg)
                 f.flush()
+                # Force OS-level flush
                 os.fsync(f.fileno())
 
     def emit(self, record):
         try:
             msg = self.format(record)
-            with file_lock:
-                with open(self.filename, 'a', encoding='utf-8') as f:
-                    f.write(msg + '\n')
-                    f.flush()
-                    os.fsync(f.fileno())
+            self._write_direct(msg + '\n')
         except Exception:
             self.handleError(record)
 
 
+# Set up logger
+log = logging.getLogger("PIPE")
+log.setLevel(logging.INFO)
+log.handlers.clear()
+
+# Define formatter
+formatter = logging.Formatter(
+    "%(asctime)s │ %(levelname)s │ %(message)s", datefmt="%H:%M:%S")
+
+# Console handler (keep as is)
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+log.addHandler(console_handler)
+
+# Direct write file handler
+direct_handler = DirectWriteHandler(str(log_file))
+direct_handler.setFormatter(formatter)
+log.addHandler(direct_handler)
+
 # Exception hook
+
+
 def log_exception_hook(exc_type, exc_value, exc_traceback):
     """Log uncaught exceptions"""
     if issubclass(exc_type, KeyboardInterrupt):
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
         return
 
-    log = logging.getLogger("PIPE")
-    if log.handlers:  # Only log if logger is initialized
-        log.error("Uncaught exception:", exc_info=(
-            exc_type, exc_value, exc_traceback))
+    log.error("Uncaught exception:", exc_info=(
+        exc_type, exc_value, exc_traceback))
 
 
 sys.excepthook = log_exception_hook
 
-# Create singleton instance and get logger
-_log_manager = LogManager()
-log = _log_manager.initialize()
+# Test logging
+log.info("Logging system initialized successfully")
+
 
 # =============================================================================
 # GENERAL UTILITY FUNCTIONS
