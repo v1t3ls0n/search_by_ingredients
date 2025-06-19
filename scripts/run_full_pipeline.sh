@@ -26,6 +26,9 @@ if [ "${1:-}" = "--force" ]; then
     echo "🔄 Force flag detected - will recompute embeddings"
 fi
 
+echo "🛠️  Shutting Down existing containers..."
+docker-compose down
+
 echo "🛠️  Building Docker images..."
 docker-compose build
 
