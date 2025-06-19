@@ -9,7 +9,7 @@ dataset/
 
 __pycache__/
 *.py[cod]
-artifacts/
+# artifacts/
 *$py.class
 *.csv
 allrecipes.parquet
