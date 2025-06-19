@@ -3663,7 +3663,7 @@ def run_mode_A(
     gold_df: pd.DataFrame,    # Gold DataFrame with labels
     *,
     domain: str = "text",     # Feature domain
-    apply_smote: bool = True  # Whether to apply SMOTE
+    apply_smote_flag: bool = True  # Whether to apply SMOTE
 ) -> list[dict]:
     """
     Train on weak (silver) labels, evaluate on gold standard labels.
@@ -3681,7 +3681,7 @@ def run_mode_A(
         silver_df: Silver DataFrame with 'silver_keto'/'silver_vegan'
         gold_df: Gold DataFrame with 'label_keto'/'label_vegan'
         domain: 'text', 'image', or 'both'
-        apply_smote: Whether to apply SMOTE for class balancing
+        apply_smote_flag: Whether to apply SMOTE for class balancing
 
     Returns:
         List of result dictionaries with metrics and predictions
@@ -3700,7 +3700,7 @@ def run_mode_A(
     # Log pipeline initialization
     log.info("🚀 Starting MODE A Training Pipeline")
     log.info(f"   Domain: {domain}")
-    log.info(f"   SMOTE enabled: {apply_smote}")
+    log.info(f"   SMOTE enabled: {apply_smote_flag}")
     log.info(f"   Silver set size: {len(silver_df):,}")
     log.info(f"   Gold set size: {len(gold_df):,}")
     log.info(f"   Feature dimensions: {X_silver.shape}")
@@ -3771,7 +3771,7 @@ def run_mode_A(
             f"   Test labels - Positive: {y_true.sum():,} ({y_true.mean():.1%})")
 
         # Handle class imbalance
-        if apply_smote:
+        if apply_smote_flag:
             smote_start = time.time()
             original_size = len(y_train)
 
@@ -4049,6 +4049,114 @@ def table(title, rows):
         vals = " ".join(f"{r[c]:>7.2f}" for c in cols)
         print(f"│ {r['model']:<7} {r['task']:<5} {vals} │")
     print("╰" + "─" * (len(hdr) - 2) + "╯")
+
+
+def export_eval_plots(results: list[dict], gold_df: pd.DataFrame, output_dir: str = "artifacts"):
+    """
+    Export evaluation plots and confusion matrices for model results.
+
+    Args:
+        results: List of result dictionaries from model evaluation
+        gold_df: Gold standard DataFrame
+        output_dir: Directory to save plots
+    """
+    import matplotlib.pyplot as plt
+    from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+
+    # Create output directory if it doesn't exist
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    log.info(f"   📊 Generating evaluation plots...")
+
+    # Create confusion matrices for best models per task
+    for task in ["keto", "vegan"]:
+        task_results = [r for r in results if r["task"]
+                        == task and "pred" in r and "prob" in r]
+
+        if not task_results:
+            log.warning(
+                f"   ⚠️  No results available for {task} visualization")
+            continue
+
+        # Find best model by F1 score
+        best_result = max(task_results, key=lambda x: x.get("F1", 0))
+
+        # Get predictions and true labels
+        y_true = gold_df[f"label_{task}"].values[:len(best_result["pred"])]
+        y_pred = best_result["pred"]
+
+        # Create confusion matrix
+        cm = confusion_matrix(y_true, y_pred)
+
+        # Plot confusion matrix
+        fig, ax = plt.subplots(figsize=(8, 6))
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[
+                                      "Not " + task.capitalize(), task.capitalize()])
+        disp.plot(ax=ax, cmap='Blues', values_format='d')
+
+        plt.title(f'{task.capitalize()} Classification - {best_result["model"]}\n'
+                  f'F1: {best_result["F1"]:.3f}, Accuracy: {best_result["ACC"]:.3f}')
+
+        # Save plot
+        plot_path = Path(
+            output_dir) / f"confusion_matrix_{task}_{best_result['model'].replace('/', '_')}.png"
+        plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+        plt.close()
+
+        log.info(f"   ✅ Saved {task} confusion matrix to {plot_path}")
+
+    # Create performance comparison plot
+    if len(results) > 0:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+
+        for i, task in enumerate(["keto", "vegan"]):
+            ax = ax1 if i == 0 else ax2
+
+            task_results = [r for r in results if r["task"] == task]
+            if not task_results:
+                continue
+
+            # Sort by F1 score
+            task_results = sorted(task_results, key=lambda x: x.get(
+                "F1", 0), reverse=True)[:10]  # Top 10
+
+            models = [r["model"] for r in task_results]
+            f1_scores = [r["F1"] for r in task_results]
+            acc_scores = [r["ACC"] for r in task_results]
+
+            x = np.arange(len(models))
+            width = 0.35
+
+            bars1 = ax.bar(x - width/2, f1_scores, width,
+                           label='F1 Score', alpha=0.8)
+            bars2 = ax.bar(x + width/2, acc_scores, width,
+                           label='Accuracy', alpha=0.8)
+
+            ax.set_xlabel('Models')
+            ax.set_ylabel('Score')
+            ax.set_title(f'{task.capitalize()} Model Performance')
+            ax.set_xticks(x)
+            ax.set_xticklabels(models, rotation=45, ha='right')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+
+            # Add value labels on bars
+            for bars in [bars1, bars2]:
+                for bar in bars:
+                    height = bar.get_height()
+                    ax.annotate(f'{height:.2f}',
+                                xy=(bar.get_x() + bar.get_width() / 2, height),
+                                xytext=(0, 3),
+                                textcoords="offset points",
+                                ha='center', va='bottom',
+                                fontsize=8)
+
+        plt.tight_layout()
+        comparison_path = Path(output_dir) / "model_performance_comparison.png"
+        plt.savefig(comparison_path, dpi=150, bbox_inches='tight')
+        plt.close()
+
+        log.info(f"   ✅ Saved performance comparison to {comparison_path}")
 
 
 def log_false_preds(task, texts, y_true, y_pred, model_name="Model"):
@@ -6274,7 +6382,7 @@ def run_full_pipeline(mode: str = "both",
                         img_silver_df,
                         img_gold_df,
                         domain="image",
-                        apply_smote=False
+                        apply_smote_flag=False
                     )
 
                     results.extend(res_img)
@@ -6306,7 +6414,7 @@ def run_full_pipeline(mode: str = "both",
             res_text = run_mode_A(
                 X_text_silver, gold.clean, X_text_gold,
                 silver_txt, gold,
-                domain="text", apply_smote=True
+                domain="text", apply_smote_flag=True
             )
 
             results.extend(res_text)
@@ -6432,7 +6540,7 @@ def run_full_pipeline(mode: str = "both",
                 res_combined = run_mode_A(
                     X_silver, gold_eval.clean, X_gold,
                     silver_eval, gold_eval,
-                    domain="both", apply_smote=True
+                    domain="both", apply_smote_flag=True
                 )
                 results.extend(res_combined)
                 log.info(
@@ -6466,7 +6574,7 @@ def run_full_pipeline(mode: str = "both",
         if not results:
             log.info(f"   🎯 Running fallback text-only training...")
             res_final = run_mode_A(X_text_silver, gold.clean, X_text_gold,
-                                   silver_txt, gold, domain="text", apply_smote=True)
+                                   silver_txt, gold, domain="text", apply_smote_flag=True)
             results.extend(res_final)
             log.info(f"      ✅ Final models: {len(res_final)} results")
 
