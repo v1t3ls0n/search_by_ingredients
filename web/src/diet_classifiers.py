@@ -5767,7 +5767,7 @@ def run_full_pipeline(mode: str = "both",
         load_pbar.update(1)
 
     # Apply sampling if requested
-    if sample_frac:
+    if sample_frac and sample_frac < 1.0:
         original_txt_size = len(silver_txt)
         original_img_size = len(silver_img)
 
