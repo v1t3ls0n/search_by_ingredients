@@ -1,6 +1,13 @@
 ================================================================================
 DIET CLASSIFIER PIPELINE - LOG INITIALIZED
 ================================================================================
-19:28:34 │ INFO │ Logging system initialized successfully
-19:29:04 │ INFO │ USDA carb table loaded: 303 distinct food descriptions
-19:29:04 │ INFO │ Carb map initialised (303 keys)
+19:37:11 │ INFO │ Logging system initialized successfully
+19:37:11 │ INFO │ 🚀 Starting main with args: Namespace(ground_truth='data/ground_truth_sample.csv', train=False, ingredients=None, mode='both', force=False, sample_frac=None)
+19:37:11 │ INFO │ 📊 Evaluating on ground truth: data/ground_truth_sample.csv
+19:37:11 │ INFO │ ✅ Loaded ground truth with 100 rows
+19:37:11 │ INFO │ ✅ Loaded vectorizer from /app/artifacts/vectorizer.pkl
+19:37:11 │ INFO │ ✅ Loaded models from /app/artifacts/models.pkl
+19:37:11 │ INFO │ ✅ Transformed text to feature vectors
+19:37:11 │ ERROR │ ❌ Ground truth evaluation failed: X has 6341 features, but LogisticRegression is expecting 8389 features as input.
+19:37:11 │ INFO │ 🚫 System exit: 1
+19:37:11 │ INFO │ 🛑 Process exiting - no restarts allowed
