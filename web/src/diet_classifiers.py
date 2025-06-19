@@ -6396,20 +6396,28 @@ def run_full_pipeline(mode: str = "both",
                 train_pbar.set_description("   ├─ Final Combined Models")
                 log.info(f"   🔄 Training final combined models...")
 
-            # Align features and data
-            common_silver_idx = img_silver_df.index
-            common_gold_idx = img_gold_df.index
+            # Align features and data. Find the intersection of indices between text and image data
+            common_silver_idx = silver_txt.index.intersection(
+                img_silver_df.index)
+            common_gold_idx = gold.index.intersection(img_gold_df.index)
 
             if len(common_silver_idx) > 0 and len(common_gold_idx) > 0:
                 # Align silver features
                 X_text_silver_algn = vec.transform(
                     silver_txt.loc[common_silver_idx].clean)
-                X_silver = combine_features(X_text_silver_algn, img_silver)
+                # Also need to align the image embeddings to the common indices
+                img_silver_aligned = img_silver[img_silver_df.index.get_indexer(
+                    common_silver_idx)]
+                X_silver = combine_features(
+                    X_text_silver_algn, img_silver_aligned)
 
                 # Align gold features
                 X_text_gold_algn = vec.transform(
                     gold.loc[common_gold_idx].clean)
-                X_gold = combine_features(X_text_gold_algn, img_gold)
+                # Also align gold image embeddings
+                img_gold_aligned = img_gold[img_gold_df.index.get_indexer(
+                    common_gold_idx)]
+                X_gold = combine_features(X_text_gold_algn, img_gold_aligned)
 
                 silver_eval = silver_txt.loc[common_silver_idx]
                 gold_eval = gold.loc[common_gold_idx]
