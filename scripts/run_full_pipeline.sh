@@ -45,7 +45,7 @@ docker-compose exec web bash -c "
 
     echo '🧠 Training classifiers on 100% of the data...'
     echo '📝 Note: Will use cached embeddings if available (add --force to recompute)'
-    python3 web/diet_classifiers.py --train --mode both $FORCE_FLAG
+    python3 web/diet_classifiers.py --train --mode both --sample_frac 0.1 $FORCE_FLAG
 
     echo '🧪 Evaluating on provided gold set...'
     python3 web/diet_classifiers.py --ground_truth data/ground_truth_sample.csv
