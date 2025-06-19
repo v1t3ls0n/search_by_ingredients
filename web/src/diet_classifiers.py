@@ -82,6 +82,8 @@ Author: Guy Vitelson (aka @v1t3ls0n on GitHub)
 
 # Enable postponed evaluation of type annotations (Python 3.7+)
 from __future__ import annotations
+from datetime import datetime
+import uuid
 from imblearn.over_sampling import SMOTE, RandomOverSampler
 from nltk.stem import WordNetLemmatizer
 import nltk
@@ -273,7 +275,6 @@ class Config:
 
 CFG = Config()
 
-
 # =============================================================================
 # DIRECT WRITE LOGGING CONFIGURATION
 # =============================================================================
@@ -283,13 +284,19 @@ Direct write logging that bypasses buffering issues entirely.
 # Make sure artifacts dir exists
 CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
 
-# Define log file path
-log_file = CFG.artifacts_dir / "pipeline.log"
+# Generate unique log filename with timestamp
 
-# Delete existing log file
-if log_file.exists():
+# Create timestamp and unique ID for this run
+run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+run_uuid = str(uuid.uuid4())[:8]  # First 8 chars of UUID for brevity
+log_filename = f"{run_timestamp}_{run_uuid}_pipeline.log"
+log_file = CFG.artifacts_dir / log_filename
+
+# Also create a symlink to latest log for convenience
+latest_log_link = CFG.artifacts_dir / "latest_pipeline.log"
+if latest_log_link.exists():
     try:
-        log_file.unlink()
+        latest_log_link.unlink()
     except Exception:
         pass
 
@@ -306,6 +313,9 @@ class DirectWriteHandler(logging.Handler):
         # Write header
         self._write_direct("="*80 + "\n")
         self._write_direct("DIET CLASSIFIER PIPELINE - LOG INITIALIZED\n")
+        self._write_direct(f"Log File: {Path(filename).name}\n")
+        self._write_direct(
+            f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         self._write_direct("="*80 + "\n")
 
     def _write_direct(self, msg):
@@ -344,6 +354,13 @@ direct_handler = DirectWriteHandler(str(log_file))
 direct_handler.setFormatter(formatter)
 log.addHandler(direct_handler)
 
+# Create symlink to latest log (Unix/Linux only)
+try:
+    if os.name != 'nt':  # Not Windows
+        latest_log_link.symlink_to(log_file.name)
+except Exception:
+    pass  # Symlink creation is optional
+
 # Exception hook
 
 
@@ -361,6 +378,7 @@ sys.excepthook = log_exception_hook
 
 # Test logging
 log.info("Logging system initialized successfully")
+log.info(f"Log file: {log_filename}")
 
 
 # =============================================================================
