@@ -287,9 +287,10 @@ Direct write logging that bypasses buffering issues entirely.
 
 # Make sure artifacts dir exists
 CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
+CFG.logs_dir.mkdir(parents=True, exist_ok=True)
 
 # Define log file path
-log_file = CFG.artifacts_dir / "pipeline.log"
+log_file = CFG.logs_dir / "diet_classifiers.py.log"
 
 
 # Thread lock for file writing
