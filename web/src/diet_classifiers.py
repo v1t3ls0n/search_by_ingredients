@@ -107,7 +107,7 @@ import logging
 import json
 import threading
 import sys
-import tqdm as tqdm_module
+import tqdm 
 from functools import partial
 import gc # Memory cleanup
 # =============================================================================
