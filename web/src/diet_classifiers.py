@@ -281,23 +281,11 @@ CFG = Config()
 """
 Direct write logging that bypasses buffering issues entirely.
 """
-
 # Make sure artifacts dir exists
 CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
 
 # Define log file path
 log_file = CFG.artifacts_dir / "pipeline.log"
-
-# Use environment variable to track if this is the first run
-# This persists across imports within the same process
-if os.environ.get('PIPELINE_LOG_INITIALIZED') != 'true':
-    # First time - delete old log
-    if log_file.exists():
-        try:
-            log_file.unlink()
-        except Exception:
-            pass
-    os.environ['PIPELINE_LOG_INITIALIZED'] = 'true'
 
 # Thread lock for file writing
 file_lock = threading.Lock()
@@ -309,32 +297,18 @@ class DirectWriteHandler(logging.Handler):
     def __init__(self, filename):
         super().__init__()
         self.filename = filename
-        # Check if we need to write header
-        write_header = False
-        try:
-            if not Path(filename).exists() or Path(filename).stat().st_size < 10:
-                write_header = True
-        except:
-            write_header = True
-
-        if write_header:
-            # Write header
-            self._write_direct("="*80 + "\n")
-            self._write_direct("DIET CLASSIFIER PIPELINE - LOG INITIALIZED\n")
-            self._write_direct("="*80 + "\n")
+        # Just append a separator for new run, don't delete anything
+        self._write_direct("\n" + "="*80 + "\n")
+        self._write_direct(f"NEW RUN STARTED AT {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        self._write_direct("="*80 + "\n")
 
     def _write_direct(self, msg):
         """Write directly to file with no buffering"""
         with file_lock:
-            # Use 'ab' mode and encode to bytes to avoid any text mode issues
-            with open(self.filename, 'ab') as f:
-                f.write((msg).encode('utf-8'))
+            # Always append, never overwrite
+            with open(self.filename, 'a', encoding='utf-8') as f:
+                f.write(msg)
                 f.flush()
-                # Force OS-level flush
-                try:
-                    os.fsync(f.fileno())
-                except:
-                    pass  # Some filesystems don't support fsync
 
     def emit(self, record):
         try:
@@ -348,9 +322,8 @@ class DirectWriteHandler(logging.Handler):
 log = logging.getLogger("PIPE")
 log.setLevel(logging.INFO)
 
-# Remove ALL existing handlers to avoid duplicates
-for handler in log.handlers[:]:
-    log.removeHandler(handler)
+# Clear any existing handlers
+log.handlers.clear()
 
 # Define formatter
 formatter = logging.Formatter(
@@ -367,8 +340,6 @@ direct_handler.setFormatter(formatter)
 log.addHandler(direct_handler)
 
 # Exception hook
-
-
 def log_exception_hook(exc_type, exc_value, exc_traceback):
     """Log uncaught exceptions"""
     if issubclass(exc_type, KeyboardInterrupt):
@@ -381,11 +352,8 @@ def log_exception_hook(exc_type, exc_value, exc_traceback):
 
 sys.excepthook = log_exception_hook
 
-# Test logging - only if first time
-if os.environ.get('PIPELINE_LOG_FIRST_MESSAGE') != 'sent':
-    log.info("Logging system initialized successfully")
-    os.environ['PIPELINE_LOG_FIRST_MESSAGE'] = 'sent'
-
+# Test logging
+log.info("Logging system initialized successfully")
 
 # =============================================================================
 # GENERAL UTILITY FUNCTIONS
