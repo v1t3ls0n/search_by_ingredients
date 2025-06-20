@@ -281,21 +281,23 @@ CFG = Config()
 """
 Direct write logging that bypasses buffering issues entirely.
 """
+
 # Make sure artifacts dir exists
 CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
 
 # Define log file path
 log_file = CFG.artifacts_dir / "pipeline.log"
 
-# Delete existing log file ONLY if we're starting fresh (not on every import)
-# Check if logger already exists to avoid re-initialization
-if 'PIPE' not in logging.Logger.manager.loggerDict:
-    # This is the first time - delete old log
+# Use environment variable to track if this is the first run
+# This persists across imports within the same process
+if os.environ.get('PIPELINE_LOG_INITIALIZED') != 'true':
+    # First time - delete old log
     if log_file.exists():
         try:
             log_file.unlink()
         except Exception:
             pass
+    os.environ['PIPELINE_LOG_INITIALIZED'] = 'true'
 
 # Thread lock for file writing
 file_lock = threading.Lock()
@@ -307,8 +309,15 @@ class DirectWriteHandler(logging.Handler):
     def __init__(self, filename):
         super().__init__()
         self.filename = filename
-        # Only write header if file is empty or doesn't exist
-        if not Path(filename).exists() or Path(filename).stat().st_size == 0:
+        # Check if we need to write header
+        write_header = False
+        try:
+            if not Path(filename).exists() or Path(filename).stat().st_size < 10:
+                write_header = True
+        except:
+            write_header = True
+
+        if write_header:
             # Write header
             self._write_direct("="*80 + "\n")
             self._write_direct("DIET CLASSIFIER PIPELINE - LOG INITIALIZED\n")
@@ -317,43 +326,45 @@ class DirectWriteHandler(logging.Handler):
     def _write_direct(self, msg):
         """Write directly to file with no buffering"""
         with file_lock:
-            with open(self.filename, 'a', encoding='utf-8') as f:
-                f.write(msg)
+            # Use 'ab' mode and encode to bytes to avoid any text mode issues
+            with open(self.filename, 'ab') as f:
+                f.write((msg).encode('utf-8'))
                 f.flush()
                 # Force OS-level flush
-                os.fsync(f.fileno())
+                try:
+                    os.fsync(f.fileno())
+                except:
+                    pass  # Some filesystems don't support fsync
 
     def emit(self, record):
         try:
-            msg = self.format(record)
-            self._write_direct(msg + '\n')
+            msg = self.format(record) + '\n'
+            self._write_direct(msg)
         except Exception:
             self.handleError(record)
 
 
-# Get or create logger
+# Get logger
 log = logging.getLogger("PIPE")
+log.setLevel(logging.INFO)
 
-# Only configure if not already configured
-if not log.handlers:
-    log.setLevel(logging.INFO)
+# Remove ALL existing handlers to avoid duplicates
+for handler in log.handlers[:]:
+    log.removeHandler(handler)
 
-    # Define formatter
-    formatter = logging.Formatter(
-        "%(asctime)s │ %(levelname)s │ %(message)s", datefmt="%H:%M:%S")
+# Define formatter
+formatter = logging.Formatter(
+    "%(asctime)s │ %(levelname)s │ %(message)s", datefmt="%H:%M:%S")
 
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    log.addHandler(console_handler)
+# Console handler
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+log.addHandler(console_handler)
 
-    # Direct write file handler
-    direct_handler = DirectWriteHandler(str(log_file))
-    direct_handler.setFormatter(formatter)
-    log.addHandler(direct_handler)
-
-    # Test logging
-    log.info("Logging system initialized successfully")
+# Direct write file handler
+direct_handler = DirectWriteHandler(str(log_file))
+direct_handler.setFormatter(formatter)
+log.addHandler(direct_handler)
 
 # Exception hook
 
@@ -369,6 +380,11 @@ def log_exception_hook(exc_type, exc_value, exc_traceback):
 
 
 sys.excepthook = log_exception_hook
+
+# Test logging - only if first time
+if os.environ.get('PIPELINE_LOG_FIRST_MESSAGE') != 'sent':
+    log.info("Logging system initialized successfully")
+    os.environ['PIPELINE_LOG_FIRST_MESSAGE'] = 'sent'
 
 
 # =============================================================================
