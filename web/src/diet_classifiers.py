@@ -275,7 +275,6 @@ class Config:
 
 CFG = Config()
 
-
 # =============================================================================
 # DIRECT WRITE LOGGING CONFIGURATION
 # =============================================================================
@@ -288,12 +287,15 @@ CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
 # Define log file path
 log_file = CFG.artifacts_dir / "pipeline.log"
 
-# Delete existing log file
-if log_file.exists():
-    try:
-        log_file.unlink()
-    except Exception:
-        pass
+# Delete existing log file ONLY if we're starting fresh (not on every import)
+# Check if logger already exists to avoid re-initialization
+if 'PIPE' not in logging.Logger.manager.loggerDict:
+    # This is the first time - delete old log
+    if log_file.exists():
+        try:
+            log_file.unlink()
+        except Exception:
+            pass
 
 # Thread lock for file writing
 file_lock = threading.Lock()
@@ -305,10 +307,12 @@ class DirectWriteHandler(logging.Handler):
     def __init__(self, filename):
         super().__init__()
         self.filename = filename
-        # Write header
-        self._write_direct("="*80 + "\n")
-        self._write_direct("DIET CLASSIFIER PIPELINE - LOG INITIALIZED\n")
-        self._write_direct("="*80 + "\n")
+        # Only write header if file is empty or doesn't exist
+        if not Path(filename).exists() or Path(filename).stat().st_size == 0:
+            # Write header
+            self._write_direct("="*80 + "\n")
+            self._write_direct("DIET CLASSIFIER PIPELINE - LOG INITIALIZED\n")
+            self._write_direct("="*80 + "\n")
 
     def _write_direct(self, msg):
         """Write directly to file with no buffering"""
@@ -327,24 +331,29 @@ class DirectWriteHandler(logging.Handler):
             self.handleError(record)
 
 
-# Set up logger
+# Get or create logger
 log = logging.getLogger("PIPE")
-log.setLevel(logging.INFO)
-log.handlers.clear()
 
-# Define formatter
-formatter = logging.Formatter(
-    "%(asctime)s │ %(levelname)s │ %(message)s", datefmt="%H:%M:%S")
+# Only configure if not already configured
+if not log.handlers:
+    log.setLevel(logging.INFO)
 
-# Console handler (keep as is)
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(formatter)
-log.addHandler(console_handler)
+    # Define formatter
+    formatter = logging.Formatter(
+        "%(asctime)s │ %(levelname)s │ %(message)s", datefmt="%H:%M:%S")
 
-# Direct write file handler
-direct_handler = DirectWriteHandler(str(log_file))
-direct_handler.setFormatter(formatter)
-log.addHandler(direct_handler)
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    log.addHandler(console_handler)
+
+    # Direct write file handler
+    direct_handler = DirectWriteHandler(str(log_file))
+    direct_handler.setFormatter(formatter)
+    log.addHandler(direct_handler)
+
+    # Test logging
+    log.info("Logging system initialized successfully")
 
 # Exception hook
 
@@ -360,9 +369,6 @@ def log_exception_hook(exc_type, exc_value, exc_traceback):
 
 
 sys.excepthook = log_exception_hook
-
-# Test logging
-log.info("Logging system initialized successfully")
 
 
 # =============================================================================
@@ -3032,16 +3038,16 @@ def show_balance(df: pd.DataFrame, title: str) -> None:
         df: DataFrame containing label columns
         title: Title for the display
     """
-    print(f"\n── {title} set class counts ─────────────")
+    log.info(f"\n── {title} set class counts ─────────────")
     for lab in ("keto", "vegan"):
         for col in (f"label_{lab}", f"silver_{lab}"):
             if col in df.columns:
                 tot = len(df)
                 if tot == 0:
-                    print(f"{lab:>5}: No data available (0 rows)")
+                    log.info(f"{lab:>5}: No data available (0 rows)")
                     break
                 pos = int(df[col].sum())
-                print(f"{lab:>5}: {pos:6}/{tot} ({pos/tot:>5.1%})")
+                log.info(f"{lab:>5}: {pos:6}/{tot} ({pos/tot:>5.1%})")
                 break
 
 
@@ -4044,13 +4050,13 @@ def table(title, rows):
     cols = ("ACC", "PREC", "REC", "F1", "ROC", "PR")
     pad = 11 + 8 * len(cols)
     hdr = "│ model task " + " ".join(f"{c:>7}" for c in cols) + " │"
-    print(f"\n╭─ {title} {'─' * (pad - len(title) - 2)}")
-    print(hdr)
-    print("├" + "─" * (len(hdr) - 2) + "┤")
+    log.info(f"\n╭─ {title} {'─' * (pad - len(title) - 2)}")
+    log.info(hdr)
+    log.info("├" + "─" * (len(hdr) - 2) + "┤")
     for r in rows:
         vals = " ".join(f"{r[c]:>7.2f}" for c in cols)
-        print(f"│ {r['model']:<7} {r['task']:<5} {vals} │")
-    print("╰" + "─" * (len(hdr) - 2) + "╯")
+        log.info(f"│ {r['model']:<7} {r['task']:<5} {vals} │")
+    log.info("╰" + "─" * (len(hdr) - 2) + "╯")
 
 
 def export_eval_plots(results: list[dict], gold_df: pd.DataFrame, output_dir: str = "artifacts"):
@@ -6873,7 +6879,7 @@ def main():
 
             keto = is_keto(ingredients)
             vegan = is_vegan(ingredients)
-            print(json.dumps({'keto': keto, 'vegan': vegan}))
+            log.info(json.dumps({'keto': keto, 'vegan': vegan}))
             return
 
         elif args.train:
@@ -7161,7 +7167,7 @@ if __name__ == "__main__":
     restart_count = int(restart_count)
 
     if restart_count > 0:
-        print(f"❌ RESTART LOOP DETECTED (count={restart_count}) - STOPPING")
+        log.info(f"❌ RESTART LOOP DETECTED (count={restart_count}) - STOPPING")
         sys.exit(1)
 
     # Set restart counter
@@ -7170,7 +7176,7 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print(f"❌ Final exception caught: {e}")
+        log.info(f"❌ Final exception caught: {e}")
         sys.exit(1)
     finally:
         # Clear restart counter on normal exit

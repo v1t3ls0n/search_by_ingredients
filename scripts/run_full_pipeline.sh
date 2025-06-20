@@ -46,7 +46,7 @@ docker-compose exec web bash -c "
     echo '📦 Verifying Python dependencies...'
     pip install -r requirements.txt --quiet || true
 
-    echo '🧠 Training classifiers on 100% of the data...'
+    echo '🧠 Training classifiers...'
     echo '📝 Note: Will use cached embeddings if available (add --force to recompute)'
     python3 web/diet_classifiers.py --train --mode both --sample_frac 0.1 $FORCE_FLAG
 
