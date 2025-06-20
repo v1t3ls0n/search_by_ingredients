@@ -110,6 +110,7 @@ import threading
 import sys
 import tqdm as tqdm_module
 from functools import partial
+import gc # Memory cleanup
 # =============================================================================
 # IMPORTS AND DEPENDENCIES
 # =============================================================================
@@ -964,8 +965,7 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16, for
         log.warning(
             f"   └─ Consider using text-only mode or checking data sources")
 
-    # Memory cleanup
-    import gc
+
     gc.collect()
 
     return sorted(valid_indices)

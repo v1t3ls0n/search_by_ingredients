@@ -87,7 +87,7 @@ docker-compose exec web bash -c "
     echo '📦 Verifying Python dependencies...' | tee -a \$CONTAINER_LOG
     pip install -r requirements.txt --quiet 2>&1 | tee -a \$CONTAINER_LOG || true
 
-    echo '🧠 Training classifiers on 10% sample...' | tee -a \$CONTAINER_LOG
+    echo '🧠 Training...' | tee -a \$CONTAINER_LOG
     echo '📝 Note: Will use cached embeddings if available (add --force to recompute)' | tee -a \$CONTAINER_LOG
     python3 web/diet_classifiers.py --train --mode both --sample_frac 0.1 $FORCE_FLAG 2>&1 | tee -a \$CONTAINER_LOG
 
@@ -123,7 +123,7 @@ SUMMARY_FILE="artifacts/logs/summary_${TIMESTAMP}.txt"
     echo "Log Files:"
     echo "  - Main log: $LOG_FILE"
     echo "  - Container log: artifacts/logs/container_pipeline_${TIMESTAMP}.log"
-    echo "  - Pipeline.log: artifacts/pipeline.log (if exists)"
+    echo "  - Python Source Code Logger:  artifacts/logs/diet_classifiers.py.log (if exists)"
     echo ""
     echo "Artifacts Generated:"
     ls -la artifacts/*.pkl artifacts/*.csv artifacts/*.json 2>/dev/null || echo "No model artifacts yet"
@@ -138,7 +138,7 @@ echo "📊 Results saved to artifacts/"
 echo "📋 Logs available at:"
 echo "   - Main log: $LOG_FILE"
 echo "   - Summary: $SUMMARY_FILE"
-echo "   - Pipeline.log: artifacts/pipeline.log"
+echo "   - Python Source Code Logger:  artifacts/logs/diet_classifiers.py.log"
 echo ""
 echo "💡 View logs:"
 echo "   tail -f $LOG_FILE                    # Follow main log"

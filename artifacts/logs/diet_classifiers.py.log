@@ -1,0 +1,15 @@
+================================================================================
+DIET CLASSIFIER PIPELINE - LOG INITIALIZED
+Process ID: 578
+Started: 2025-06-20 19:22:57
+================================================================================
+19:22:57 │ INFO │ Logging system initialized successfully
+19:22:57 │ INFO │ 🚀 Starting main with args: Namespace(ground_truth='/app/data/ground_truth_sample.csv', train=False, ingredients=None, mode='both', force=False, sample_frac=None)
+19:22:57 │ INFO │ 📊 Evaluating on ground truth: /app/data/ground_truth_sample.csv
+19:22:57 │ INFO │ ✅ Loaded ground truth with 100 rows
+19:22:57 │ INFO │ ✅ Loaded vectorizer from /app/artifacts/vectorizer.pkl
+19:22:57 │ INFO │ ✅ Loaded models from /app/artifacts/models.pkl
+19:22:57 │ INFO │ ✅ Transformed text to feature vectors
+19:22:57 │ ERROR │ ❌ Ground truth evaluation failed: X has 6341 features, but LogisticRegression is expecting 8389 features as input.
+19:22:57 │ INFO │ 🚫 System exit: 1
+19:22:57 │ INFO │ 🛑 Process exiting - no restarts allowed
