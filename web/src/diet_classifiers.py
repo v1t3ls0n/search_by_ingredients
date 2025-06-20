@@ -4146,7 +4146,7 @@ def export_eval_plots(results: list[dict], gold_df: pd.DataFrame, output_dir: st
         cm = confusion_matrix(y_true, y_pred)
 
         # Plot confusion matrix
-        fig, ax = plt.subplots(figsize=(8, 6))
+        fig, ax = plt.subplots(figsize=(8, 12))
         disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[
                                       "Not " + task.capitalize(), task.capitalize()])
         disp.plot(ax=ax, cmap='Blues', values_format='d')
