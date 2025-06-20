@@ -80,7 +80,6 @@ Supports interactive development, Docker builds, and production use.
 Author: Guy Vitelson (aka @v1t3ls0n on GitHub)
 """
 
-# Enable postponed evaluation of type annotations (Python 3.7+)
 from __future__ import annotations
 from datetime import datetime
 import uuid
