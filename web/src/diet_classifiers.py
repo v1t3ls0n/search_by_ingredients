@@ -89,7 +89,6 @@ from nltk.stem import WordNetLemmatizer
 import nltk
 import psutil
 from scipy.sparse import hstack, csr_matrix
-from tqdm import tqdm
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -109,6 +108,8 @@ import logging
 import json
 import threading
 import sys
+import tqdm as tqdm_module
+from functools import partial
 # =============================================================================
 # IMPORTS AND DEPENDENCIES
 # =============================================================================
@@ -262,6 +263,7 @@ class Config:
     """
     pretrained_models_dir: Path = Path("/app/pretrained_models")
     artifacts_dir: Path = Path("/app/artifacts")
+    logs_dir: Path = Path("/app/artifacts/logs")
     data_dir: Path = Path("/app/data")
     usda_dir: Path = Path("/app/data/usda")
     url_map: Mapping[str, str] = field(default_factory=lambda: {
@@ -274,21 +276,42 @@ class Config:
 
 
 CFG = Config()
-
 # =============================================================================
 # DIRECT WRITE LOGGING CONFIGURATION
 # =============================================================================
+
+
 """
 Direct write logging that bypasses buffering issues entirely.
 """
+
 # Make sure artifacts dir exists
 CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
+CFG.logs_dir.mkdir(parents=True, exist_ok=True)
 
 # Define log file path
-log_file = CFG.artifacts_dir / "pipeline.log"
+log_file = CFG.logs_dir / "diet_classifiers.py.log"
 
 # Thread lock for file writing
 file_lock = threading.Lock()
+
+# Check if we're in a new process (not just a new import)
+_CURRENT_PID = os.getpid()
+_LOG_INITIALIZED_PID = os.environ.get('LOG_INITIALIZED_PID', '')
+
+# Only delete/reinitialize if this is a new process
+if str(_CURRENT_PID) != _LOG_INITIALIZED_PID:
+    # New process - set up fresh log
+    if log_file.exists():
+        try:
+            log_file.unlink()
+        except Exception:
+            pass
+    os.environ['LOG_INITIALIZED_PID'] = str(_CURRENT_PID)
+    _WRITE_HEADER = True
+else:
+    # Same process, different import - don't reinitialize
+    _WRITE_HEADER = False
 
 
 class DirectWriteHandler(logging.Handler):
@@ -297,47 +320,62 @@ class DirectWriteHandler(logging.Handler):
     def __init__(self, filename):
         super().__init__()
         self.filename = filename
-        # Just append a separator for new run, don't delete anything
-        self._write_direct("\n" + "="*80 + "\n")
-        self._write_direct(f"NEW RUN STARTED AT {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        self._write_direct("="*80 + "\n")
+        # Only write header for new process
+        if _WRITE_HEADER:
+            self._write_direct("="*80 + "\n")
+            self._write_direct("DIET CLASSIFIER PIPELINE - LOG INITIALIZED\n")
+            self._write_direct(f"Process ID: {os.getpid()}\n")
+            self._write_direct(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            self._write_direct("="*80 + "\n")
 
     def _write_direct(self, msg):
         """Write directly to file with no buffering"""
         with file_lock:
-            # Always append, never overwrite
             with open(self.filename, 'a', encoding='utf-8') as f:
                 f.write(msg)
                 f.flush()
+                # Force OS-level flush
+                os.fsync(f.fileno())
 
     def emit(self, record):
         try:
-            msg = self.format(record) + '\n'
-            self._write_direct(msg)
+            msg = self.format(record)
+            self._write_direct(msg + '\n')
         except Exception:
             self.handleError(record)
 
 
 # Get logger
 log = logging.getLogger("PIPE")
-log.setLevel(logging.INFO)
 
-# Clear any existing handlers
-log.handlers.clear()
-
-# Define formatter
-formatter = logging.Formatter(
-    "%(asctime)s │ %(levelname)s │ %(message)s", datefmt="%H:%M:%S")
-
-# Console handler
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(formatter)
-log.addHandler(console_handler)
-
-# Direct write file handler
-direct_handler = DirectWriteHandler(str(log_file))
-direct_handler.setFormatter(formatter)
-log.addHandler(direct_handler)
+# Only configure if not already configured for this process
+if not hasattr(log, '_configured_for_pid') or log._configured_for_pid != _CURRENT_PID:
+    log.setLevel(logging.INFO)
+    
+    # Remove ALL existing handlers
+    for handler in log.handlers[:]:
+        log.removeHandler(handler)
+    
+    # Define formatter
+    formatter = logging.Formatter(
+        "%(asctime)s │ %(levelname)s │ %(message)s", datefmt="%H:%M:%S")
+    
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    log.addHandler(console_handler)
+    
+    # Direct write file handler
+    direct_handler = DirectWriteHandler(str(log_file))
+    direct_handler.setFormatter(formatter)
+    log.addHandler(direct_handler)
+    
+    # Mark as configured for this PID
+    log._configured_for_pid = _CURRENT_PID
+    
+    # Test logging only on first config
+    if _WRITE_HEADER:
+        log.info("Logging system initialized successfully")
 
 # Exception hook
 def log_exception_hook(exc_type, exc_value, exc_traceback):
@@ -352,8 +390,38 @@ def log_exception_hook(exc_type, exc_value, exc_traceback):
 
 sys.excepthook = log_exception_hook
 
-# Test logging
-log.info("Logging system initialized successfully")
+
+class TqdmLoggingHandler:
+    """Handler to redirect tqdm output to logger"""
+    def __init__(self, logger, level=logging.INFO):
+        self.logger = logger
+        self.level = level
+        
+    def write(self, buf):
+        # Strip trailing newlines and empty strings
+        buf = buf.rstrip('\n\r')
+        if buf:
+            self.logger.log(self.level, buf)
+    
+    def flush(self):
+        pass  # No-op for compatibility
+
+
+# Create a custom tqdm that logs
+class LoggingTqdm(tqdm_module.tqdm):
+    def __init__(self, *args, **kwargs):
+        # Force file output to our logger
+        if 'file' not in kwargs:
+            kwargs['file'] = TqdmLoggingHandler(log)
+        # Reduce update frequency to avoid log spam
+        if 'mininterval' not in kwargs:
+            kwargs['mininterval'] = 1.0  # Update at most once per second
+        super().__init__(*args, **kwargs)
+
+# Replace tqdm globally
+tqdm = LoggingTqdm
+
+
 
 # =============================================================================
 # GENERAL UTILITY FUNCTIONS
@@ -1528,7 +1596,6 @@ def load_datasets() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFr
     log.info(f"   └─ Ready for ML pipeline: ✅")
 
     # Garbage collection for memory optimization
-    import gc
     gc.collect()
 
     return silver, ground_truth, recipes, carb_df
@@ -2701,7 +2768,6 @@ def optimize_memory_usage(stage_name=""):
         ├─ RAM freed: 523.4 MB
         └─ Objects collected: 1247
     """
-    import gc
 
     # Get memory before cleanup
     try:
@@ -2787,7 +2853,6 @@ def handle_memory_crisis():
     Returns:
         Final memory usage percentage after cleanup
     """
-    import gc
 
     log.warning("🚨 MEMORY CRISIS - Applying emergency cleanup")
 
@@ -4233,10 +4298,7 @@ def build_image_embeddings(df: pd.DataFrame,
         alignment with the original dataset after filtering.
     """
 
-    import os
     from collections import defaultdict, Counter
-    from PIL import ImageStat
-    import gc
 
     embedding_start = time.time()
 
@@ -5804,8 +5866,7 @@ def run_full_pipeline(mode: str = "both",
     and detailed progress tracking throughout all stages.
     """
 
-    import gc
-    from datetime import datetime
+
 
     # Initialize pipeline tracking
     pipeline_start = time.time()

@@ -89,13 +89,13 @@ docker-compose exec web bash -c "
 
     echo '🧠 Training classifiers on 10% sample...' | tee -a \$CONTAINER_LOG
     echo '📝 Note: Will use cached embeddings if available (add --force to recompute)' | tee -a \$CONTAINER_LOG
-    python3 diet_classifiers.py --train --mode both --sample_frac 0.1 $FORCE_FLAG 2>&1 | tee -a \$CONTAINER_LOG
+    python3 web/diet_classifiers.py --train --mode both --sample_frac 0.1 $FORCE_FLAG 2>&1 | tee -a \$CONTAINER_LOG
 
     echo '🧪 Evaluating on provided gold set...' | tee -a \$CONTAINER_LOG
-    python3 diet_classifiers.py --ground_truth /app/data/ground_truth_sample.csv 2>&1 | tee -a \$CONTAINER_LOG
+    python3 web/diet_classifiers.py --ground_truth /app/data/ground_truth_sample.csv 2>&1 | tee -a \$CONTAINER_LOG
 
     echo '🥘 Classifying custom ingredient list...' | tee -a \$CONTAINER_LOG
-    python3 diet_classifiers.py --ingredients 'almond flour, erythritol, egg whites' 2>&1 | tee -a \$CONTAINER_LOG
+    python3 web/diet_classifiers.py --ingredients 'almond flour, erythritol, egg whites' 2>&1 | tee -a \$CONTAINER_LOG
     
     echo '✅ Container pipeline complete!' | tee -a \$CONTAINER_LOG
 " 2>&1 | tee -a "$LOG_FILE"
