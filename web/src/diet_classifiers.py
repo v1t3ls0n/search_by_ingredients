@@ -276,21 +276,20 @@ class Config:
 
 
 CFG = Config()
+
 # =============================================================================
 # DIRECT WRITE LOGGING CONFIGURATION
 # =============================================================================
-
-
 """
 Direct write logging that bypasses buffering issues entirely.
 """
 
+
 # Make sure artifacts dir exists
 CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
-CFG.logs_dir.mkdir(parents=True, exist_ok=True)
 
 # Define log file path
-log_file = CFG.logs_dir / "diet_classifiers.py.log"
+log_file = CFG.artifacts_dir / "pipeline.log"
 
 # Thread lock for file writing
 file_lock = threading.Lock()
@@ -390,38 +389,63 @@ def log_exception_hook(exc_type, exc_value, exc_traceback):
 
 sys.excepthook = log_exception_hook
 
+# =============================================================================
+# TQDM CONFIGURATION 
+# =============================================================================
+"""
+Configure tqdm to also write to log file without interfering with logger
+"""
 
-class TqdmLoggingHandler:
-    """Handler to redirect tqdm output to logger"""
-    def __init__(self, logger, level=logging.INFO):
-        self.logger = logger
-        self.level = level
-        
-    def write(self, buf):
-        # Strip trailing newlines and empty strings
-        buf = buf.rstrip('\n\r')
-        if buf:
-            self.logger.log(self.level, buf)
+# Store original tqdm
+from tqdm import tqdm as original_tqdm
+
+class FileLoggingTqdm(original_tqdm):
+    """Custom tqdm that also writes to log file"""
     
-    def flush(self):
-        pass  # No-op for compatibility
-
-
-# Create a custom tqdm that logs
-class LoggingTqdm(tqdm_module.tqdm):
+    @staticmethod
+    def write_to_log(s, file=None, end="\n", nolock=False):
+        """Write to both console and log file"""
+        # Write to console as normal
+        original_tqdm.write(s, file=file, end=end, nolock=nolock)
+        
+        # Also write to log file directly
+        if s.strip():  # Only log non-empty lines
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            log_line = f"{timestamp} │ PROGRESS │ {s.strip()}\n"
+            
+            with file_lock:
+                with open(log_file, 'a', encoding='utf-8') as f:
+                    f.write(log_line)
+                    f.flush()
+    
     def __init__(self, *args, **kwargs):
-        # Force file output to our logger
-        if 'file' not in kwargs:
-            kwargs['file'] = TqdmLoggingHandler(log)
-        # Reduce update frequency to avoid log spam
-        if 'mininterval' not in kwargs:
-            kwargs['mininterval'] = 1.0  # Update at most once per second
+        # Only log progress bars with descriptions
+        self._should_log = bool(kwargs.get('desc'))
         super().__init__(*args, **kwargs)
+        
+    def display(self, msg=None, pos=None):
+        """Override display to also log progress"""
+        # Let parent display as normal
+        super().display(msg=msg, pos=pos)
+        
+        # Also log to file if this bar has a description
+        if self._should_log and self.desc and hasattr(self, 'n') and hasattr(self, 'total'):
+            if self.total:
+                percentage = (self.n / self.total) * 100
+                # Log at milestones: 0%, 25%, 50%, 75%, 100%
+                milestones = [0, 25, 50, 75, 100]
+                for m in milestones:
+                    if abs(percentage - m) < 0.5 and not hasattr(self, f'_logged_{m}'):
+                        setattr(self, f'_logged_{m}', True)
+                        elapsed = self.format_dict.get('elapsed', 0)
+                        rate = self.format_dict.get('rate', 0) or 0
+                        self.write_to_log(
+                            f"{self.desc}: {m}% ({self.n}/{self.total}) "
+                            f"[{elapsed:.1f}s, {rate:.1f} it/s]"
+                        )
 
 # Replace tqdm globally
-tqdm = LoggingTqdm
-
-
+tqdm = FileLoggingTqdm
 
 # =============================================================================
 # GENERAL UTILITY FUNCTIONS
