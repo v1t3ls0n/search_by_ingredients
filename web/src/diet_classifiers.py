@@ -276,14 +276,12 @@ class Config:
 
 
 CFG = Config()
-
 # =============================================================================
 # DIRECT WRITE LOGGING CONFIGURATION
 # =============================================================================
 """
 Direct write logging that bypasses buffering issues entirely.
 """
-
 
 # Make sure artifacts dir exists
 CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
@@ -292,27 +290,8 @@ CFG.logs_dir.mkdir(parents=True, exist_ok=True)
 # Define log file path
 log_file = CFG.logs_dir / "diet_classifiers.py.log"
 
-
 # Thread lock for file writing
 file_lock = threading.Lock()
-
-# Check if we're in a new process (not just a new import)
-_CURRENT_PID = os.getpid()
-_LOG_INITIALIZED_PID = os.environ.get('LOG_INITIALIZED_PID', '')
-
-# Only delete/reinitialize if this is a new process
-if str(_CURRENT_PID) != _LOG_INITIALIZED_PID:
-    # New process - set up fresh log
-    if log_file.exists():
-        try:
-            log_file.unlink()
-        except Exception:
-            pass
-    os.environ['LOG_INITIALIZED_PID'] = str(_CURRENT_PID)
-    _WRITE_HEADER = True
-else:
-    # Same process, different import - don't reinitialize
-    _WRITE_HEADER = False
 
 
 class DirectWriteHandler(logging.Handler):
@@ -321,22 +300,24 @@ class DirectWriteHandler(logging.Handler):
     def __init__(self, filename):
         super().__init__()
         self.filename = filename
-        # Only write header for new process
-        if _WRITE_HEADER:
-            self._write_direct("="*80 + "\n")
-            self._write_direct("DIET CLASSIFIER PIPELINE - LOG INITIALIZED\n")
-            self._write_direct(f"Process ID: {os.getpid()}\n")
-            self._write_direct(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-            self._write_direct("="*80 + "\n")
+        # Write a separator for new runs (but don't delete existing content)
+        self._write_direct("\n" + "="*80 + "\n")
+        self._write_direct(f"NEW RUN STARTED AT {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        self._write_direct(f"Process ID: {os.getpid()}\n")
+        self._write_direct("="*80 + "\n")
 
     def _write_direct(self, msg):
         """Write directly to file with no buffering"""
         with file_lock:
+            # Always append, never truncate
             with open(self.filename, 'a', encoding='utf-8') as f:
                 f.write(msg)
                 f.flush()
                 # Force OS-level flush
-                os.fsync(f.fileno())
+                try:
+                    os.fsync(f.fileno())
+                except:
+                    pass  # Some filesystems don't support fsync
 
     def emit(self, record):
         try:
@@ -349,13 +330,9 @@ class DirectWriteHandler(logging.Handler):
 # Get logger
 log = logging.getLogger("PIPE")
 
-# Only configure if not already configured for this process
-if not hasattr(log, '_configured_for_pid') or log._configured_for_pid != _CURRENT_PID:
+# Configure logger - but check if handlers already exist to avoid duplicates
+if not log.handlers:
     log.setLevel(logging.INFO)
-    
-    # Remove ALL existing handlers
-    for handler in log.handlers[:]:
-        log.removeHandler(handler)
     
     # Define formatter
     formatter = logging.Formatter(
@@ -371,12 +348,8 @@ if not hasattr(log, '_configured_for_pid') or log._configured_for_pid != _CURREN
     direct_handler.setFormatter(formatter)
     log.addHandler(direct_handler)
     
-    # Mark as configured for this PID
-    log._configured_for_pid = _CURRENT_PID
-    
-    # Test logging only on first config
-    if _WRITE_HEADER:
-        log.info("Logging system initialized successfully")
+    # Test logging
+    log.info("Logging system initialized successfully")
 
 # Exception hook
 def log_exception_hook(exc_type, exc_value, exc_traceback):
