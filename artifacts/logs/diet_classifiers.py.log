@@ -1,0 +1,976 @@
+
+================================================================================
+NEW RUN STARTED AT 2025-06-20 21:07:17
+Process ID: 46
+================================================================================
+21:07:17 │ INFO │ Logging system initialized successfully
+
+================================================================================
+NEW RUN STARTED AT 2025-06-20 21:07:18
+Process ID: 102
+================================================================================
+21:07:18 │ INFO │ Logging system initialized successfully
+21:07:18 │ INFO │ 🚀 Starting main with args: Namespace(ground_truth=None, train=True, ingredients=None, mode='both', force=False, sample_frac=0.1)
+21:07:18 │ INFO │ 🧠 SINGLE training run - sample_frac=0.1
+21:07:18 │ INFO │ 🚀 STARTING FULL ML PIPELINE
+21:07:18 │ INFO │    Mode: both
+21:07:18 │ INFO │    Force recomputation: False
+21:07:18 │ INFO │    Sample fraction: 0.1
+21:07:18 │ INFO │    Start time: 2025-06-20 21:07:18
+21:07:18 │ INFO │    Available CPU cores: 24
+21:07:18 │ INFO │    Available memory: 31 GB
+21:07:18 │ INFO │ 
+📂 STAGE 1: DATA LOADING AND PREPARATION
+21:07:18 │ INFO │ 
+📂 DATASET LOADING PIPELINE
+21:07:18 │ INFO │    Configuration: 2 data sources
+21:07:18 │ INFO │    Data directory: /app/data
+21:07:18 │ INFO │    📊 Data Sources:
+21:07:18 │ INFO │    ├─ allrecipes.parquet: Local
+21:07:18 │ INFO │    │  └─ /app/data/allrecipes.parquet
+21:07:18 │ INFO │    ├─ ground_truth_sample.csv: Local
+21:07:18 │ INFO │    │  └─ /app/data/ground_truth_sample.csv
+21:07:18 │ INFO │ 
+   🍳 STAGE 1: LOADING RECIPES DATASET
+21:07:18 │ INFO │    ├─ Source: /app/data/allrecipes.parquet
+21:07:18 │ INFO │       ├─ Local file size: 49.2 MB
+21:07:19 │ INFO │       📊 Recipes Dataset:
+21:07:19 │ INFO │       ├─ Shape: (225602, 5)
+21:07:19 │ INFO │       ├─ Columns: ['title', 'description', 'instructions', 'ingredients', 'photo_url']
+21:07:19 │ INFO │       ├─ Memory usage: 145.4 MB
+21:07:19 │ INFO │       └─ Load time: 0.6s
+
+================================================================================
+NEW RUN STARTED AT 2025-06-20 21:07:22
+Process ID: 151
+================================================================================
+21:07:22 │ INFO │ Logging system initialized successfully
+21:07:22 │ INFO │       📈 Data Quality:
+21:07:22 │ INFO │       ├─ Total recipes: 225,602
+21:07:22 │ INFO │       ├─ Null ingredients: 0
+21:07:22 │ INFO │       ├─ Empty ingredients: 0
+21:07:22 │ INFO │       └─ With photos: 225,602 (100.0%)
+21:07:22 │ INFO │    ✅ Recipes loaded successfully in 4.1s
+21:07:22 │ INFO │       💾 Recipes loaded: 16.7% memory used (4747 MB / 32015 MB)
+21:07:22 │ INFO │ 
+   🎯 STAGE 2: LOADING GROUND TRUTH DATASET
+21:07:22 │ INFO │    ├─ Source: /app/data/ground_truth_sample.csv
+21:07:22 │ INFO │       ├─ File size: 79.1 KB
+21:07:22 │ INFO │       📊 Ground Truth Dataset:
+21:07:22 │ INFO │       ├─ Shape: (100, 7)
+21:07:22 │ INFO │       ├─ Columns: ['title', 'description', 'instructions', 'ingredients', 'photo_url', 'vegan', 'keto']
+21:07:22 │ INFO │       ├─ Keto columns found: ['keto']
+21:07:22 │ INFO │       ├─ Vegan columns found: ['vegan']
+21:07:22 │ INFO │       └─ Load time: 0.01s
+21:07:22 │ INFO │       ├─ Keto labels: 40/100 (40.0% positive)
+21:07:22 │ INFO │       ├─ Vegan labels: 40/100 (40.0% positive)
+21:07:24 │ INFO │    ✅ Ground truth loaded successfully in 1.8s
+21:07:24 │ INFO │       💾 Ground truth loaded: 17.0% memory used (4852 MB / 32015 MB)
+21:07:24 │ INFO │ 
+   🥈 STAGE 3: GENERATING SILVER LABELS
+21:07:40 │ INFO │ USDA carb table loaded: 303 distinct food descriptions
+21:07:40 │ INFO │ Carb map initialised (303 keys)
+21:09:05 │ INFO │       📊 Silver Labels Generated:
+21:09:05 │ INFO │       ├─ Total recipes: 225,602
+21:09:06 │ INFO │       ├─ Keto positive: 36,722 (16.3%)
+21:09:06 │ INFO │       ├─ Vegan positive: 16,378 (7.3%)
+21:09:06 │ INFO │       ├─ With photos: 225,602 (100.0%)
+21:09:06 │ INFO │       └─ Generation time: 101.6s
+21:09:06 │ INFO │    ✅ Silver labels generated successfully in 101.7s
+21:09:06 │ INFO │       💾 Silver labels generated: 17.2% memory used (4907 MB / 32015 MB)
+21:09:06 │ INFO │ 
+   ✅ STAGE 4: DATA VALIDATION AND CROSS-CHECKS
+21:09:06 │ INFO │       💾 Memory Usage by Dataset:
+21:09:06 │ INFO │       ├─ Recipes: 145.4 MB
+21:09:06 │ INFO │       ├─ Silver: 106.4 MB
+21:09:06 │ INFO │       ├─ Ground_truth: 0.1 MB
+21:09:06 │ INFO │       └─ Total: 251.9 MB
+21:09:06 │ INFO │       📊 Label Distribution Comparison:
+21:09:06 │ INFO │       ├─ Keto: Gold=40.0%, Silver=16.3%
+21:09:06 │ INFO │       └─ Vegan: Gold=40.0%, Silver=7.3%
+21:09:06 │ WARNING │       ⚠️  Large keto distribution difference: 23.7%
+21:09:06 │ WARNING │       ⚠️  Large vegan distribution difference: 32.7%
+21:09:06 │ INFO │       ✅ Validation Summary:
+21:09:06 │ INFO │       ├─ Recipes Loaded: ✅
+21:09:06 │ INFO │       ├─ Ground Truth Loaded: ✅
+21:09:06 │ INFO │       ├─ Silver Generated: ✅
+21:09:06 │ INFO │       ├─ Required Columns Present: ✅
+21:09:06 │ INFO │       ├─ Labels Processed: ✅
+21:09:06 │ INFO │       ├─ Consistency Issues: 0
+21:09:06 │ INFO │    ✅ Data validation completed in 0.4s
+21:09:06 │ INFO │       💾 Validation complete: 17.2% memory used (4917 MB / 32015 MB)
+21:09:06 │ INFO │ USDA carb table loaded: 303 distinct food descriptions
+21:09:06 │ INFO │    ✅ USDA table loaded in 0.1s – 303 rows
+21:09:06 │ INFO │ 
+🏁 DATASET LOADING COMPLETE
+21:09:06 │ INFO │    ├─ Total loading time: 108.3s
+21:09:06 │ INFO │    ├─ Datasets loaded: 4 (recipes, ground_truth, silver, usda)
+21:09:06 │ INFO │    ├─ Total memory usage: 251.9 MB
+21:09:06 │ INFO │    └─ All validations passed: ✅
+21:09:06 │ INFO │ 
+   📋 Final Dataset Summary:
+21:09:06 │ INFO │    ├─ Recipes: 225,602 rows × 5 columns
+21:09:06 │ INFO │    ├─ Ground Truth: 100 rows × 10 columns
+21:09:06 │ INFO │    ├─ Silver Labels: 225,602 rows × 5 columns
+21:09:06 │ INFO │    ├─ USDA Carb Tbl:  303 rows × 2 columns (0.0 MB)
+21:09:06 │ INFO │    ├─ Total memory usage: 251.9 MB
+21:09:06 │ INFO │    └─ Ready for ML pipeline: ✅
+21:09:06 │ INFO │    📉 Consistent sampling: Using 721 common indices
+21:09:06 │ INFO │    📉 Applied sampling before processing:
+21:09:06 │ INFO │    ├─ Text: 22,560 → 2,256 rows (10.0%)
+21:09:06 │ INFO │    └─ Images: 7,315 → 721 rows (10.0%)
+21:09:06 │ INFO │ 
+   📊 Dataset Statistics:
+21:09:06 │ INFO │    ├─ Silver (All): 22,560 recipes
+21:09:06 │ INFO │    ├─ Silver (Text): 2,256 recipes
+21:09:06 │ INFO │    ├─ Silver (Images): 721 recipes
+21:09:07 │ INFO │    ├─ Gold (All): 100 recipes
+21:09:07 │ INFO │    └─ Gold (Images): 66 recipes
+21:09:07 │ INFO │ 
+   ⚖️  Class Balance Analysis:
+21:09:07 │ INFO │ 
+── Gold set set class counts ─────────────
+21:09:07 │ INFO │  keto:     40/100 (40.0%)
+21:09:07 │ INFO │ vegan:     40/100 (40.0%)
+21:09:07 │ INFO │ 
+── Silver (Text) set set class counts ─────────────
+21:09:07 │ INFO │  keto:    379/2256 (16.8%)
+21:09:07 │ INFO │ vegan:    160/2256 ( 7.1%)
+21:09:07 │ INFO │ 
+── Silver (Image) set set class counts ─────────────
+21:09:07 │ INFO │  keto:    295/721 (40.9%)
+21:09:07 │ INFO │ vegan:    126/721 (17.5%)
+21:09:07 │ INFO │    ✅ Data loading completed in 108.9s
+21:09:07 │ INFO │    📊 Data Loading - Memory: 17.3% used (4929 MB / 32015 MB)
+21:09:07 │ INFO │    🧹 Data Loading: Memory cleanup
+21:09:07 │ INFO │       ├─ RAM: 17.3% used (4929 MB)
+21:09:07 │ INFO │       ✅ Memory usage normal: 17.3%
+21:09:07 │ INFO │ 
+🔤 STAGE 2: TEXT FEATURE PROCESSING
+21:09:07 │ INFO │    ├─ Vectorizer config: {'min_df': 2, 'ngram_range': (1, 3), 'max_features': 50000, 'sublinear_tf': True}
+21:09:07 │ INFO │ USDA carb table loaded: 303 distinct food descriptions
+21:09:07 │ INFO │    ├─ USDA examples added: 303
+21:09:07 │ INFO │    📊 Text Processing Results:
+21:09:07 │ INFO │    ├─ Vocabulary size: 6,341
+21:09:07 │ INFO │    ├─ Silver features: (2559, 6341)
+21:09:07 │ INFO │    ├─ Gold features: (100, 6341)
+21:09:07 │ INFO │    ├─ Sparsity: 0.0%
+21:09:07 │ INFO │    └─ Memory usage: ~0 MB
+21:09:07 │ INFO │    ✅ Text processing completed in 0.3s
+21:09:07 │ INFO │    📊 Text Processing - Memory: 17.3% used (4928 MB / 32015 MB)
+21:09:07 │ INFO │    🧹 Text Processing: Memory cleanup
+21:09:07 │ INFO │       ├─ RAM: 17.3% used (4928 MB)
+21:09:07 │ INFO │       ✅ Memory usage normal: 17.3%
+21:09:07 │ INFO │ 
+🖼️  STAGE 3: IMAGE FEATURE PROCESSING
+21:09:07 │ INFO │    ├─ Processing 721 sampled silver images
+21:09:07 │ INFO │    └─ Processing 66 gold images
+21:09:07 │ INFO │ 
+🧠 EMBEDDINGS-FIRST IMAGE PIPELINE: silver
+21:09:07 │ INFO │    Target directory: dataset/arg_max/images/silver
+21:09:07 │ INFO │    Total samples: 721
+21:09:07 │ INFO │    Force recompute: False
+21:09:07 │ INFO │    🔍 Searching for existing embeddings...
+21:09:07 │ INFO │    ❌ No suitable embeddings found - proceeding with downloads
+21:09:07 │ INFO │ 
+   📋 DOWNLOAD PLANNING:
+21:09:07 │ INFO │       📊 Analysis Results:
+21:09:08 │ INFO │       ├─ Total samples: 721
+21:09:08 │ INFO │       ├─ Existing valid files: 0
+21:09:08 │ INFO │       ├─ Corrupted files cleaned: 0
+21:09:08 │ INFO │       ├─ Valid URLs to download: 721
+21:09:08 │ INFO │       ├─ Missing URLs: 0
+21:09:08 │ INFO │       └─ Invalid URLs: 0
+21:09:08 │ WARNING │    ⚠️  Large download required: 721 files
+21:09:08 │ INFO │       └─ This may take a while...
+21:09:08 │ INFO │    🎯 Download Queue: 721 files
+21:09:08 │ INFO │ 
+   🚀 EXECUTING ROBUST DOWNLOADS:
+21:09:38 │ INFO │ 
+   📊 DOWNLOAD RESULTS:
+21:09:38 │ INFO │    ├─ Processing time: 30.8s
+21:09:38 │ INFO │    ├─ Files downloaded: 721
+21:09:38 │ INFO │    ├─ Files skipped: 0
+21:09:38 │ INFO │    ├─ Download failures: 0
+21:09:38 │ INFO │    ├─ Retry attempts: 0
+21:09:38 │ INFO │    └─ Data transferred: 21.9 MB
+21:09:38 │ INFO │ 
+   📈 SUCCESS METRICS:
+21:09:38 │ INFO │    ├─ Download success rate: 100.0%
+21:09:38 │ INFO │    ├─ Total valid files: 721
+21:09:38 │ INFO │    ├─ Coverage: 100.0% of dataset
+21:09:38 │ INFO │    ✅ ACCEPTABLE COVERAGE - proceeding with 721 images
+21:09:38 │ INFO │       ├─ Silver download: 721/721 successful
+21:09:38 │ INFO │ 
+🧠 EMBEDDINGS-FIRST IMAGE PIPELINE: gold
+21:09:38 │ INFO │    Target directory: dataset/arg_max/images/gold
+21:09:38 │ INFO │    Total samples: 66
+21:09:38 │ INFO │    Force recompute: False
+21:09:38 │ INFO │    🔍 Searching for existing embeddings...
+21:09:39 │ INFO │    ❌ No suitable embeddings found - proceeding with downloads
+21:09:39 │ INFO │ 
+   📋 DOWNLOAD PLANNING:
+21:09:39 │ INFO │       📊 Analysis Results:
+21:09:39 │ INFO │       ├─ Total samples: 66
+21:09:39 │ INFO │       ├─ Existing valid files: 0
+21:09:39 │ INFO │       ├─ Corrupted files cleaned: 0
+21:09:39 │ INFO │       ├─ Valid URLs to download: 66
+21:09:39 │ INFO │       ├─ Missing URLs: 0
+21:09:39 │ INFO │       └─ Invalid URLs: 0
+21:09:39 │ WARNING │    ⚠️  Large download required: 66 files
+21:09:39 │ INFO │       └─ This may take a while...
+21:09:39 │ INFO │    🎯 Download Queue: 66 files
+21:09:39 │ INFO │ 
+   🚀 EXECUTING ROBUST DOWNLOADS:
+21:09:41 │ INFO │ 
+   📊 DOWNLOAD RESULTS:
+21:09:41 │ INFO │    ├─ Processing time: 2.4s
+21:09:41 │ INFO │    ├─ Files downloaded: 66
+21:09:41 │ INFO │    ├─ Files skipped: 0
+21:09:41 │ INFO │    ├─ Download failures: 0
+21:09:41 │ INFO │    ├─ Retry attempts: 0
+21:09:41 │ INFO │    └─ Data transferred: 2.1 MB
+21:09:41 │ INFO │ 
+   📈 SUCCESS METRICS:
+21:09:41 │ INFO │    ├─ Download success rate: 100.0%
+21:09:41 │ INFO │    ├─ Total valid files: 66
+21:09:41 │ INFO │    ├─ Coverage: 100.0% of dataset
+21:09:41 │ INFO │    ✅ ACCEPTABLE COVERAGE - proceeding with 66 images
+21:09:41 │ INFO │       ├─ Gold download: 66/66 successful
+21:09:41 │ INFO │       ├─ Silver filtered: 721 with valid images
+21:09:41 │ INFO │       ├─ Gold filtered: 66 with valid images
+21:09:41 │ INFO │       ├─ Gold filtered: 66 with valid images
+21:09:41 │ INFO │ 
+🧠 IMAGE EMBEDDING EXTRACTION: silver
+21:09:41 │ INFO │    Target images: 721
+21:09:41 │ INFO │    Mode: silver
+21:09:41 │ INFO │    Force recomputation: False
+21:09:41 │ INFO │    🔧 Device Configuration:
+21:09:41 │ INFO │    ├─ Device: cpu
+21:09:41 │ INFO │    ├─ CUDA available: False
+21:09:41 │ INFO │    └─ Using CPU (warning: much slower)
+21:09:41 │ INFO │    📁 Paths:
+21:09:41 │ INFO │    ├─ Image directory: dataset/arg_max/images/silver
+21:09:41 │ INFO │    ├─ Cache file: dataset/arg_max/images/silver/embeddings.npy
+21:09:41 │ INFO │    └─ Backup file: /app/artifacts/embeddings_silver_backup.npy
+21:09:41 │ INFO │ 
+   🔍 Cache Validation:
+21:09:41 │ INFO │       ├─ Artifacts backup: Not found
+21:09:41 │ INFO │       ├─ Primary cache: Not found
+21:09:41 │ INFO │       ├─ Legacy backup: Not found
+21:09:41 │ INFO │       └─ No valid cache found - will compute embeddings
+21:09:41 │ INFO │ 
+   📊 Pre-processing Analysis:
+21:09:41 │ INFO │       📈 Image Availability:
+21:09:41 │ INFO │       ├─ Total expected: 721
+21:09:41 │ INFO │       ├─ Available: 721 (100.0%)
+21:09:41 │ INFO │       ├─ Missing: 0 (0.0%)
+21:09:41 │ INFO │       └─ Corrupted: 0 (0.0%)
+21:09:41 │ INFO │       📊 Sample Analysis (10 images):
+21:09:41 │ INFO │       ├─ Average size: 436×289 pixels
+21:09:42 │ INFO │       ├─ Average file size: 35.2 KB
+21:09:42 │ INFO │       ├─ Color modes: {'RGB': 10}
+21:09:42 │ INFO │       └─ Formats: {'JPEG': 10}
+21:09:42 │ INFO │ 
+   🤖 Model Setup:
+21:11:21 │ INFO │       ✅ Model loaded in 99.52s
+21:11:21 │ INFO │       ├─ Architecture: ResNet-50 (feature extractor)
+21:11:21 │ INFO │       ├─ Output dimension: 2048
+21:11:21 │ INFO │       ├─ Device: cpu
+21:11:21 │ INFO │       └─ Parameters: 23,508,032
+21:11:21 │ INFO │ 
+   ⚡ Feature Extraction:
+21:11:21 │ INFO │       🔧 Processing Configuration:
+21:11:21 │ INFO │       ├─ Batch size: 8
+21:11:21 │ INFO │       ├─ Total batches: 91
+21:11:21 │ INFO │       └─ Expected output shape: (721, 2048)
+21:11:39 │ INFO │ 
+   📊 Extraction Results:
+21:11:39 │ INFO │    ├─ Total processing time: 117.6s
+21:11:39 │ INFO │    ├─ Successfully processed: 721
+21:11:39 │ INFO │    ├─ Missing images: 0
+21:11:39 │ INFO │    ├─ Failed processing: 0
+21:11:39 │ INFO │    └─ Overall success rate: 100.0%
+21:11:39 │ INFO │    ⚡ Performance Metrics:
+21:11:39 │ INFO │    ├─ Average processing time: 0.024s per image
+21:11:39 │ INFO │    ├─ Throughput: 6.1 images/second
+21:11:39 │ INFO │    └─ Device efficiency: cpu
+21:11:39 │ INFO │ 
+   💾 Saving Results:
+21:11:39 │ INFO │    💾 Metadata saved to: dataset/arg_max/images/silver/embedding_metadata.json
+21:11:39 │ INFO │    📊 File Information:
+21:11:39 │ INFO │    ├─ Primary cache: 5.6 MB (dataset/arg_max/images/silver/embeddings.npy)
+21:11:39 │ INFO │    ├─ Backup cache: 5.6 MB (/app/artifacts/embeddings_silver_backup.npy)
+21:11:39 │ INFO │    └─ Array shape: (721, 2048)
+21:11:39 │ INFO │ 
+   🏁 EMBEDDING EXTRACTION COMPLETE:
+21:11:39 │ INFO │    ├─ Output shape: (721, 2048)
+21:11:39 │ INFO │    ├─ Success rate: 100.0%
+21:11:39 │ INFO │    ├─ Total time: 117.6s
+21:11:39 │ INFO │    ├─ Throughput: 6.1 images/s
+21:11:39 │ INFO │    └─ Files saved: Primary + Backup + Metadata
+21:11:39 │ INFO │       ├─ Quality filtering: 575/721 images kept
+21:11:39 │ INFO │    📊 Quality filtering reduced images from 721 to 575
+21:11:39 │ INFO │       ├─ Aligning silver DataFrame: 721 → 575 rows
+21:11:39 │ INFO │       ├─ Silver embeddings: (575, 2048)
+21:11:39 │ INFO │       ├─ Silver DataFrame: 575 rows
+21:11:39 │ INFO │ 
+🧠 IMAGE EMBEDDING EXTRACTION: gold
+21:11:39 │ INFO │    Target images: 66
+21:11:39 │ INFO │    Mode: gold
+21:11:39 │ INFO │    Force recomputation: False
+21:11:39 │ INFO │    🔧 Device Configuration:
+21:11:39 │ INFO │    ├─ Device: cpu
+21:11:39 │ INFO │    ├─ CUDA available: False
+21:11:39 │ INFO │    └─ Using CPU (warning: much slower)
+21:11:39 │ INFO │    📁 Paths:
+21:11:40 │ INFO │    ├─ Image directory: dataset/arg_max/images/gold
+21:11:40 │ INFO │    ├─ Cache file: dataset/arg_max/images/gold/embeddings.npy
+21:11:40 │ INFO │    └─ Backup file: /app/artifacts/embeddings_gold_backup.npy
+21:11:40 │ INFO │ 
+   🔍 Cache Validation:
+21:11:40 │ INFO │       ├─ Artifacts backup: Not found
+21:11:40 │ INFO │       ├─ Primary cache: Not found
+21:11:40 │ INFO │       ├─ Legacy backup: Not found
+21:11:40 │ INFO │       └─ No valid cache found - will compute embeddings
+21:11:40 │ INFO │ 
+   📊 Pre-processing Analysis:
+21:11:40 │ INFO │       📈 Image Availability:
+21:11:40 │ INFO │       ├─ Total expected: 66
+21:11:40 │ INFO │       ├─ Available: 66 (100.0%)
+21:11:40 │ INFO │       ├─ Missing: 0 (0.0%)
+21:11:40 │ INFO │       └─ Corrupted: 0 (0.0%)
+21:11:40 │ INFO │       📊 Sample Analysis (10 images):
+21:11:40 │ INFO │       ├─ Average size: 436×289 pixels
+21:11:40 │ INFO │       ├─ Average file size: 32.1 KB
+21:11:40 │ INFO │       ├─ Color modes: {'RGB': 10}
+21:11:40 │ INFO │       └─ Formats: {'JPEG': 10}
+21:11:40 │ INFO │ 
+   🤖 Model Setup:
+21:11:40 │ INFO │       ✅ Model loaded in 0.18s
+21:11:40 │ INFO │       ├─ Architecture: ResNet-50 (feature extractor)
+21:11:40 │ INFO │       ├─ Output dimension: 2048
+21:11:40 │ INFO │       ├─ Device: cpu
+21:11:40 │ INFO │       └─ Parameters: 23,508,032
+21:11:40 │ INFO │ 
+   ⚡ Feature Extraction:
+21:11:40 │ INFO │       🔧 Processing Configuration:
+21:11:40 │ INFO │       ├─ Batch size: 8
+21:11:40 │ INFO │       ├─ Total batches: 9
+21:11:40 │ INFO │       └─ Expected output shape: (66, 2048)
+21:11:42 │ INFO │ 
+   📊 Extraction Results:
+21:11:42 │ INFO │    ├─ Total processing time: 2.2s
+21:11:42 │ INFO │    ├─ Successfully processed: 66
+21:11:42 │ INFO │    ├─ Missing images: 0
+21:11:42 │ INFO │    ├─ Failed processing: 0
+21:11:42 │ INFO │    └─ Overall success rate: 100.0%
+21:11:42 │ INFO │    ⚡ Performance Metrics:
+21:11:42 │ INFO │    ├─ Average processing time: 0.025s per image
+21:11:42 │ INFO │    ├─ Throughput: 29.4 images/second
+21:11:42 │ INFO │    └─ Device efficiency: cpu
+21:11:42 │ INFO │ 
+   💾 Saving Results:
+21:11:42 │ INFO │    💾 Metadata saved to: dataset/arg_max/images/gold/embedding_metadata.json
+21:11:42 │ INFO │    📊 File Information:
+21:11:42 │ INFO │    ├─ Primary cache: 0.5 MB (dataset/arg_max/images/gold/embeddings.npy)
+21:11:42 │ INFO │    ├─ Backup cache: 0.5 MB (/app/artifacts/embeddings_gold_backup.npy)
+21:11:42 │ INFO │    └─ Array shape: (66, 2048)
+21:11:42 │ INFO │ 
+   🏁 EMBEDDING EXTRACTION COMPLETE:
+21:11:42 │ INFO │    ├─ Output shape: (66, 2048)
+21:11:42 │ INFO │    ├─ Success rate: 100.0%
+21:11:42 │ INFO │    ├─ Total time: 2.2s
+21:11:42 │ INFO │    ├─ Throughput: 29.4 images/s
+21:11:42 │ INFO │    └─ Files saved: Primary + Backup + Metadata
+21:11:42 │ INFO │       ├─ Quality filtering: 52/66 images kept
+21:11:42 │ INFO │    📊 Quality filtering reduced images from 66 to 52
+21:11:42 │ INFO │       ├─ Aligning gold DataFrame: 66 → 52 rows
+21:11:42 │ INFO │       ├─ Gold embeddings: (52, 2048)
+21:11:42 │ INFO │       ├─ Gold DataFrame: 52 rows
+21:11:42 │ INFO │       ├─ Saved gold embeddings to embeddings/img_gold.pkl
+21:11:42 │ INFO │       ├─ Saved silver embeddings to embeddings/img_silver.pkl
+21:11:42 │ INFO │    🔍 DIMENSION VERIFICATION:
+21:11:42 │ INFO │    ├─ Silver embeddings: (575, 2048)
+21:11:42 │ INFO │    ├─ Silver DataFrame: 575 rows
+21:11:42 │ INFO │    ├─ Gold embeddings: (52, 2048)
+21:11:42 │ INFO │    └─ Gold DataFrame: 52 rows
+21:11:42 │ INFO │    📊 Image Processing Results:
+21:11:42 │ INFO │    ├─ Silver images available: 721
+21:11:42 │ INFO │    ├─ Silver images downloaded: 721
+21:11:42 │ INFO │    ├─ Silver valid embeddings: 575
+21:11:42 │ INFO │    ├─ Gold images available: 66
+21:11:42 │ INFO │    ├─ Gold images downloaded: 66
+21:11:42 │ INFO │    ├─ Gold valid embeddings: 52
+21:11:42 │ INFO │    ├─ Silver embedding size: 4 MB
+21:11:42 │ INFO │    └─ Gold embedding size: 0 MB
+21:11:42 │ INFO │    ✅ Image processing completed in 155.0s
+21:11:42 │ INFO │    📊 Image Processing - Memory: 17.7% used (5064 MB / 32015 MB)
+21:11:42 │ INFO │    🧹 Image Processing: Memory cleanup
+21:11:43 │ INFO │       ├─ RAM: 17.7% used (5064 MB)
+21:11:43 │ INFO │       ✅ Memory usage normal: 17.7%
+21:11:43 │ INFO │ 
+🤖 STAGE 4: MODEL TRAINING
+21:11:43 │ INFO │    🖼️  Training image-based models...
+21:11:43 │ INFO │ 🚀 Starting MODE A Training Pipeline
+21:11:43 │ INFO │    Domain: image
+21:11:43 │ INFO │    SMOTE enabled: False
+21:11:43 │ INFO │    Silver set size: 575
+21:11:43 │ INFO │    Gold set size: 52
+21:11:43 │ INFO │    Feature dimensions: (575, 2048)
+21:11:43 │ INFO │ 
+📊 Class Distribution Analysis:
+21:11:43 │ INFO │     Keto - Silver: 245/575 (42.6%) | Gold: 27/52 (51.9%)
+21:11:43 │ INFO │    Vegan - Silver: 105/575 (18.3%) | Gold: 28/52 (53.8%)
+21:11:43 │ INFO │ 
+🎯 Processing KETO classification:
+21:11:43 │ INFO │    Training labels - Positive: 245 (42.6%)
+21:11:43 │ INFO │    Test labels - Positive: 27 (51.9%)
+21:11:43 │ INFO │    ⏭️  SMOTE disabled, using original data
+21:11:43 │ INFO │    🤖 Training 3 models: ['MLP', 'RF', 'LGBM']
+21:11:43 │ INFO │       ✅    MLP_IMAGE: F1=0.600 | ACC=0.692 | PREC=0.923 | REC=0.444 | Time=0.5s
+21:11:43 │ INFO │       🏆 New best model for keto: MLP_IMAGE (F1=0.600)
+21:11:44 │ INFO │       ✅     RF_IMAGE: F1=0.526 | ACC=0.654 | PREC=0.909 | REC=0.370 | Time=0.4s
+21:11:45 │ INFO │       ✅   LGBM_IMAGE: F1=0.564 | ACC=0.673 | PREC=0.917 | REC=0.407 | Time=1.3s
+21:11:45 │ INFO │    🎯 KETO COMPLETE:
+21:11:45 │ INFO │    ├─ Best Model: MLP_IMAGE (F1=0.600)
+21:11:45 │ INFO │    ├─ Final Metrics: ACC=0.692 | PREC=0.923 | REC=0.444
+21:11:45 │ INFO │    └─ Task Time: 2.3s
+21:11:45 │ INFO │ 
+🎯 Processing VEGAN classification:
+21:11:45 │ INFO │    Training labels - Positive: 105 (18.3%)
+21:11:45 │ INFO │    Test labels - Positive: 28 (53.8%)
+21:11:45 │ INFO │    ⏭️  SMOTE disabled, using original data
+21:11:45 │ INFO │    🤖 Training 3 models: ['MLP', 'RF', 'LGBM']
+21:11:46 │ INFO │       ✅    MLP_IMAGE: F1=0.444 | ACC=0.615 | PREC=1.000 | REC=0.286 | Time=0.7s
+21:11:46 │ INFO │       🏆 New best model for vegan: MLP_IMAGE (F1=0.444)
+21:11:46 │ INFO │       ✅     RF_IMAGE: F1=0.000 | ACC=0.462 | PREC=0.000 | REC=0.000 | Time=0.4s
+21:11:47 │ INFO │       ✅   LGBM_IMAGE: F1=0.250 | ACC=0.538 | PREC=1.000 | REC=0.143 | Time=1.0s
+21:11:47 │ INFO │    🎯 VEGAN COMPLETE:
+21:11:47 │ INFO │    ├─ Best Model: MLP_IMAGE (F1=0.444)
+21:11:47 │ INFO │    ├─ Final Metrics: ACC=0.615 | PREC=1.000 | REC=0.286
+21:11:47 │ INFO │    └─ Task Time: 2.3s
+21:11:47 │ INFO │ 
+🏁 MODE A PIPELINE COMPLETE:
+21:11:47 │ INFO │    ├─ Total Time: 4.8s
+21:11:47 │ INFO │    ├─ Tasks Completed: 2
+21:11:47 │ INFO │    └─ Domain: image
+21:11:47 │ INFO │ 
+📊 FINAL RESULTS SUMMARY:
+21:11:47 │ INFO │    1.  KETO |       MLP_IMAGE | F1=0.600 | ACC=0.692 | Time=0.5s
+21:11:47 │ INFO │    2. VEGAN |       MLP_IMAGE | F1=0.444 | ACC=0.615 | Time=0.7s
+21:11:47 │ INFO │ 
+╭─ MODE A (silver → gold) ───────────────────────────────────
+21:11:47 │ INFO │ │ model task     ACC    PREC     REC      F1     ROC      PR │
+21:11:47 │ INFO │ ├────────────────────────────────────────────────────────────┤
+21:11:47 │ INFO │ │ MLP_IMAGE keto     0.69    0.92    0.44    0.60    0.91    0.86 │
+21:11:47 │ INFO │ │ MLP_IMAGE vegan    0.62    1.00    0.29    0.44    1.00    1.00 │
+21:11:47 │ INFO │ ╰────────────────────────────────────────────────────────────╯
+21:11:48 │ INFO │       ✅ Image models: 2 results
+21:11:48 │ INFO │    🧹 Image Models: Memory cleanup
+21:11:48 │ INFO │       ├─ RAM: 18.3% used (5245 MB)
+21:11:48 │ INFO │       ├─ Objects collected: 23
+21:11:48 │ INFO │       ✅ Memory usage normal: 18.3%
+21:11:48 │ INFO │    🔤 Training text-based models...
+21:11:48 │ INFO │ 🚀 Starting MODE A Training Pipeline
+21:11:48 │ INFO │    Domain: text
+21:11:48 │ INFO │    SMOTE enabled: True
+21:11:48 │ INFO │    Silver set size: 2,559
+21:11:48 │ INFO │    Gold set size: 100
+21:11:48 │ INFO │    Feature dimensions: (2559, 6341)
+21:11:48 │ INFO │ 
+📊 Class Distribution Analysis:
+21:11:48 │ INFO │     Keto - Silver: 542/2,559 (21.2%) | Gold: 40/100 (40.0%)
+21:11:48 │ INFO │    Vegan - Silver: 160.0/2,559 (6.3%) | Gold: 40/100 (40.0%)
+21:11:48 │ INFO │ 
+🎯 Processing KETO classification:
+21:11:48 │ INFO │    Training labels - Positive: 542 (21.2%)
+21:11:48 │ INFO │    Test labels - Positive: 40 (40.0%)
+21:11:48 │ INFO │    Minority class ratio: 21.2%
+21:11:48 │ INFO │    🔄 Applying SMOTE (minority < 30%)...
+21:11:48 │ INFO │    ✅ SMOTE completed in 0.2s
+21:11:48 │ INFO │    ├─ Size: 2,559 → 2,622 (1.0x)
+21:11:48 │ INFO │    └─ Minority ratio: 21.2% → 23.1%
+21:11:48 │ INFO │    🤖 Training 6 models: ['Rule', 'NB', 'Softmax', 'Ridge', 'PA', 'SGD']
+21:11:48 │ ERROR │       ❌ Rule: Prediction failed - sparse array length is ambiguous; use ge...
+21:11:48 │ INFO │       ✅      NB_TEXT: F1=0.937 | ACC=0.950 | PREC=0.949 | REC=0.925 | Time=0.1s
+21:11:48 │ INFO │       🏆 New best model for keto: NB_TEXT (F1=0.937)
+21:11:49 │ INFO │       ✅ Softmax_TEXT: F1=0.963 | ACC=0.970 | PREC=0.951 | REC=0.975 | Time=1.0s
+21:11:49 │ INFO │       🏆 New best model for keto: Softmax_TEXT (F1=0.963)
+21:11:50 │ INFO │ Adding probability calibration to RidgeClassifier
+21:11:51 │ INFO │       ✅   Ridge_TEXT: F1=0.865 | ACC=0.900 | PREC=0.941 | REC=0.800 | Time=1.5s
+21:11:51 │ INFO │ Adding probability calibration to PassiveAggressiveClassifier
+21:11:52 │ INFO │       ✅      PA_TEXT: F1=0.833 | ACC=0.880 | PREC=0.938 | REC=0.750 | Time=1.4s
+21:11:53 │ INFO │       ✅     SGD_TEXT: F1=0.937 | ACC=0.950 | PREC=0.949 | REC=0.925 | Time=0.7s
+21:11:53 │ INFO │    🎯 KETO COMPLETE:
+21:11:53 │ INFO │    ├─ Best Model: Softmax_TEXT (F1=0.963)
+21:11:53 │ INFO │    ├─ Final Metrics: ACC=0.970 | PREC=0.951 | REC=0.975
+21:11:53 │ INFO │    └─ Task Time: 4.9s
+21:11:53 │ WARNING │ Found 303 NaN values in vegan labels, filling with defaults
+21:11:53 │ INFO │ 
+🎯 Processing VEGAN classification:
+21:11:53 │ INFO │    Training labels - Positive: 463 (18.1%)
+21:11:53 │ INFO │    Test labels - Positive: 40 (40.0%)
+21:11:53 │ INFO │    Minority class ratio: 18.1%
+21:11:53 │ INFO │    🔄 Applying SMOTE (minority < 30%)...
+21:11:53 │ INFO │    ✅ SMOTE completed in 0.1s
+21:11:53 │ INFO │    ├─ Size: 2,559 → 2,724 (1.1x)
+21:11:53 │ INFO │    └─ Minority ratio: 18.1% → 23.1%
+21:11:53 │ INFO │    🤖 Training 6 models: ['Rule', 'NB', 'Softmax', 'Ridge', 'PA', 'SGD']
+21:11:53 │ ERROR │       ❌ Rule: Prediction failed - sparse array length is ambiguous; use ge...
+21:11:53 │ INFO │       ✅      NB_TEXT: F1=0.892 | ACC=0.920 | PREC=0.971 | REC=0.825 | Time=0.0s
+21:11:53 │ INFO │       🏆 New best model for vegan: NB_TEXT (F1=0.892)
+21:11:54 │ INFO │       ✅ Softmax_TEXT: F1=0.776 | ACC=0.850 | PREC=0.963 | REC=0.650 | Time=0.9s
+21:11:55 │ INFO │ Adding probability calibration to RidgeClassifier
+21:11:56 │ INFO │       ✅   Ridge_TEXT: F1=0.509 | ACC=0.730 | PREC=0.933 | REC=0.350 | Time=1.8s
+21:11:56 │ INFO │ Adding probability calibration to PassiveAggressiveClassifier
+21:11:57 │ INFO │       ✅      PA_TEXT: F1=0.561 | ACC=0.750 | PREC=0.941 | REC=0.400 | Time=1.0s
+21:11:57 │ INFO │       ✅     SGD_TEXT: F1=0.610 | ACC=0.770 | PREC=0.947 | REC=0.450 | Time=0.5s
+21:11:57 │ INFO │    🎯 VEGAN COMPLETE:
+21:11:57 │ INFO │    ├─ Best Model: NB_TEXT (F1=0.892)
+21:11:57 │ INFO │    ├─ Final Metrics: ACC=0.920 | PREC=0.971 | REC=0.825
+21:11:57 │ INFO │    └─ Task Time: 4.5s
+21:11:57 │ INFO │ 
+🏁 MODE A PIPELINE COMPLETE:
+21:11:57 │ INFO │    ├─ Total Time: 9.7s
+21:11:57 │ INFO │    ├─ Tasks Completed: 2
+21:11:57 │ INFO │    └─ Domain: text
+21:11:57 │ INFO │ 
+📊 FINAL RESULTS SUMMARY:
+21:11:58 │ INFO │    1.  KETO |    Softmax_TEXT | F1=0.963 | ACC=0.970 | Time=1.0s
+21:11:58 │ INFO │    2. VEGAN |         NB_TEXT | F1=0.892 | ACC=0.920 | Time=0.0s
+21:11:58 │ INFO │ 
+╭─ MODE A (silver → gold) ───────────────────────────────────
+21:11:58 │ INFO │ │ model task     ACC    PREC     REC      F1     ROC      PR │
+21:11:58 │ INFO │ ├────────────────────────────────────────────────────────────┤
+21:11:58 │ INFO │ │ Softmax_TEXT keto     0.97    0.95    0.97    0.96    0.98    0.97 │
+21:11:58 │ INFO │ │ NB_TEXT vegan    0.92    0.97    0.82    0.89    0.97    0.92 │
+21:11:58 │ INFO │ ╰────────────────────────────────────────────────────────────╯
+21:11:58 │ INFO │       ✅ Text models: 2 results
+21:11:58 │ INFO │    🧹 Text Models: Memory cleanup
+21:11:58 │ INFO │       ├─ RAM: 21.3% used (6206 MB)
+21:11:58 │ INFO │       ├─ Objects collected: 100
+21:11:58 │ INFO │       ✅ Memory usage normal: 21.3%
+21:11:58 │ INFO │    🤝 Creating text+image ensemble...
+21:11:58 │ INFO │       ├─ keto: Testing alpha values [0.25, 0.5, 0.75]
+21:11:58 │ INFO │ ▶️  BEST-TWO (keto) — text=Softmax_TEXT (F1=0.963), image=MLP_IMAGE
+21:11:58 │ ERROR │       ❌ keto ensemble creation failed: Length of values (100) does not match length of in...
+21:11:58 │ INFO │       ├─ vegan: Testing alpha values [0.25, 0.5, 0.75]
+21:11:58 │ INFO │ ▶️  BEST-TWO (vegan) — text=NB_TEXT (F1=0.892), image=MLP_IMAGE
+21:11:58 │ ERROR │       ❌ vegan ensemble creation failed: Length of values (100) does not match length of in...
+21:11:58 │ WARNING │       ⚠️  No successful ensembles created
+21:11:58 │ INFO │    🔄 Training final combined models...
+21:11:58 │ INFO │       ├─ Combined silver features: (18, 8389)
+21:11:58 │ INFO │       ├─ Combined gold features: (52, 8389)
+21:11:58 │ INFO │       ├─ Silver samples: 18
+21:11:58 │ INFO │       └─ Gold samples: 52
+21:11:58 │ INFO │ 🚀 Starting MODE A Training Pipeline
+21:11:58 │ INFO │    Domain: both
+21:11:58 │ INFO │    SMOTE enabled: True
+21:11:58 │ INFO │    Silver set size: 18
+21:11:58 │ INFO │    Gold set size: 52
+21:11:58 │ INFO │    Feature dimensions: (18, 8389)
+21:11:58 │ INFO │ 
+📊 Class Distribution Analysis:
+21:11:58 │ INFO │     Keto - Silver: 3/18 (16.7%) | Gold: 27/52 (51.9%)
+21:11:58 │ INFO │    Vegan - Silver: 0.0/18 (0.0%) | Gold: 28/52 (53.8%)
+21:11:58 │ INFO │ 
+🎯 Processing KETO classification:
+21:11:58 │ INFO │    Training labels - Positive: 3 (16.7%)
+21:11:58 │ INFO │    Test labels - Positive: 27 (51.9%)
+21:11:58 │ INFO │    Minority class ratio: 16.7%
+21:11:58 │ INFO │    🔄 Applying SMOTE (minority < 30%)...
+21:11:58 │ WARNING │ SMOTE failed: Expected n_neighbors <= n_samples_fit, but n_neighbors = 6, n_samples_fit = 3, n_samples = 3. Using original data.
+21:11:58 │ INFO │    ✅ SMOTE completed in 0.0s
+21:11:58 │ INFO │    ├─ Size: 18 → 18 (1.0x)
+21:11:58 │ INFO │    └─ Minority ratio: 16.7% → 16.7%
+21:11:58 │ INFO │    🤖 Training 9 models: ['Rule', 'NB', 'Softmax', 'Ridge', 'PA', 'SGD', 'MLP', 'RF', 'LGBM']
+21:11:58 │ ERROR │       ❌ Rule: Prediction failed - sparse array length is ambiguous; use ge...
+21:11:58 │ INFO │       ✅      NB_BOTH: F1=0.000 | ACC=0.481 | PREC=0.000 | REC=0.000 | Time=0.0s
+21:11:58 │ INFO │       🏆 New best model for keto: NB_BOTH (F1=0.000)
+21:11:59 │ INFO │       ✅ Softmax_BOTH: F1=0.250 | ACC=0.538 | PREC=0.800 | REC=0.148 | Time=0.6s
+21:11:59 │ INFO │       🏆 New best model for keto: Softmax_BOTH (F1=0.250)
+21:11:59 │ INFO │ Adding probability calibration to RidgeClassifier
+21:11:59 │ INFO │       ✅   Ridge_BOTH: F1=0.000 | ACC=0.481 | PREC=0.000 | REC=0.000 | Time=0.0s
+21:11:59 │ INFO │ Adding probability calibration to PassiveAggressiveClassifier
+21:11:59 │ INFO │       ✅      PA_BOTH: F1=0.000 | ACC=0.481 | PREC=0.000 | REC=0.000 | Time=0.0s
+21:11:59 │ INFO │       ✅     SGD_BOTH: F1=0.400 | ACC=0.596 | PREC=0.875 | REC=0.259 | Time=0.0s
+21:11:59 │ INFO │       🏆 New best model for keto: SGD_BOTH (F1=0.400)
+21:12:00 │ INFO │       ✅     MLP_BOTH: F1=0.000 | ACC=0.481 | PREC=0.000 | REC=0.000 | Time=1.0s
+21:12:00 │ INFO │       ✅      RF_BOTH: F1=0.000 | ACC=0.481 | PREC=0.000 | REC=0.000 | Time=0.3s
+21:12:00 │ INFO │       ✅    LGBM_BOTH: F1=0.000 | ACC=0.481 | PREC=0.000 | REC=0.000 | Time=0.0s
+21:12:00 │ INFO │    🎯 KETO COMPLETE:
+21:12:00 │ INFO │    ├─ Best Model: SGD_BOTH (F1=0.400)
+21:12:00 │ INFO │    ├─ Final Metrics: ACC=0.596 | PREC=0.875 | REC=0.259
+21:12:00 │ INFO │    └─ Task Time: 2.3s
+21:12:00 │ WARNING │ Found 2 NaN values in vegan labels, filling with defaults
+21:12:00 │ INFO │ 
+🎯 Processing VEGAN classification:
+21:12:00 │ INFO │    Training labels - Positive: 2 (11.1%)
+21:12:00 │ INFO │    Test labels - Positive: 28 (53.8%)
+21:12:00 │ INFO │    Minority class ratio: 11.1%
+21:12:00 │ INFO │    🔄 Applying SMOTE (minority < 30%)...
+21:12:00 │ WARNING │ SMOTE failed: Expected n_neighbors <= n_samples_fit, but n_neighbors = 6, n_samples_fit = 2, n_samples = 2. Using original data.
+21:12:00 │ INFO │    ✅ SMOTE completed in 0.0s
+21:12:00 │ INFO │    ├─ Size: 18 → 18 (1.0x)
+21:12:00 │ INFO │    └─ Minority ratio: 11.1% → 11.1%
+21:12:00 │ INFO │    🤖 Training 9 models: ['Rule', 'NB', 'Softmax', 'Ridge', 'PA', 'SGD', 'MLP', 'RF', 'LGBM']
+21:12:01 │ ERROR │       ❌ Rule: Prediction failed - sparse array length is ambiguous; use ge...
+21:12:01 │ INFO │       ✅      NB_BOTH: F1=0.000 | ACC=0.462 | PREC=0.000 | REC=0.000 | Time=0.0s
+21:12:01 │ INFO │       🏆 New best model for vegan: NB_BOTH (F1=0.000)
+21:12:01 │ INFO │       ✅ Softmax_BOTH: F1=0.000 | ACC=0.462 | PREC=0.000 | REC=0.000 | Time=0.6s
+21:12:01 │ INFO │ Adding probability calibration to RidgeClassifier
+21:12:01 │ ERROR │ Calibration failed: Requesting 3-fold cross-validation but provided less than 3 examples for at least one class.
+21:12:01 │ INFO │       ✅   Ridge_BOTH: F1=0.000 | ACC=0.462 | PREC=0.000 | REC=0.000 | Time=0.0s
+21:12:01 │ INFO │ Adding probability calibration to PassiveAggressiveClassifier
+21:12:01 │ ERROR │ Calibration failed: Requesting 3-fold cross-validation but provided less than 3 examples for at least one class.
+21:12:01 │ INFO │       ✅      PA_BOTH: F1=0.069 | ACC=0.481 | PREC=1.000 | REC=0.036 | Time=0.0s
+21:12:01 │ INFO │       🏆 New best model for vegan: PA_BOTH (F1=0.069)
+21:12:01 │ INFO │       ✅     SGD_BOTH: F1=0.303 | ACC=0.558 | PREC=1.000 | REC=0.179 | Time=0.0s
+21:12:01 │ INFO │       🏆 New best model for vegan: SGD_BOTH (F1=0.303)
+21:12:02 │ INFO │       ✅     MLP_BOTH: F1=0.000 | ACC=0.462 | PREC=0.000 | REC=0.000 | Time=1.0s
+21:12:03 │ INFO │       ✅      RF_BOTH: F1=0.000 | ACC=0.462 | PREC=0.000 | REC=0.000 | Time=0.3s
+21:12:03 │ INFO │       ✅    LGBM_BOTH: F1=0.000 | ACC=0.462 | PREC=0.000 | REC=0.000 | Time=0.0s
+21:12:03 │ INFO │    🎯 VEGAN COMPLETE:
+21:12:03 │ INFO │    ├─ Best Model: SGD_BOTH (F1=0.303)
+21:12:03 │ INFO │    ├─ Final Metrics: ACC=0.558 | PREC=1.000 | REC=0.179
+21:12:03 │ INFO │    └─ Task Time: 2.3s
+21:12:03 │ INFO │ 
+🏁 MODE A PIPELINE COMPLETE:
+21:12:03 │ INFO │    ├─ Total Time: 4.8s
+21:12:03 │ INFO │    ├─ Tasks Completed: 2
+21:12:03 │ INFO │    └─ Domain: both
+21:12:03 │ INFO │ 
+📊 FINAL RESULTS SUMMARY:
+21:12:03 │ INFO │    1.  KETO |        SGD_BOTH | F1=0.400 | ACC=0.596 | Time=0.0s
+21:12:03 │ INFO │    2. VEGAN |        SGD_BOTH | F1=0.303 | ACC=0.558 | Time=0.0s
+21:12:03 │ INFO │ 
+╭─ MODE A (silver → gold) ───────────────────────────────────
+21:12:03 │ INFO │ │ model task     ACC    PREC     REC      F1     ROC      PR │
+21:12:03 │ INFO │ ├────────────────────────────────────────────────────────────┤
+21:12:03 │ INFO │ │ SGD_BOTH keto     0.60    0.88    0.26    0.40    0.83    0.79 │
+21:12:03 │ INFO │ │ SGD_BOTH vegan    0.56    1.00    0.18    0.30    0.89    0.90 │
+21:12:03 │ INFO │ ╰────────────────────────────────────────────────────────────╯
+21:12:03 │ INFO │       ✅ Combined models: 2 results
+21:12:03 │ INFO │    🧹 Memory cleanup
+21:12:03 │ INFO │       ├─ RAM: 21.4% used (6244 MB)
+21:12:03 │ INFO │       ├─ Objects collected: 47
+21:12:03 │ INFO │       ✅ Memory usage normal: 21.4%
+21:12:03 │ INFO │    ✅ Model training completed in 20.6s
+21:12:03 │ INFO │    📊 Total models trained: 6
+21:12:03 │ INFO │    📊 Model Training - Memory: 21.4% used (6244 MB / 32015 MB)
+21:12:03 │ INFO │ 
+🎭 STAGE 5: ENSEMBLE OPTIMIZATION
+21:12:03 │ INFO │    🎯 Optimizing keto ensemble...
+21:12:03 │ INFO │       ├─ Available models: 3
+21:12:03 │ INFO │ 
+🎯 ENSEMBLE OPTIMIZATION for KETO
+21:12:03 │ INFO │    Available models: ['Softmax_TEXT', 'MLP_IMAGE', 'SGD_BOTH']
+21:12:03 │ INFO │    Maximum ensemble size: 3
+21:12:03 │ INFO │    🎛️  Using default equal weighting for all metrics
+21:12:03 │ INFO │    ├─ Weights: F1=0.167, PREC=0.167, REC=0.167, ROC=0.167, PR=0.167, ACC=0.167
+21:12:03 │ INFO │ 
+   📊 Individual Model Performance:
+21:12:03 │ INFO │    ├─ Softmax_TEXT: F1=0.963 | Composite=0.967 | ACC=0.970
+21:12:03 │ INFO │    ├─ MLP_IMAGE: F1=0.600 | Composite=0.738 | ACC=0.692
+21:12:03 │ INFO │    ├─ SGD_BOTH: F1=0.400 | Composite=0.625 | ACC=0.596
+21:12:03 │ INFO │ 
+   🔬 Testing ensemble sizes 1 to 3...
+21:12:03 │ INFO │ 
+🎯 BUILDING TOP-1 ENSEMBLE for KETO
+21:12:03 │ INFO │    Target ensemble size: 1 models
+21:12:03 │ INFO │    Use saved parameters: False
+21:12:03 │ INFO │ 
+   📊 Model Selection Analysis:
+21:12:03 │ INFO │    ├─ Available models: 3
+21:12:03 │ INFO │    └─ Selection criteria: Combined metric scoring
+21:12:03 │ INFO │ 
+   🏆 Top 1 Model Rankings:
+21:12:03 │ INFO │     1. Softmax_TEXT | F1=0.963 | Composite=5.804 | ACC=0.970
+21:12:03 │ INFO │ 
+   🔧 Model Preparation Pipeline:
+21:12:03 │ INFO │       ├─ Processing Softmax_TEXT (F1=0.963)
+21:12:03 │ INFO │          ├─ Tuning hyperparameters...
+21:12:03 │ INFO │             ✅ Softmax: Using cached model (0ms)
+21:12:04 │ ERROR │       ❌ Softmax_TEXT failed after 0.5s: Found input variables with inconsistent numbers of...
+21:12:04 │ INFO │ 
+   📋 Preparation Summary:
+21:12:04 │ INFO │    ├─ Successfully prepared: 0/1
+21:12:04 │ INFO │    ├─ Failed preparations: 1
+21:12:04 │ INFO │    └─ Total preparation time: 0.5s
+21:12:04 │ INFO │    ⚠️  Failed models:
+21:12:04 │ INFO │       ├─ Softmax_TEXT: Found input variables with inconsistent numbers of...
+21:12:04 │ ERROR │       ❌ n=1: FAILED after 0.7s
+21:12:04 │ ERROR │       └─ Error: No models successfully prepared for keto ensemble...
+21:12:04 │ INFO │ 
+🎯 BUILDING TOP-2 ENSEMBLE for KETO
+21:12:04 │ INFO │    Target ensemble size: 2 models
+21:12:04 │ INFO │    Use saved parameters: False
+21:12:04 │ INFO │ 
+   📊 Model Selection Analysis:
+21:12:04 │ INFO │    ├─ Available models: 3
+21:12:04 │ INFO │    └─ Selection criteria: Combined metric scoring
+21:12:04 │ INFO │ 
+   🏆 Top 2 Model Rankings:
+21:12:04 │ INFO │     1. Softmax_TEXT | F1=0.963 | Composite=5.804 | ACC=0.970
+21:12:04 │ INFO │     2.  MLP_IMAGE | F1=0.600 | Composite=4.429 | ACC=0.692
+21:12:04 │ INFO │ 
+   🔧 Model Preparation Pipeline:
+21:12:04 │ INFO │       ├─ Processing Softmax_TEXT (F1=0.963)
+21:12:04 │ INFO │          ├─ Tuning hyperparameters...
+21:12:04 │ INFO │             ✅ Softmax: Using cached model (0ms)
+21:12:05 │ ERROR │       ❌ Softmax_TEXT failed after 0.5s: Found input variables with inconsistent numbers of...
+21:12:05 │ INFO │       ├─ Processing MLP_IMAGE (F1=0.600)
+21:12:05 │ ERROR │       ❌ MLP_IMAGE failed after 0.0s: 'MLP'
+21:12:05 │ INFO │ 
+   📋 Preparation Summary:
+21:12:05 │ INFO │    ├─ Successfully prepared: 0/2
+21:12:05 │ INFO │    ├─ Failed preparations: 2
+21:12:05 │ INFO │    └─ Total preparation time: 0.5s
+21:12:05 │ INFO │    ⚠️  Failed models:
+21:12:05 │ INFO │       ├─ Softmax_TEXT: Found input variables with inconsistent numbers of...
+21:12:05 │ INFO │       ├─ MLP_IMAGE: 'MLP'
+21:12:05 │ ERROR │       ❌ n=2: FAILED after 0.8s
+21:12:05 │ ERROR │       └─ Error: No models successfully prepared for keto ensemble...
+21:12:05 │ INFO │ 
+🎯 BUILDING TOP-3 ENSEMBLE for KETO
+21:12:05 │ INFO │    Target ensemble size: 3 models
+21:12:05 │ INFO │    Use saved parameters: False
+21:12:05 │ INFO │ 
+   📊 Model Selection Analysis:
+21:12:05 │ INFO │    ├─ Available models: 3
+21:12:05 │ INFO │    └─ Selection criteria: Combined metric scoring
+21:12:05 │ INFO │ 
+   🏆 Top 3 Model Rankings:
+21:12:05 │ INFO │     1. Softmax_TEXT | F1=0.963 | Composite=5.804 | ACC=0.970
+21:12:05 │ INFO │     2.  MLP_IMAGE | F1=0.600 | Composite=4.429 | ACC=0.692
+21:12:05 │ INFO │     3.   SGD_BOTH | F1=0.400 | Composite=3.751 | ACC=0.596
+21:12:05 │ INFO │ 
+   🔧 Model Preparation Pipeline:
+21:12:05 │ INFO │       ├─ Processing Softmax_TEXT (F1=0.963)
+21:12:05 │ INFO │          ├─ Tuning hyperparameters...
+21:12:05 │ INFO │             ✅ Softmax: Using cached model (0ms)
+21:12:05 │ ERROR │       ❌ Softmax_TEXT failed after 0.5s: Found input variables with inconsistent numbers of...
+21:12:05 │ INFO │       ├─ Processing MLP_IMAGE (F1=0.600)
+21:12:05 │ ERROR │       ❌ MLP_IMAGE failed after 0.0s: 'MLP'
+21:12:05 │ INFO │       ├─ Processing SGD_BOTH (F1=0.400)
+21:12:05 │ INFO │          ├─ Tuning hyperparameters...
+21:12:06 │ INFO │             ✅ SGD: Using cached model (0ms)
+21:12:06 │ ERROR │       ❌ SGD_BOTH failed after 0.0s: Found input variables with inconsistent numbers of...
+21:12:06 │ INFO │ 
+   📋 Preparation Summary:
+21:12:06 │ INFO │    ├─ Successfully prepared: 0/3
+21:12:06 │ INFO │    ├─ Failed preparations: 3
+21:12:06 │ INFO │    └─ Total preparation time: 0.6s
+21:12:06 │ INFO │    ⚠️  Failed models:
+21:12:06 │ INFO │       ├─ Softmax_TEXT: Found input variables with inconsistent numbers of...
+21:12:06 │ INFO │       ├─ MLP_IMAGE: 'MLP'
+21:12:06 │ INFO │       ├─ SGD_BOTH: Found input variables with inconsistent numbers of...
+21:12:06 │ ERROR │       ❌ n=3: FAILED after 0.8s
+21:12:06 │ ERROR │       └─ Error: No models successfully prepared for keto ensemble...
+21:12:06 │ ERROR │ 
+   ❌ ENSEMBLE OPTIMIZATION FAILED:
+21:12:06 │ ERROR │    ├─ No valid ensembles found
+21:12:06 │ ERROR │    ├─ Available models: 3
+21:12:06 │ ERROR │    └─ Total Time: 2.5s
+21:12:06 │ INFO │    🛡️  Falling back to best individual model:
+21:12:06 │ INFO │    └─ Softmax_TEXT (F1=0.963)
+21:12:06 │ INFO │       ✅ keto ensemble: Softmax_TEXT (F1=0.963)
+21:12:06 │ INFO │    🎯 Optimizing vegan ensemble...
+21:12:06 │ INFO │       ├─ Available models: 3
+21:12:06 │ INFO │ 
+🎯 ENSEMBLE OPTIMIZATION for VEGAN
+21:12:06 │ INFO │    Available models: ['MLP_IMAGE', 'NB_TEXT', 'SGD_BOTH']
+21:12:06 │ INFO │    Maximum ensemble size: 3
+21:12:06 │ INFO │    🎛️  Using default equal weighting for all metrics
+21:12:06 │ INFO │    ├─ Weights: F1=0.167, PREC=0.167, REC=0.167, ROC=0.167, PR=0.167, ACC=0.167
+21:12:06 │ INFO │ 
+   📊 Individual Model Performance:
+21:12:06 │ INFO │    ├─  NB_TEXT: F1=0.892 | Composite=0.916 | ACC=0.920
+21:12:06 │ INFO │    ├─ MLP_IMAGE: F1=0.444 | Composite=0.724 | ACC=0.615
+21:12:06 │ INFO │    ├─ SGD_BOTH: F1=0.303 | Composite=0.639 | ACC=0.558
+21:12:06 │ INFO │ 
+   🔬 Testing ensemble sizes 1 to 3...
+21:12:06 │ INFO │ 
+🎯 BUILDING TOP-1 ENSEMBLE for VEGAN
+21:12:06 │ INFO │    Target ensemble size: 1 models
+21:12:06 │ INFO │    Use saved parameters: False
+21:12:06 │ INFO │ 
+   📊 Model Selection Analysis:
+21:12:06 │ INFO │    ├─ Available models: 3
+21:12:06 │ INFO │    └─ Selection criteria: Combined metric scoring
+21:12:06 │ INFO │ 
+   🏆 Top 1 Model Rankings:
+21:12:06 │ INFO │     1.    NB_TEXT | F1=0.892 | Composite=5.494 | ACC=0.920
+21:12:06 │ INFO │ 
+   🔧 Model Preparation Pipeline:
+21:12:06 │ INFO │       ├─ Processing NB_TEXT (F1=0.892)
+21:12:06 │ INFO │          ├─ Tuning hyperparameters...
+21:12:06 │ INFO │             ✅ NB: Using cached model (0ms)
+21:12:06 │ ERROR │       ❌ NB_TEXT failed after 0.0s: Input y contains NaN.
+21:12:06 │ INFO │ 
+   📋 Preparation Summary:
+21:12:06 │ INFO │    ├─ Successfully prepared: 0/1
+21:12:06 │ INFO │    ├─ Failed preparations: 1
+21:12:06 │ INFO │    └─ Total preparation time: 0.0s
+21:12:06 │ INFO │    ⚠️  Failed models:
+21:12:06 │ INFO │       ├─ NB_TEXT: Input y contains NaN.
+21:12:06 │ ERROR │       ❌ n=1: FAILED after 0.3s
+21:12:06 │ ERROR │       └─ Error: No models successfully prepared for vegan ensemble...
+21:12:06 │ INFO │ 
+🎯 BUILDING TOP-2 ENSEMBLE for VEGAN
+21:12:06 │ INFO │    Target ensemble size: 2 models
+21:12:06 │ INFO │    Use saved parameters: False
+21:12:06 │ INFO │ 
+   📊 Model Selection Analysis:
+21:12:06 │ INFO │    ├─ Available models: 3
+21:12:06 │ INFO │    └─ Selection criteria: Combined metric scoring
+21:12:06 │ INFO │ 
+   🏆 Top 2 Model Rankings:
+21:12:06 │ INFO │     1.    NB_TEXT | F1=0.892 | Composite=5.494 | ACC=0.920
+21:12:06 │ INFO │     2.  MLP_IMAGE | F1=0.444 | Composite=4.346 | ACC=0.615
+21:12:06 │ INFO │ 
+   🔧 Model Preparation Pipeline:
+21:12:06 │ INFO │       ├─ Processing NB_TEXT (F1=0.892)
+21:12:06 │ INFO │          ├─ Tuning hyperparameters...
+21:12:07 │ INFO │             ✅ NB: Using cached model (0ms)
+21:12:07 │ ERROR │       ❌ NB_TEXT failed after 0.1s: Input y contains NaN.
+21:12:07 │ INFO │       ├─ Processing MLP_IMAGE (F1=0.444)
+21:12:07 │ ERROR │       ❌ MLP_IMAGE failed after 0.0s: 'MLP'
+21:12:07 │ INFO │ 
+   📋 Preparation Summary:
+21:12:07 │ INFO │    ├─ Successfully prepared: 0/2
+21:12:07 │ INFO │    ├─ Failed preparations: 2
+21:12:07 │ INFO │    └─ Total preparation time: 0.1s
+21:12:07 │ INFO │    ⚠️  Failed models:
+21:12:07 │ INFO │       ├─ NB_TEXT: Input y contains NaN.
+21:12:07 │ INFO │       ├─ MLP_IMAGE: 'MLP'
+21:12:07 │ ERROR │       ❌ n=2: FAILED after 0.6s
+21:12:07 │ ERROR │       └─ Error: No models successfully prepared for vegan ensemble...
+21:12:07 │ INFO │ 
+🎯 BUILDING TOP-3 ENSEMBLE for VEGAN
+21:12:07 │ INFO │    Target ensemble size: 3 models
+21:12:07 │ INFO │    Use saved parameters: False
+21:12:07 │ INFO │ 
+   📊 Model Selection Analysis:
+21:12:07 │ INFO │    ├─ Available models: 3
+21:12:07 │ INFO │    └─ Selection criteria: Combined metric scoring
+21:12:07 │ INFO │ 
+   🏆 Top 3 Model Rankings:
+21:12:07 │ INFO │     1.    NB_TEXT | F1=0.892 | Composite=5.494 | ACC=0.920
+21:12:07 │ INFO │     2.  MLP_IMAGE | F1=0.444 | Composite=4.346 | ACC=0.615
+21:12:07 │ INFO │     3.   SGD_BOTH | F1=0.303 | Composite=3.833 | ACC=0.558
+21:12:07 │ INFO │ 
+   🔧 Model Preparation Pipeline:
+21:12:07 │ INFO │       ├─ Processing NB_TEXT (F1=0.892)
+21:12:07 │ INFO │          ├─ Tuning hyperparameters...
+21:12:07 │ INFO │             ✅ NB: Using cached model (0ms)
+21:12:07 │ ERROR │       ❌ NB_TEXT failed after 0.1s: Input y contains NaN.
+21:12:07 │ INFO │       ├─ Processing MLP_IMAGE (F1=0.444)
+21:12:07 │ ERROR │       ❌ MLP_IMAGE failed after 0.0s: 'MLP'
+21:12:07 │ INFO │       ├─ Processing SGD_BOTH (F1=0.303)
+21:12:07 │ INFO │          ├─ Tuning hyperparameters...
+21:12:07 │ INFO │             ✅ SGD: Using cached model (0ms)
+21:12:07 │ ERROR │       ❌ SGD_BOTH failed after 0.1s: Input y contains NaN.
+21:12:07 │ INFO │ 
+   📋 Preparation Summary:
+21:12:07 │ INFO │    ├─ Successfully prepared: 0/3
+21:12:08 │ INFO │    ├─ Failed preparations: 3
+21:12:08 │ INFO │    └─ Total preparation time: 0.2s
+21:12:08 │ INFO │    ⚠️  Failed models:
+21:12:08 │ INFO │       ├─ NB_TEXT: Input y contains NaN.
+21:12:08 │ INFO │       ├─ MLP_IMAGE: 'MLP'
+21:12:08 │ INFO │       ├─ SGD_BOTH: Input y contains NaN.
+21:12:08 │ ERROR │       ❌ n=3: FAILED after 0.8s
+21:12:08 │ ERROR │       └─ Error: No models successfully prepared for vegan ensemble...
+21:12:08 │ ERROR │ 
+   ❌ ENSEMBLE OPTIMIZATION FAILED:
+21:12:08 │ ERROR │    ├─ No valid ensembles found
+21:12:08 │ ERROR │    ├─ Available models: 3
+21:12:08 │ ERROR │    └─ Total Time: 2.0s
+21:12:08 │ INFO │    🛡️  Falling back to best individual model:
+21:12:08 │ INFO │    └─ NB_TEXT (F1=0.892)
+21:12:08 │ INFO │       ✅ vegan ensemble: NB_TEXT (F1=0.892)
+21:12:08 │ INFO │    📊 Ensemble results: 2 optimized ensembles
+21:12:08 │ INFO │ 
+   🔀 Cross-domain ensemble optimization...
+21:12:08 │ INFO │       ├─ Optimizing keto cross-domain ensemble...
+21:12:08 │ INFO │ 
+🎯 ENSEMBLE OPTIMIZATION for KETO
+21:12:08 │ INFO │    Available models: ['Softmax_TEXT']
+21:12:08 │ INFO │    Maximum ensemble size: 1
+21:12:08 │ INFO │    ⚠️  Only one model available: Softmax_TEXT
+21:12:08 │ INFO │    └─ F1=0.963, skipping ensemble optimization
+21:12:08 │ INFO │ 
+🎯 ENSEMBLE OPTIMIZATION for KETO
+21:12:08 │ INFO │    Available models: ['MLP_IMAGE']
+21:12:08 │ INFO │    Maximum ensemble size: 1
+21:12:08 │ INFO │    ⚠️  Only one model available: MLP_IMAGE
+21:12:08 │ INFO │    └─ F1=0.600, skipping ensemble optimization
+21:12:08 │ INFO │       ✅ keto cross-domain: SmartEns(Text=Softmax_TEXT,Img=MLP_IMAGE,alpha=0.25) (F1=0.963)
+21:12:08 │ INFO │       ├─ Optimizing vegan cross-domain ensemble...
+21:12:08 │ INFO │ 
+🎯 ENSEMBLE OPTIMIZATION for VEGAN
+21:12:08 │ INFO │    Available models: ['NB_TEXT']
+21:12:08 │ INFO │    Maximum ensemble size: 1
+21:12:08 │ INFO │    ⚠️  Only one model available: NB_TEXT
+21:12:08 │ INFO │    └─ F1=0.892, skipping ensemble optimization
+21:12:09 │ INFO │ 
+🎯 ENSEMBLE OPTIMIZATION for VEGAN
+21:12:09 │ INFO │    Available models: ['MLP_IMAGE']
+21:12:09 │ INFO │    Maximum ensemble size: 1
+21:12:09 │ INFO │    ⚠️  Only one model available: MLP_IMAGE
+21:12:09 │ INFO │    └─ F1=0.444, skipping ensemble optimization
+21:12:09 │ INFO │       ✅ vegan cross-domain: SmartEns(Text=NB_TEXT,Img=MLP_IMAGE,alpha=0.25) (F1=0.829)
+21:12:09 │ INFO │    📊 Cross-domain results: 2 optimized ensembles
+21:12:09 │ INFO │    ✅ Ensemble optimization completed in 5.6s
+21:12:09 │ INFO │    📊 Ensemble Creation - Memory: 22.2% used (6492 MB / 32015 MB)
+21:12:09 │ INFO │ 
+📊 STAGE 6: EVALUATION AND EXPORT
+21:12:09 │ INFO │    📊 Generating evaluation plots...
+21:12:09 │ INFO │    ✅ Saved keto confusion matrix to artifacts/confusion_matrix_keto_Softmax_TEXT.png
+21:12:09 │ INFO │    ✅ Saved vegan confusion matrix to artifacts/confusion_matrix_vegan_NB_TEXT.png
+21:12:09 │ INFO │    ✅ Saved performance comparison to artifacts/model_performance_comparison.png
+21:12:09 │ INFO │       ✅ Generated evaluation plots and confusion matrices
+21:12:10 │ INFO │       ✅ Saved results summary with 10 entries
+21:12:10 │ INFO │    ✅ Evaluation completed in 0.9s
+21:12:10 │ INFO │    📊 Final - Memory: 22.2% used (6492 MB / 32015 MB)
+21:12:10 │ INFO │ 
+🏁 PIPELINE COMPLETE
+21:12:10 │ INFO │    ├─ Total runtime: 292.0s (4.9 minutes)
+21:12:10 │ INFO │    ├─ Mode: both
+21:12:10 │ INFO │    ├─ Sample fraction: 0.1
+21:12:10 │ INFO │    ├─ Total results: 10
+21:12:10 │ INFO │    └─ End time: 2025-06-20 21:12:10
+21:12:10 │ INFO │ 
+   🏆 FINAL PERFORMANCE SUMMARY:
+21:12:10 │ INFO │    ├─ KETO: Best F1=0.963 (Softmax_TEXT) | ACC=0.970
+21:12:10 │ INFO │    ├─ VEGAN: Best F1=0.892 (NB_TEXT) | ACC=0.920
+21:12:10 │ INFO │ 
+   💾 RESOURCE USAGE:
+21:12:10 │ INFO │    ├─ Peak memory: 22.2%
+21:12:10 │ INFO │    ├─ Final memory: 6492 MB
+21:12:10 │ INFO │    └─ Efficiency: 0.03 models/second
+21:12:10 │ INFO │    💾 Saved pipeline metadata to pipeline_metadata.json
+21:12:10 │ INFO │ ✅ Pipeline completed with 10 results
+21:12:10 │ INFO │ ✅ Saved vectorizer
+21:12:10 │ INFO │ ✅ Saved keto single model: Softmax (F1=0.963)
+21:12:10 │ INFO │ ✅ Saved vegan single model: NB (F1=0.892)
+21:12:10 │ INFO │ ✅ Saved 2 models to /app/artifacts
+21:12:10 │ INFO │ 🏁 Main completed successfully
+21:12:11 │ INFO │ 🛑 Process exiting - no restarts allowed
+
+================================================================================
+NEW RUN STARTED AT 2025-06-20 21:12:15
+Process ID: 610
+================================================================================
+21:12:15 │ INFO │ Logging system initialized successfully
+21:12:15 │ INFO │ 🚀 Starting main with args: Namespace(ground_truth='/app/data/ground_truth_sample.csv', train=False, ingredients=None, mode='both', force=False, sample_frac=None)
+21:12:15 │ INFO │ 📊 Evaluating on ground truth: /app/data/ground_truth_sample.csv
+21:12:15 │ INFO │ ✅ Loaded ground truth with 100 rows
+21:12:15 │ INFO │ ✅ Loaded vectorizer from /app/artifacts/vectorizer.pkl
+21:12:15 │ INFO │ ✅ Loaded models from /app/artifacts/models.pkl
+21:12:15 │ INFO │ ✅ Transformed text to feature vectors
+21:12:15 │ ERROR │ ❌ Ground truth evaluation failed: X has 6341 features, but LogisticRegression is expecting 8389 features as input.
+21:12:15 │ INFO │ 🚫 System exit: 1
+21:12:15 │ INFO │ 🛑 Process exiting - no restarts allowed
