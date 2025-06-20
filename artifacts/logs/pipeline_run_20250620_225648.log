@@ -1,0 +1,329 @@
+============================================
+Pipeline Run Started: יום ו 20 יונ 2025 22:56:48
+============================================
+[2025-06-20 22:56:48] 🛠️  Shutting down existing containers...
+[2025-06-20 22:56:48] 🛠️  Building Docker images...
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 32B done
+#1 DONE 0.0s
+
+#2 [internal] load .dockerignore
+#2 transferring context: 2B done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/python:3.11-slim
+#3 DONE 1.0s
+
+#4 [ 1/12] FROM docker.io/library/python:3.11-slim@sha256:9e1912aab0a30bbd9488eb79063f68f42a68ab0946cbe98fecf197fe5b085506
+#4 resolve docker.io/library/python:3.11-slim@sha256:9e1912aab0a30bbd9488eb79063f68f42a68ab0946cbe98fecf197fe5b085506 done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 644.87kB done
+#5 DONE 0.0s
+
+#6 [ 3/12] RUN apt-get update &&     apt-get install -y --no-install-recommends         build-essential         curl         unzip         dos2unix &&     rm -rf /var/lib/apt/lists/*
+#6 CACHED
+
+#7 [ 5/12] RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/allrecipes.parquet     -o /app/data/allrecipes.parquet
+#7 CACHED
+
+#8 [ 8/12] COPY requirements.txt .
+#8 CACHED
+
+#9 [ 4/12] RUN mkdir -p /app/data/usda
+#9 CACHED
+
+#10 [ 2/12] WORKDIR /app
+#10 CACHED
+
+#11 [ 7/12] RUN curl -L     https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_foundation_food_csv_2025-04-24.zip     -o /tmp/fdc.zip &&     unzip -q /tmp/fdc.zip -d /tmp &&     cp /tmp/FoodData_Central_foundation_food_csv_2025-04-24/food.csv        /tmp/FoodData_Central_foundation_food_csv_2025-04-24/food_nutrient.csv        /tmp/FoodData_Central_foundation_food_csv_2025-04-24/nutrient.csv        /app/data/usda/ &&     rm -rf /tmp/fdc.zip /tmp/FoodData_Central_foundation_food_csv_2025-04-24
+#11 CACHED
+
+#12 [ 6/12] RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/ground_truth_sample.csv     -o /app/data/ground_truth_sample.csv
+#12 CACHED
+
+#13 [ 9/12] RUN pip install --no-cache-dir -r requirements.txt
+#13 CACHED
+
+#14 [10/12] RUN mkdir -p /app/pretrained_models
+#14 CACHED
+
+#15 [11/12] COPY --chmod=755 . /app/
+#15 DONE 0.0s
+
+#16 [12/12] RUN if [ -f "/app/pretrained_models/models.zip" ]; then         echo "🔓 Extracting pretrained models..." &&         unzip -o /app/pretrained_models/models.zip -d /app/pretrained_models &&         rm /app/pretrained_models/models.zip;     else         echo "✅ No pretrained models found, skipping extraction.";     fi
+#16 0.259 ✅ No pretrained models found, skipping extraction.
+#16 DONE 0.3s
+
+#17 exporting to image
+#17 exporting layers 0.0s done
+#17 writing image sha256:a6fbbe3eb0ff77929aa5be933893063ced2fab8194817a9282ffb3e021143534 done
+#17 naming to docker.io/library/search_by_ingredients_v1t3ls0n-web done
+#17 DONE 0.0s
+[2025-06-20 22:56:50] 🚀 Starting services...
+Network search_by_ingredients_v1t3ls0n_argmax  Creating
+Network search_by_ingredients_v1t3ls0n_argmax  Created
+Container search_by_ingredients_v1t3ls0n-os-1  Creating
+Container search_by_ingredients_v1t3ls0n-os-1  Created
+Container search_by_ingredients_v1t3ls0n-web-1  Creating
+Container search_by_ingredients_v1t3ls0n-web-1  Created
+Container search_by_ingredients_v1t3ls0n-os-1  Starting
+Container search_by_ingredients_v1t3ls0n-os-1  Started
+Container search_by_ingredients_v1t3ls0n-os-1  Waiting
+Container search_by_ingredients_v1t3ls0n-os-1  Healthy
+Container search_by_ingredients_v1t3ls0n-web-1  Starting
+Container search_by_ingredients_v1t3ls0n-web-1  Started
+[2025-06-20 22:57:02] 📋 Starting container log collection...
+[2025-06-20 22:57:02] ⏳ Waiting for services to initialize...
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:51.387115281Z Disabling OpenSearch Security Plugin
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:51.387138206Z Enabling execution of OPENSEARCH_HOME/bin/opensearch-performance-analyzer/performance-analyzer-agent-cli for OpenSearch Performance Analyzer Plugin
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:52.645380794Z WARNING: Using incubator modules: jdk.incubator.vector
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:52.647090475Z WARNING: Unknown module: org.apache.arrow.memory.core specified to --add-opens
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:53.677843446Z [2025-06-20T19:56:53,676][WARN ][stderr                   ] [7522b5859ed6] Jun 20, 2025 7:56:53 PM org.opensearch.javaagent.bootstrap.AgentPolicy setPolicy
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:53.677860737Z [2025-06-20T19:56:53,677][WARN ][stderr                   ] [7522b5859ed6] INFO: Policy attached successfully: org.opensearch.bootstrap.OpenSearchPolicy@43b40233
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:53.684891805Z [2025-06-20T19:56:53,684][INFO ][o.o.n.Node               ] [7522b5859ed6] version[3.0.0], pid[1], build[tar/dc4efa821904cc2d7ea7ef61c0f577d3fc0d8be9/2025-05-03T06:25:26.379676844Z], OS[Linux/5.15.167.4-microsoft-standard-WSL2/amd64], JVM[Eclipse Adoptium/OpenJDK 64-Bit Server VM/21.0.7/21.0.7+6-LTS]
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:57:02.271892420Z dos2unix: converting file web/init.sh to Unix format...
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:57:02.277657090Z 📊 Running initial indexing...
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:53.684909909Z [2025-06-20T19:56:53,684][INFO ][o.o.n.Node               ] [7522b5859ed6] JVM home [/usr/share/opensearch/jdk], using bundled JDK/JRE [true]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:53.685022853Z [2025-06-20T19:56:53,684][INFO ][o.o.n.Node               ] [7522b5859ed6] JVM arguments [-Xshare:auto, -Dopensearch.networkaddress.cache.ttl=60, -Dopensearch.networkaddress.cache.negative.ttl=10, -XX:+AlwaysPreTouch, -Xss1m, -Djava.awt.headless=true, -Dfile.encoding=UTF-8, -Djna.nosys=true, -XX:-OmitStackTraceInFastThrow, -XX:+ShowCodeDetailsInExceptionMessages, -Dio.netty.noUnsafe=true, -Dio.netty.noKeySetOptimization=true, -Dio.netty.recycler.maxCapacityPerThread=0, -Dio.netty.allocator.numDirectArenas=0, -Dlog4j.shutdownHookEnabled=false, -Dlog4j2.disable.jmx=true, -Djava.locale.providers=SPI,CLDR, -Xms1g, -Xmx1g, -XX:+UseG1GC, -XX:G1ReservePercent=25, -XX:InitiatingHeapOccupancyPercent=30, -Djava.io.tmpdir=/tmp/opensearch-4751583884377844360, -XX:+HeapDumpOnOutOfMemoryError, -XX:HeapDumpPath=data, -XX:ErrorFile=logs/hs_err_pid%p.log, -Xlog:gc*,gc+age=trace,safepoint:file=logs/gc.log:utctime,pid,tags:filecount=32,filesize=64m, --add-modules=jdk.incubator.vector, -javaagent:agent/opensearch-agent.jar, --add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED, -Dclk.tck=100, -Djdk.attach.allowAttachSelf=true, -Djava.security.policy=/usr/share/opensearch/config/opensearch-performance-analyzer/opensearch_security.policy, --add-opens=jdk.attach/sun.tools.attach=ALL-UNNAMED, -Dopensearch.cgroups.hierarchy.override=/, -Xms512m, -Xmx512m, -XX:MaxDirectMemorySize=268435456, -Dopensearch.path.home=/usr/share/opensearch, -Dopensearch.path.conf=/usr/share/opensearch/config, -Dopensearch.distribution.type=tar, -Dopensearch.bundled_jdk=true]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:53.799094583Z [2025-06-20T19:56:53,798][WARN ][stderr                   ] [7522b5859ed6] Jun 20, 2025 7:56:53 PM org.apache.lucene.internal.vectorization.PanamaVectorizationProvider <init>
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:53.799115448Z [2025-06-20T19:56:53,799][WARN ][stderr                   ] [7522b5859ed6] INFO: Java vector incubator API enabled; uses preferredBitSize=256; FMA enabled
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:54.472960726Z [2025-06-20T19:56:54,472][INFO ][o.o.s.s.t.SSLConfig      ] [7522b5859ed6] SSL dual mode is disabled
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:54.473149642Z [2025-06-20T19:56:54,473][WARN ][o.o.s.OpenSearchSecurityPlugin] [7522b5859ed6] OpenSearch Security plugin installed but disabled. This can expose your configuration (including passwords) to the public.
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.182265799Z [2025-06-20T19:56:55,182][ERROR][o.o.p.c.c.PluginSettings ] [7522b5859ed6] Loading config file /usr/share/opensearch/config/opensearch-performance-analyzer/performance-analyzer.properties failed with error: org.opensearch.performanceanalyzer.commons.config.ConfigFileException: java.io.FileNotFoundException: /usr/share/opensearch/config/opensearch-performance-analyzer/performance-analyzer.properties (No such file or directory). Disabling plugin.
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.182456947Z [2025-06-20T19:56:55,182][INFO ][o.o.p.c.c.PluginSettings ] [7522b5859ed6] Config: metricsLocation: /dev/shm/performanceanalyzer/, metricsDeletionInterval: 1, httpsEnabled: false, cleanup-metrics-db-files: false, batch-metrics-retention-period-minutes: 7, rpc-port: 9650, webservice-port 9600
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318702424Z [2025-06-20T19:56:55,316][ERROR][o.o.p.c.c.StatsCollector ] [7522b5859ed6] Error in loading metadata for folderLocation: /usr/share/opensearch/config/opensearch-performance-analyzer/, fileLocation: plugin-stats-metadata
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318720919Z java.io.FileNotFoundException: /usr/share/opensearch/config/opensearch-performance-analyzer/plugin-stats-metadata (No such file or directory)
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318722378Z 	at java.base/java.io.FileInputStream.open0(Native Method) ~[?:?]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318723594Z 	at java.base/java.io.FileInputStream.open(FileInputStream.java:213) ~[?:?]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318724546Z 	at java.base/java.io.FileInputStream.<init>(FileInputStream.java:152) ~[?:?]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318725578Z 	at java.base/java.io.FileInputStream.<init>(FileInputStream.java:106) ~[?:?]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318726544Z 	at org.opensearch.performanceanalyzer.commons.collectors.StatsCollector.loadMetadata(StatsCollector.java:158) ~[performance-analyzer-commons-2.0.0.jar:?]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318727521Z 	at org.opensearch.performanceanalyzer.commons.collectors.StatsCollector.instance(StatsCollector.java:73) ~[performance-analyzer-commons-2.0.0.jar:?]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318728494Z 	at org.opensearch.performanceanalyzer.PerformanceAnalyzerPlugin.scheduleRcaCollectors(PerformanceAnalyzerPlugin.java:264) ~[opensearch-performance-analyzer-3.0.0.0.jar:3.0.0.0]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318729502Z 	at org.opensearch.performanceanalyzer.PerformanceAnalyzerPlugin.<init>(PerformanceAnalyzerPlugin.java:213) ~[opensearch-performance-analyzer-3.0.0.0.jar:3.0.0.0]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318730520Z 	at java.base/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62) [?:?]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318731548Z 	at java.base/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502) [?:?]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318732442Z 	at java.base/java.lang.reflect.Constructor.newInstance(Constructor.java:486) [?:?]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318733329Z 	at org.opensearch.plugins.PluginsService.loadPlugin(PluginsService.java:840) [opensearch-3.0.0.jar:3.0.0]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318734255Z 	at org.opensearch.plugins.PluginsService.loadBundle(PluginsService.java:788) [opensearch-3.0.0.jar:3.0.0]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318735162Z 	at org.opensearch.plugins.PluginsService.loadBundles(PluginsService.java:582) [opensearch-3.0.0.jar:3.0.0]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318744617Z 	at org.opensearch.plugins.PluginsService.<init>(PluginsService.java:197) [opensearch-3.0.0.jar:3.0.0]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318746006Z 	at org.opensearch.node.Node.<init>(Node.java:533) [opensearch-3.0.0.jar:3.0.0]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318747015Z 	at org.opensearch.node.Node.<init>(Node.java:460) [opensearch-3.0.0.jar:3.0.0]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318747948Z 	at org.opensearch.bootstrap.Bootstrap$5.<init>(Bootstrap.java:243) [opensearch-3.0.0.jar:3.0.0]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318748892Z 	at org.opensearch.bootstrap.Bootstrap.setup(Bootstrap.java:243) [opensearch-3.0.0.jar:3.0.0]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318749793Z 	at org.opensearch.bootstrap.Bootstrap.init(Bootstrap.java:405) [opensearch-3.0.0.jar:3.0.0]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318750689Z 	at org.opensearch.bootstrap.OpenSearch.init(OpenSearch.java:168) [opensearch-3.0.0.jar:3.0.0]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318751605Z 	at org.opensearch.bootstrap.OpenSearch.execute(OpenSearch.java:159) [opensearch-3.0.0.jar:3.0.0]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318752496Z 	at org.opensearch.common.cli.EnvironmentAwareCommand.execute(EnvironmentAwareCommand.java:110) [opensearch-3.0.0.jar:3.0.0]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318753437Z 	at org.opensearch.cli.Command.mainWithoutErrorHandling(Command.java:138) [opensearch-cli-3.0.0.jar:3.0.0]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318754347Z 	at org.opensearch.cli.Command.main(Command.java:101) [opensearch-cli-3.0.0.jar:3.0.0]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318755248Z 	at org.opensearch.bootstrap.OpenSearch.main(OpenSearch.java:125) [opensearch-3.0.0.jar:3.0.0]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.318756143Z 	at org.opensearch.bootstrap.OpenSearch.main(OpenSearch.java:91) [opensearch-3.0.0.jar:3.0.0]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.319860895Z [2025-06-20T19:56:55,319][INFO ][o.o.p.c.SearchBackPressureStatsCollector] [7522b5859ed6] SearchBackPressureStatsCollector started
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.614801752Z [2025-06-20T19:56:55,614][INFO ][o.o.i.r.ReindexModulePlugin] [7522b5859ed6] ReindexPlugin reloadSPI called
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.615399021Z [2025-06-20T19:56:55,615][INFO ][o.o.i.r.ReindexModulePlugin] [7522b5859ed6] Unable to find any implementation for RemoteReindexExtension
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.639785699Z [2025-06-20T19:56:55,639][INFO ][o.o.j.JobSchedulerPlugin ] [7522b5859ed6] Loaded scheduler extension: opensearch_time_series_analytics, index: .opendistro-anomaly-detector-jobs
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.666433048Z [2025-06-20T19:56:55,666][INFO ][o.o.j.JobSchedulerPlugin ] [7522b5859ed6] Loaded scheduler extension: reports-scheduler, index: .opendistro-reports-definitions
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.666913811Z [2025-06-20T19:56:55,666][INFO ][o.o.j.JobSchedulerPlugin ] [7522b5859ed6] Loaded scheduler extension: opendistro-index-management, index: .opendistro-ism-config
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.669081943Z [2025-06-20T19:56:55,668][INFO ][o.o.j.JobSchedulerPlugin ] [7522b5859ed6] Loaded scheduler extension: checkBatchJobTaskStatus, index: .ml_commons_task_polling_job
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.669770583Z [2025-06-20T19:56:55,669][INFO ][o.o.j.JobSchedulerPlugin ] [7522b5859ed6] Loaded scheduler extension: scheduler_geospatial_ip2geo_datasource, index: .scheduler-geospatial-ip2geo-datasource
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.670124528Z [2025-06-20T19:56:55,670][INFO ][o.o.j.JobSchedulerPlugin ] [7522b5859ed6] Loaded scheduler extension: opensearch_sap_job, index: .opensearch-sap--job
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.671558862Z [2025-06-20T19:56:55,671][INFO ][o.o.j.JobSchedulerPlugin ] [7522b5859ed6] Loaded scheduler extension: async-query-scheduler, index: .async-query-scheduler
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.688312429Z [2025-06-20T19:56:55,688][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [aggs-matrix-stats]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.688330161Z [2025-06-20T19:56:55,688][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [analysis-common]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.688331340Z [2025-06-20T19:56:55,688][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [cache-common]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.688332356Z [2025-06-20T19:56:55,688][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [geo]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.688467507Z [2025-06-20T19:56:55,688][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [ingest-common]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.688474325Z [2025-06-20T19:56:55,688][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [ingest-geoip]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.688475529Z [2025-06-20T19:56:55,688][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [ingest-user-agent]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.688523531Z [2025-06-20T19:56:55,688][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [lang-expression]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.688571157Z [2025-06-20T19:56:55,688][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [lang-mustache]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.688710613Z [2025-06-20T19:56:55,688][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [lang-painless]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.688719804Z [2025-06-20T19:56:55,688][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [mapper-extras]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.688721119Z [2025-06-20T19:56:55,688][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [opensearch-dashboards]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.688742558Z [2025-06-20T19:56:55,688][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [parent-join]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.688787465Z [2025-06-20T19:56:55,688][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [percolator]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.688824306Z [2025-06-20T19:56:55,688][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [rank-eval]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.688852776Z [2025-06-20T19:56:55,688][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [reindex]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.689029382Z [2025-06-20T19:56:55,688][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [repository-url]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.689086421Z [2025-06-20T19:56:55,688][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [search-pipeline-common]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.689306710Z [2025-06-20T19:56:55,689][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [systemd]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.689313505Z [2025-06-20T19:56:55,689][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded module [transport-netty4]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.689534860Z [2025-06-20T19:56:55,689][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-alerting]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.689579755Z [2025-06-20T19:56:55,689][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-anomaly-detection]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.689659083Z [2025-06-20T19:56:55,689][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-asynchronous-search]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.689667490Z [2025-06-20T19:56:55,689][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-cross-cluster-replication]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.689732577Z [2025-06-20T19:56:55,689][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-custom-codecs]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.689774850Z [2025-06-20T19:56:55,689][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-flow-framework]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.689829477Z [2025-06-20T19:56:55,689][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-geospatial]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.689863418Z [2025-06-20T19:56:55,689][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-index-management]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.689991579Z [2025-06-20T19:56:55,689][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-job-scheduler]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.690124223Z [2025-06-20T19:56:55,689][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-knn]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.690154116Z [2025-06-20T19:56:55,690][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-ltr]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.690306655Z [2025-06-20T19:56:55,690][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-ml]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.690324747Z [2025-06-20T19:56:55,690][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-neural-search]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.690387720Z [2025-06-20T19:56:55,690][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-notifications]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.690412520Z [2025-06-20T19:56:55,690][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-notifications-core]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.690498846Z [2025-06-20T19:56:55,690][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-observability]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.690527212Z [2025-06-20T19:56:55,690][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-performance-analyzer]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.690576969Z [2025-06-20T19:56:55,690][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-reports-scheduler]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.690608416Z [2025-06-20T19:56:55,690][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-security]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.690669192Z [2025-06-20T19:56:55,690][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-security-analytics]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.690818888Z [2025-06-20T19:56:55,690][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-skills]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.690975145Z [2025-06-20T19:56:55,690][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-sql]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.691102758Z [2025-06-20T19:56:55,690][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [opensearch-system-templates]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.691147289Z [2025-06-20T19:56:55,691][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] loaded plugin [query-insights]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.719896876Z [2025-06-20T19:56:55,719][WARN ][stderr                   ] [7522b5859ed6] WARNING: A restricted method in java.lang.foreign.Linker has been called
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.719914724Z [2025-06-20T19:56:55,719][WARN ][stderr                   ] [7522b5859ed6] WARNING: java.lang.foreign.Linker::downcallHandle has been called by the unnamed module
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.720021776Z [2025-06-20T19:56:55,719][WARN ][stderr                   ] [7522b5859ed6] WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for this module
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.767569846Z [2025-06-20T19:56:55,767][INFO ][o.o.e.NodeEnvironment    ] [7522b5859ed6] using [1] data paths, mounts [[/usr/share/opensearch/data (/dev/sdd)]], net usable_space [214.1gb], net total_space [250.9gb], types [ext4]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.767589044Z [2025-06-20T19:56:55,767][INFO ][o.o.e.NodeEnvironment    ] [7522b5859ed6] heap size [512mb], compressed ordinary object pointers [true]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.862075173Z [2025-06-20T19:56:55,861][INFO ][o.o.n.Node               ] [7522b5859ed6] node name [7522b5859ed6], node ID [EyntKRspRLmKpIHnyi4NoA], cluster name [docker-cluster], roles [ingest, remote_cluster_client, data, cluster_manager]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:55.913720555Z [2025-06-20T19:56:55,913][INFO ][o.o.e.ExtensionsManager  ] [7522b5859ed6] ExtensionsManager initialized
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:57.951921678Z [2025-06-20T19:56:57,951][WARN ][stderr                   ] [7522b5859ed6] SLF4J: Failed to load class "org.slf4j.impl.StaticLoggerBinder".
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:57.951940518Z [2025-06-20T19:56:57,951][WARN ][stderr                   ] [7522b5859ed6] SLF4J: Defaulting to no-operation (NOP) logger implementation
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:57.951943937Z [2025-06-20T19:56:57,951][WARN ][stderr                   ] [7522b5859ed6] SLF4J: See http://www.slf4j.org/codes.html#StaticLoggerBinder for further details.
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:57.968663922Z [2025-06-20T19:56:57,968][INFO ][o.o.l.b.LTRCircuitBreakerService] [7522b5859ed6] Registered memory breaker.
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:58.105592403Z [2025-06-20T19:56:58,105][INFO ][o.o.t.b.CircuitBreakerService] [7522b5859ed6] Registered memory breaker.
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:58.304614566Z [2025-06-20T19:56:58,304][INFO ][o.o.r.m.c.i.SdkClientFactory] [7522b5859ed6] Using local opensearch cluster as metadata store.
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:58.583887160Z [2025-06-20T19:56:58,583][INFO ][o.o.r.m.c.i.SdkClientFactory] [7522b5859ed6] Using local opensearch cluster as metadata store.
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:58.600647194Z [2025-06-20T19:56:58,600][INFO ][o.o.m.b.MLCircuitBreakerService] [7522b5859ed6] Registered ML memory breaker.
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:58.601046506Z [2025-06-20T19:56:58,600][INFO ][o.o.m.b.MLCircuitBreakerService] [7522b5859ed6] Registered ML disk breaker.
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:58.601049392Z [2025-06-20T19:56:58,601][INFO ][o.o.m.b.MLCircuitBreakerService] [7522b5859ed6] Registered ML native memory breaker.
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:58.671548357Z [2025-06-20T19:56:58,671][INFO ][o.r.Reflections          ] [7522b5859ed6] Reflections took 37 ms to scan 1 urls, producing 31 keys and 81 values 
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:58.686404267Z [2025-06-20T19:56:58,686][INFO ][o.r.Reflections          ] [7522b5859ed6] Reflections took 2 ms to scan 1 urls, producing 3 keys and 5 values 
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:58.833624691Z [2025-06-20T19:56:58,833][WARN ][o.o.s.p.SQLPlugin        ] [7522b5859ed6] Master key is a required config for using create and update datasource APIs. Please set plugins.query.datasources.encryption.masterkey config in opensearch.yml in all the cluster nodes. More details can be found here: https://github.com/opensearch-project/sql/blob/main/docs/user/ppl/admin/datasources.rst#master-key-config-for-encrypting-credential-information
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:59.078425272Z [2025-06-20T19:56:59,078][INFO ][o.o.p.i.c.s.QueryInsightsService] [7522b5859ed6] Setting query insights index template priority to [1847]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:59.603284965Z [2025-06-20T19:56:59,603][INFO ][o.o.t.NettyAllocator     ] [7522b5859ed6] creating NettyAllocator with the following configs: [name=unpooled, suggested_max_allocation_size=256kb, factors={opensearch.unsafe.use_unpooled_allocator=null, g1gc_enabled=true, g1gc_region_size=1mb, heap_size=512mb}]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:56:59.686343858Z [2025-06-20T19:56:59,686][INFO ][o.o.d.DiscoveryModule    ] [7522b5859ed6] using discovery type [single-node] and seed hosts providers [settings]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.049354478Z [2025-06-20T19:57:00,049][WARN ][o.o.g.DanglingIndicesState] [7522b5859ed6] gateway.auto_import_dangling_indices is disabled, dangling indices will not be automatically detected or imported and must be managed manually
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.504098194Z [2025-06-20T19:57:00,503][INFO ][o.o.p.h.c.PerformanceAnalyzerConfigAction] [7522b5859ed6] PerformanceAnalyzer Enabled: false
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.542115960Z [2025-06-20T19:57:00,541][INFO ][o.o.n.Node               ] [7522b5859ed6] initialized
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.542136486Z [2025-06-20T19:57:00,542][INFO ][o.o.n.Node               ] [7522b5859ed6] starting ...
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.571562894Z [2025-06-20T19:57:00,571][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [windows_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.571626975Z [2025-06-20T19:57:00,571][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [waf_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.571843157Z [2025-06-20T19:57:00,571][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [vpcflow_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.571979487Z [2025-06-20T19:57:00,571][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [test_windows_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.572301938Z [2025-06-20T19:57:00,572][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [s3_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.572309189Z [2025-06-20T19:57:00,572][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [others_web_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.572358352Z [2025-06-20T19:57:00,572][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [others_proxy_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.572471517Z [2025-06-20T19:57:00,572][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [others_macos_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.572585076Z [2025-06-20T19:57:00,572][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [others_compliance_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.572751359Z [2025-06-20T19:57:00,572][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [others_cloud_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.572830693Z [2025-06-20T19:57:00,572][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [others_apt_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.572945067Z [2025-06-20T19:57:00,572][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [others_application_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.573066976Z [2025-06-20T19:57:00,572][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [okta_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.573235787Z [2025-06-20T19:57:00,573][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [network_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.573408186Z [2025-06-20T19:57:00,573][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [netflow_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.573604087Z [2025-06-20T19:57:00,573][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [m365_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.573914069Z [2025-06-20T19:57:00,573][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [linux_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.574023197Z [2025-06-20T19:57:00,573][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [gworkspace_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.574251979Z [2025-06-20T19:57:00,574][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [github_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.574381440Z [2025-06-20T19:57:00,574][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [dns_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.574518797Z [2025-06-20T19:57:00,574][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [cloudtrail_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.574930989Z [2025-06-20T19:57:00,574][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [azure_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.574937712Z [2025-06-20T19:57:00,574][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [apache_access_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.575141653Z [2025-06-20T19:57:00,575][INFO ][o.o.s.l.BuiltinLogTypeLoader] [7522b5859ed6] Loaded [ad_ldap_logtype.json] log type
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.677241255Z [2025-06-20T19:57:00,676][INFO ][o.o.t.TransportService   ] [7522b5859ed6] publish_address {192.168.0.2:9300}, bound_addresses {0.0.0.0:9300}
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.677922989Z [2025-06-20T19:57:00,677][INFO ][o.o.t.TransportService   ] [7522b5859ed6] Remote clusters initialized successfully.
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.812739913Z [2025-06-20T19:57:00,812][WARN ][o.o.b.BootstrapChecks    ] [7522b5859ed6] max virtual memory areas vm.max_map_count [65530] is too low, increase to at least [262144]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.813426817Z [2025-06-20T19:57:00,813][INFO ][o.o.c.c.Coordinator      ] [7522b5859ed6] cluster UUID [T9eekrQxSg6vsmIBFQpQhA]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.945669265Z [2025-06-20T19:57:00,945][INFO ][o.o.c.s.ClusterManagerService] [7522b5859ed6] Tasks batched with key: org.opensearch.cluster.coordination.JoinHelper, count:3 and sample tasks: elected-as-cluster-manager ([1] nodes joined)[{7522b5859ed6}{EyntKRspRLmKpIHnyi4NoA}{1ny1Ckt1Tt6Aljl91LA_gw}{192.168.0.2}{192.168.0.2:9300}{dimr}{shard_indexing_pressure_enabled=true} elect leader, _BECOME_CLUSTER_MANAGER_TASK_, _FINISH_ELECTION_], term: 51, version: 532, delta: cluster-manager node changed {previous [], current [{7522b5859ed6}{EyntKRspRLmKpIHnyi4NoA}{1ny1Ckt1Tt6Aljl91LA_gw}{192.168.0.2}{192.168.0.2:9300}{dimr}{shard_indexing_pressure_enabled=true}]}
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.975802592Z [2025-06-20T19:57:00,975][INFO ][o.o.c.s.ClusterApplierService] [7522b5859ed6] cluster-manager node changed {previous [], current [{7522b5859ed6}{EyntKRspRLmKpIHnyi4NoA}{1ny1Ckt1Tt6Aljl91LA_gw}{192.168.0.2}{192.168.0.2:9300}{dimr}{shard_indexing_pressure_enabled=true}]}, term: 51, version: 532, reason: Publication{term=51, version=532}
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.980224313Z [2025-06-20T19:57:00,980][INFO ][o.o.t.i.IndexManagement  ] [7522b5859ed6] Candidate custom result indices are empty.
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.980461218Z [2025-06-20T19:57:00,980][INFO ][o.o.t.i.IndexManagement  ] [7522b5859ed6] Candidate custom result indices are empty.
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:00.980558384Z [2025-06-20T19:57:00,980][INFO ][o.o.t.c.ClusterEventListener] [7522b5859ed6] Cluster is not recovered yet.
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.008244691Z [2025-06-20T19:57:01,007][INFO ][o.o.i.i.ManagedIndexCoordinator] [7522b5859ed6] Cache cluster manager node onClusterManager time: 1750449421007
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.013271236Z [2025-06-20T19:57:01,011][WARN ][o.o.p.c.s.h.ConfigOverridesClusterSettingHandler] [7522b5859ed6] Config override setting update called with empty string. Ignoring.
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.016860615Z [2025-06-20T19:57:01,016][INFO ][o.o.d.PeerFinder         ] [7522b5859ed6] setting findPeersInterval to [1s] as node commission status = [true] for local node [{7522b5859ed6}{EyntKRspRLmKpIHnyi4NoA}{1ny1Ckt1Tt6Aljl91LA_gw}{192.168.0.2}{192.168.0.2:9300}{dimr}{shard_indexing_pressure_enabled=true}]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.018514881Z [2025-06-20T19:57:01,018][WARN ][o.o.c.r.a.AllocationService] [7522b5859ed6] Falling back to single shard assignment since batch mode disable or multiple custom allocators set
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.024051247Z [2025-06-20T19:57:01,023][INFO ][o.o.h.AbstractHttpServerTransport] [7522b5859ed6] publish_address {192.168.0.2:9200}, bound_addresses {0.0.0.0:9200}
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.024061430Z [2025-06-20T19:57:01,023][INFO ][o.o.n.Node               ] [7522b5859ed6] started
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.025079832Z [2025-06-20T19:57:01,024][INFO ][o.o.s.OpenSearchSecurityPlugin] [7522b5859ed6] 0 OpenSearch Security modules loaded so far: []
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.026583371Z [2025-06-20T19:57:01,026][WARN ][o.o.c.r.a.AllocationService] [7522b5859ed6] Falling back to single shard assignment since batch mode disable or multiple custom allocators set
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.053449484Z [2025-06-20T19:57:01,053][INFO ][o.o.t.c.HashRing         ] [7522b5859ed6] Node added: [EyntKRspRLmKpIHnyi4NoA]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.055370058Z [2025-06-20T19:57:01,055][INFO ][o.o.t.c.HashRing         ] [7522b5859ed6] Add data node to version hash ring: EyntKRspRLmKpIHnyi4NoA
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.056245537Z [2025-06-20T19:57:01,056][INFO ][o.o.t.c.HashRing         ] [7522b5859ed6] All nodes with known version: {EyntKRspRLmKpIHnyi4NoA=ADNodeInfo{version=3.0.0, isEligibleDataNode=true}}
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.056254478Z [2025-06-20T19:57:01,056][INFO ][o.o.t.c.HashRing         ] [7522b5859ed6] Rebuild hash ring for realtime with cooldown, nodeChangeEvents size 0
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.056443273Z [2025-06-20T19:57:01,056][INFO ][o.o.t.c.HashRing         ] [7522b5859ed6] Build version hash ring successfully
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.056822812Z [2025-06-20T19:57:01,056][INFO ][o.o.t.c.ADDataMigrator   ] [7522b5859ed6] Start migrating AD data
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.056842992Z [2025-06-20T19:57:01,056][INFO ][o.o.t.c.ADDataMigrator   ] [7522b5859ed6] AD job index doesn't exist, no need to migrate
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.056845822Z [2025-06-20T19:57:01,056][INFO ][o.o.t.c.ClusterEventListener] [7522b5859ed6] Init version hash ring successfully
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.071082332Z [2025-06-20T19:57:01,070][INFO ][o.o.c.s.ClusterManagerTaskThrottler] [7522b5859ed6] Starting cluster manager throttling as all nodes are higher than or equal to 2.5.0
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.071796674Z [2025-06-20T19:57:01,071][INFO ][o.o.g.GatewayService     ] [7522b5859ed6] recovered [10] indices into cluster_state
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.072750505Z [2025-06-20T19:57:01,072][INFO ][o.o.s.l.LogTypeService   ] [7522b5859ed6] Loading builtin types!
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.074140364Z [2025-06-20T19:57:01,074][INFO ][o.o.s.l.LogTypeService   ] [7522b5859ed6] Indexing [432] fieldMappingDocs from logTypes: 24
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.087868943Z [2025-06-20T19:57:01,087][WARN ][o.o.c.r.a.AllocationService] [7522b5859ed6] Falling back to single shard assignment since batch mode disable or multiple custom allocators set
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.092438082Z [2025-06-20T19:57:01,092][WARN ][o.o.s.SecurityAnalyticsPlugin] [7522b5859ed6] Failed to initialize LogType config index and builtin log types
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.153059829Z [2025-06-20T19:57:01,152][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] PluginService:onIndexModule index:[top_queries-2025.06.13-11037/bKInP0JWTgyPBEQklRVMaw]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.221784781Z [2025-06-20T19:57:01,221][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] PluginService:onIndexModule index:[top_queries-2025.06.14-11038/44-ttSaXQs68W4meuWkunA]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.230052024Z [2025-06-20T19:57:01,229][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] PluginService:onIndexModule index:[top_queries-2025.06.20-11065/91OY2F5EQTma_9SlZeRn1g]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.238536035Z [2025-06-20T19:57:01,238][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] PluginService:onIndexModule index:[.plugins-ml-config/u5LjUPifRwy-d1SFFP0YHg]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.392673242Z [2025-06-20T19:57:01,392][WARN ][o.o.c.r.a.AllocationService] [7522b5859ed6] Falling back to single shard assignment since batch mode disable or multiple custom allocators set
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.422634684Z [2025-06-20T19:57:01,422][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] PluginService:onIndexModule index:[top_queries-2025.06.10-11034/32JLoxNlSKmnAoo-UytgOA]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.428545584Z [2025-06-20T19:57:01,428][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] PluginService:onIndexModule index:[top_queries-2025.06.11-11035/68bATnXhQsGivvg36D6fRA]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.434639700Z [2025-06-20T19:57:01,434][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] PluginService:onIndexModule index:[ingredients/Lz1bvnphRUOAQkVVDeF7sA]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.437046814Z [2025-06-20T19:57:01,436][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] PluginService:onIndexModule index:[top_queries-2025.06.12-11036/OGcCwmmGTZ2TjtwnJmrFmQ]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.522357408Z [2025-06-20T19:57:01,522][WARN ][o.o.c.r.a.AllocationService] [7522b5859ed6] Falling back to single shard assignment since batch mode disable or multiple custom allocators set
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.539684071Z [2025-06-20T19:57:01,539][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] PluginService:onIndexModule index:[.opensearch-sap-log-types-config/kISrNAR0S4W7fab9CCGGxg]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.544895476Z [2025-06-20T19:57:01,544][INFO ][o.o.p.PluginsService     ] [7522b5859ed6] PluginService:onIndexModule index:[recipes/hGEVpajpQMCvlpK5sNw6ug]
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.608211029Z [2025-06-20T19:57:01,607][WARN ][o.o.c.r.a.AllocationService] [7522b5859ed6] Falling back to single shard assignment since batch mode disable or multiple custom allocators set
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.672895829Z [2025-06-20T19:57:01,672][INFO ][o.o.c.r.a.AllocationService] [7522b5859ed6] Cluster health status changed from [RED] to [YELLOW] (reason: [shards started [[.opensearch-sap-log-types-config][0]]]).
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:01.695136385Z [2025-06-20T19:57:01,694][WARN ][o.o.c.r.a.AllocationService] [7522b5859ed6] Falling back to single shard assignment since batch mode disable or multiple custom allocators set
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:02.014882094Z [2025-06-20T19:57:02,014][INFO ][o.o.s.l.LogTypeService   ] [7522b5859ed6] Loading builtin types!
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:02.015173710Z [2025-06-20T19:57:02,015][INFO ][o.o.s.l.LogTypeService   ] [7522b5859ed6] Indexing [432] fieldMappingDocs from logTypes: 24
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:02.021516316Z [2025-06-20T19:57:02,021][INFO ][o.o.s.l.LogTypeService   ] [7522b5859ed6] Loading builtin types!
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:02.021750466Z [2025-06-20T19:57:02,021][INFO ][o.o.s.l.LogTypeService   ] [7522b5859ed6] Indexing [432] fieldMappingDocs from logTypes: 24
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:02.022731007Z [2025-06-20T19:57:02,022][INFO ][o.o.s.i.DetectorIndexManagementService] [7522b5859ed6] info deleteOldIndices
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:02.023992952Z [2025-06-20T19:57:02,023][INFO ][o.o.s.i.DetectorIndexManagementService] [7522b5859ed6] No Old Correlation Indices to delete
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:02.024405401Z [2025-06-20T19:57:02,024][INFO ][o.o.s.i.DetectorIndexManagementService] [7522b5859ed6] info deleteOldIndices
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:02.024539871Z [2025-06-20T19:57:02,024][INFO ][o.o.s.i.DetectorIndexManagementService] [7522b5859ed6] No Old IOC Findings Indices to delete
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:02.128661833Z [2025-06-20T19:57:02,128][INFO ][o.o.s.l.LogTypeService   ] [7522b5859ed6] Indexing [432] fieldMappingDocs
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:02.129685487Z [2025-06-20T19:57:02,129][INFO ][o.o.s.l.LogTypeService   ] [7522b5859ed6] Indexing [432] fieldMappingDocs
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:02.366368145Z [2025-06-20T19:57:02,365][INFO ][o.o.s.l.LogTypeService   ] [7522b5859ed6] Loaded [432] field mapping docs successfully!
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:02.368662680Z [2025-06-20T19:57:02,368][INFO ][o.o.s.l.LogTypeService   ] [7522b5859ed6] Loaded [432] field mapping docs successfully!
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:02.377069906Z [2025-06-20T19:57:02,376][INFO ][o.o.s.l.LogTypeService   ] [7522b5859ed6] Indexing [23] customLogTypes
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:02.387057355Z [2025-06-20T19:57:02,386][INFO ][o.o.s.l.LogTypeService   ] [7522b5859ed6] Indexing [23] customLogTypes
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:02.404235726Z [2025-06-20T19:57:02,403][INFO ][o.o.s.l.LogTypeService   ] [7522b5859ed6] Loaded [23] customLogType docs successfully!
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:02.415819498Z [2025-06-20T19:57:02,415][INFO ][o.o.s.l.LogTypeService   ] [7522b5859ed6] Loaded [23] customLogType docs successfully!
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:02.462897313Z [2025-06-20T19:57:02,462][INFO ][o.o.s.i.DetectorIndexManagementService] [7522b5859ed6] info deleteOldIndices
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:02.463258796Z [2025-06-20T19:57:02,463][INFO ][o.o.s.i.DetectorIndexManagementService] [7522b5859ed6] No Old Finding Indices to delete
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:57:02.760561442Z INFO:__main__:Found existing data: 225602 recipes and 246351 ingredients
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:57:02.760617238Z INFO:__main__:Data already exists in OpenSearch, skipping indexing
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:57:02.823963073Z ✅ Indexing completed
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:57:02.824271372Z 🚀 Launching Flask app...
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:11.008349124Z [2025-06-20T19:57:11,008][INFO ][o.o.m.a.MLModelAutoReDeployer] [7522b5859ed6] Index not found, not performing auto reloading!
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:11.008375633Z [2025-06-20T19:57:11,008][INFO ][o.o.m.c.MLCommonsClusterManagerEventListener] [7522b5859ed6] Starting ML sync up job...
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:21.027314521Z [2025-06-20T19:57:21,026][INFO ][o.o.m.c.MLSyncUpCron     ] [7522b5859ed6] Skipping sync up job - ML model index not found
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:21.028283326Z [2025-06-20T19:57:21,028][INFO ][o.o.m.c.MLSyncUpCron     ] [7522b5859ed6] ML configuration already initialized, no action needed
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:31.027950875Z [2025-06-20T19:57:31,027][INFO ][o.o.m.c.MLSyncUpCron     ] [7522b5859ed6] Skipping sync up job - ML model index not found
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:41.028637015Z [2025-06-20T19:57:41,028][INFO ][o.o.m.c.MLSyncUpCron     ] [7522b5859ed6] Skipping sync up job - ML model index not found
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:57:51.029379580Z [2025-06-20T19:57:51,029][INFO ][o.o.m.c.MLSyncUpCron     ] [7522b5859ed6] Skipping sync up job - ML model index not found
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:58:01.031256238Z [2025-06-20T19:58:01,030][INFO ][o.o.m.c.MLSyncUpCron     ] [7522b5859ed6] Skipping sync up job - ML model index not found
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:58:11.031319070Z [2025-06-20T19:58:11,031][INFO ][o.o.m.c.MLSyncUpCron     ] [7522b5859ed6] Skipping sync up job - ML model index not found
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:17.545746364Z 19:58:17 │ INFO │ Logging system initialized successfully
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:17.576709312Z INFO: Starting application initialization...
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:17.649314689Z INFO: Application initialization completed successfully
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:17.650299190Z Waiting for OpenSearch to be ready...
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:17.650323837Z Successfully connected to OpenSearch!
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:17.650325821Z Successfully loaded 10000 ingredients
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:17.650326911Z  * Serving Flask app 'app'
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:17.650327929Z  * Debug mode: on
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:17.654425228Z INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:17.654462466Z  * Running on all addresses (0.0.0.0)
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:17.654469438Z  * Running on http://127.0.0.1:8080
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:17.654473177Z  * Running on http://192.168.0.3:8080
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:17.654475346Z INFO: [33mPress CTRL+C to quit[0m
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:17.654826507Z INFO:  * Restarting with stat
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:20.924165175Z 19:58:20 │ INFO │ Logging system initialized successfully
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:20.956539258Z INFO: Starting application initialization...
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:20.993456433Z INFO: Application initialization completed successfully
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:20.996368315Z WARNING:  * Debugger is active!
+search_by_ingredients_v1t3ls0n-web-1  | 2025-06-20T19:58:20.996689933Z INFO:  * Debugger PIN: 105-592-780
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:58:21.032108395Z [2025-06-20T19:58:21,031][INFO ][o.o.m.c.MLSyncUpCron     ] [7522b5859ed6] Skipping sync up job - ML model index not found
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:58:31.034234498Z [2025-06-20T19:58:31,033][INFO ][o.o.m.c.MLSyncUpCron     ] [7522b5859ed6] Skipping sync up job - ML model index not found
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:58:41.035904076Z [2025-06-20T19:58:41,035][INFO ][o.o.m.c.MLSyncUpCron     ] [7522b5859ed6] Skipping sync up job - ML model index not found
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-20T19:58:51.037938113Z [2025-06-20T19:58:51,037][INFO ][o.o.m.c.MLSyncUpCron     ] [7522b5859ed6] Skipping sync up job - ML model index not found

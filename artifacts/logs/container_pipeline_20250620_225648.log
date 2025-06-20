@@ -1,0 +1,22 @@
+📦 Verifying Python dependencies...
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+
+[notice] A new release of pip is available: 24.0 -> 25.1.1
+[notice] To update, run: pip install --upgrade pip
+🧠 Training...
+📝 Note: Will use cached embeddings if available (add --force to recompute)
+19:58:10 │ INFO │ Logging system initialized successfully
+19:58:10 │ INFO │ 🚀 Starting main with args: Namespace(ground_truth=None, train=True, ingredients=None, mode='both', force=False, sample_frac=0.1)
+19:58:10 │ INFO │ 🧠 SINGLE training run - sample_frac=0.1
+19:58:10 │ INFO │ 🚀 STARTING FULL ML PIPELINE
+19:58:10 │ INFO │    Mode: both
+19:58:10 │ INFO │    Force recomputation: False
+19:58:10 │ INFO │    Sample fraction: 0.1
+19:58:10 │ INFO │    Start time: 2025-06-20 19:58:10
+19:58:10 │ INFO │    Available CPU cores: 24
+19:58:10 │ INFO │    Available memory: 31 GB
+19:58:10 │ ERROR │ ❌ Training pipeline failed: 'module' object is not callable
+19:58:10 │ ERROR │    Error type: TypeError
+19:58:10 │ INFO │ 🚫 EXITING WITHOUT RESTART
+19:58:10 │ INFO │ 🚫 System exit: 1
+19:58:10 │ INFO │ 🛑 Process exiting - no restarts allowed
