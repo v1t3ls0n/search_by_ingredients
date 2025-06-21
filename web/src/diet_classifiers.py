@@ -81,6 +81,20 @@ Author: Guy Vitelson (aka @v1t3ls0n on GitHub)
 """
 
 from __future__ import annotations
+
+# =============================================================================
+# IMPORTS AND DEPENDENCIES
+# =============================================================================
+"""
+  This section imports all required libraries, organizing them by category:
+- Standard library modules
+- Core third-party libraries (NumPy, Pandas, etc.)
+- Machine learning libraries (scikit-learn, LightGBM)
+- Deep learning libraries (PyTorch, torchvision)
+- Specialized libraries (NLTK, imbalanced-learn)
+"""
+
+
 from datetime import datetime
 import uuid
 from imblearn.over_sampling import SMOTE, RandomOverSampler
@@ -107,25 +121,10 @@ import logging
 import json
 import threading
 import sys
-from tqdm import tqdm 
+from tqdm import tqdm
 from functools import partial
-import gc # Memory cleanup
-# =============================================================================
-# IMPORTS AND DEPENDENCIES
-# =============================================================================
-"""
-  This section imports all required libraries, organizing them by category:
-- Standard library modules
-- Core third-party libraries (NumPy, Pandas, etc.)
-- Machine learning libraries (scikit-learn, LightGBM)
-- Deep learning libraries (PyTorch, torchvision)
-- Specialized libraries (NLTK, imbalanced-learn)
-"""
+import gc  # Memory cleanup
 
-
-# --- Standard library ---
-
-# --- Third-party: core ---
 
 # --- NLTK (used for lemmatization) ---
 try:
@@ -302,7 +301,8 @@ class DirectWriteHandler(logging.Handler):
         self.filename = filename
         # Write a separator for new runs (but don't delete existing content)
         self._write_direct("\n" + "="*80 + "\n")
-        self._write_direct(f"NEW RUN STARTED AT {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        self._write_direct(
+            f"NEW RUN STARTED AT {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         self._write_direct(f"Process ID: {os.getpid()}\n")
         self._write_direct("="*80 + "\n")
 
@@ -333,21 +333,21 @@ log = logging.getLogger("PIPE")
 # Configure logger - but check if handlers already exist to avoid duplicates
 if not log.handlers:
     log.setLevel(logging.INFO)
-    
+
     # Define formatter
     formatter = logging.Formatter(
         "%(asctime)s │ %(levelname)s │ %(message)s", datefmt="%H:%M:%S")
-    
+
     # Console handler
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     log.addHandler(console_handler)
-    
+
     # Direct write file handler
     direct_handler = DirectWriteHandler(str(log_file))
     direct_handler.setFormatter(formatter)
     log.addHandler(direct_handler)
-    
+
     # Test logging
     log.info("Logging system initialized successfully")
 
@@ -364,21 +364,219 @@ def log_exception_hook(exc_type, exc_value, exc_traceback):
 
 sys.excepthook = log_exception_hook
 
+
 # =============================================================================
-# GENERAL UTILITY FUNCTIONS
+# MEMORY OPTIMIZATION
 # =============================================================================
+"""
+Functions for managing memory usage during training. Critical for handling
+large datasets and preventing out-of-memory errors, especially when working
+with both text and image features.
+"""
 
 
-def safe_array_check(arr, condition_func):
-    """Safely check array conditions to avoid ambiguous truth value errors."""
+def get_available_memory(safety_factor=0.9):
+    """
+    Get available memory accounting for Docker container limits.
+    Enhanced version that properly detects container memory constraints.
+    """
+    mem = psutil.virtual_memory()
+    total_memory = mem.total
+
+    # Check Docker cgroup limits
+    cgroup_files = [
+        '/sys/fs/cgroup/memory/memory.limit_in_bytes',  # cgroup v1
+        '/sys/fs/cgroup/memory.max',  # cgroup v2
+    ]
+
+    for cgroup_file in cgroup_files:
+        if os.path.exists(cgroup_file):
+            try:
+                with open(cgroup_file, 'r') as f:
+                    limit = f.read().strip()
+                    if limit != 'max' and limit.isdigit():
+                        cgroup_limit = int(limit)
+                        # Use the smaller of cgroup limit or system memory
+                        if cgroup_limit < total_memory * 2:  # sanity check
+                            total_memory = min(total_memory, cgroup_limit)
+                            log.info(
+                                f"Container memory limited by cgroup: {total_memory / (1024**3):.1f} GB")
+                            break
+            except Exception as e:
+                log.warning(f"Could not read cgroup file {cgroup_file}: {e}")
+
+    # Return usable memory in GB
+    usable_gb = (total_memory * safety_factor) / (1024**3)
+
+    log.info(
+        f"System/Container total memory: {total_memory / (1024**3):.1f} GB")
+    log.info(
+        f"Safe memory limit ({safety_factor*100:.0f}%): {usable_gb:.1f} GB")
+
+    return usable_gb
+
+
+def optimize_memory_usage(stage_name=""):
+    """
+    Optimize memory usage during training with enhanced Docker support.
+    """
+    # Get memory before cleanup
     try:
-        arr = np.asarray(arr)
-        return condition_func(arr)
-    except ValueError as e:
-        if "ambiguous" in str(e).lower():
-            log.warning(f"Array ambiguity detected, using element-wise check")
-            return condition_func(arr).any() if arr.size > 1 else condition_func(arr)
-        raise
+        memory_before = psutil.virtual_memory()
+        memory_before_used = memory_before.used
+        memory_before_percent = memory_before.percent
+
+        # Log current memory state with container awareness
+        available_memory_gb = get_available_memory(
+            safety_factor=1.0)  # Get total available
+        log.info(f"   🧹 {stage_name}: Memory optimization")
+        log.info(
+            f"      ├─ Container/System memory: {available_memory_gb:.1f} GB total")
+        log.info(
+            f"      ├─ Currently used: {memory_before_percent:.1f}% ({memory_before_used / (1024**2):.0f} MB)")
+
+    except Exception as e:
+        log.error(f"Failed to get initial memory stats: {e}")
+        return "error"
+
+    # Force garbage collection multiple times
+    collected_total = 0
+    for i in range(3):
+        try:
+            collected = gc.collect()
+            collected_total += collected
+        except Exception as e:
+            log.debug(f"Garbage collection pass {i+1} failed: {e}")
+
+    # Clear GPU cache if available
+    gpu_freed = 0
+    if torch and torch.cuda.is_available():
+        try:
+            gpu_before = torch.cuda.memory_allocated() / (1024**2)
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()  # Ensure operations complete
+            gpu_after = torch.cuda.memory_allocated() / (1024**2)
+            gpu_freed = max(0, gpu_before - gpu_after)
+        except Exception as e:
+            log.debug(f"GPU memory cleanup failed: {e}")
+
+    # Get memory after cleanup
+    try:
+        memory_after = psutil.virtual_memory()
+        memory_freed_bytes = max(0, memory_before_used - memory_after.used)
+        memory_freed_mb = memory_freed_bytes / (1024**2)
+
+    except Exception as e:
+        log.error(f"Failed to get final memory stats: {e}")
+        return "error"
+
+    # Log results
+    if memory_freed_mb > 1.0 or collected_total > 0 or gpu_freed > 1.0:
+        log.info(f"      ├─ Freed: {memory_freed_mb:.1f} MB RAM")
+        if collected_total > 0:
+            log.info(f"      ├─ Objects collected: {collected_total}")
+        if gpu_freed > 1.0:
+            log.info(f"      ├─ GPU freed: {gpu_freed:.1f} MB")
+
+    # Check final status
+    if memory_after.percent > 90:
+        log.error(
+            f"      ❌ CRITICAL memory usage: {memory_after.percent:.1f}%")
+        # Try emergency cleanup
+        handle_memory_crisis()
+        return "critical"
+    elif memory_after.percent > 85:
+        log.warning(
+            f"      ⚠️  High memory usage: {memory_after.percent:.1f}%")
+        return "high"
+    elif memory_after.percent > 70:
+        log.info(
+            f"      ⚠️  Moderate memory usage: {memory_after.percent:.1f}%")
+        return "moderate"
+    else:
+        log.info(f"      ✅ Memory usage normal: {memory_after.percent:.1f}%")
+        return "normal"
+
+
+def handle_memory_crisis():
+    """
+    Emergency memory cleanup when usage is critical.
+
+    Applies aggressive memory optimization techniques including:
+    - Multiple garbage collection passes
+    - Complete GPU memory clearing
+    - Python cache invalidation
+    - Memory compaction
+
+    Returns:
+        Final memory usage percentage after cleanup
+    """
+
+    log.warning("🚨 MEMORY CRISIS - Applying emergency cleanup")
+
+    try:
+        initial_memory = psutil.virtual_memory()
+        initial_percent = initial_memory.percent
+        log.info(f"   ├─ Initial memory: {initial_percent:.1f}%")
+
+        # Step 1: Multiple aggressive garbage collection passes
+        total_collected = 0
+        for i in range(5):
+            try:
+                collected = gc.collect()
+                total_collected += collected
+                if collected > 0:
+                    log.info(
+                        f"   ├─ GC pass {i+1}: {collected} objects collected")
+            except Exception as e:
+                log.debug(f"GC pass {i+1} failed: {e}")
+
+        # Step 2: Clear all GPU memory
+        gpu_freed = 0
+        if torch and torch.cuda.is_available():
+            try:
+                gpu_before = torch.cuda.memory_allocated() / (1024**2)
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+                gpu_after = torch.cuda.memory_allocated() / (1024**2)
+                gpu_freed = max(0, gpu_before - gpu_after)
+                log.info(f"   ├─ GPU memory freed: {gpu_freed:.1f} MB")
+            except Exception as e:
+                log.debug(f"   ├─ GPU cleanup failed: {e}")
+
+        # Step 3: Clear Python internal caches
+        try:
+            import importlib
+            if hasattr(importlib, 'invalidate_caches'):
+                importlib.invalidate_caches()
+        except Exception as e:
+            log.debug(f"   ├─ Cache cleanup failed: {e}")
+
+        # Step 4: Force memory compaction
+        try:
+            gc.set_debug(0)  # Disable debugging to save memory
+            gc.collect()
+        except Exception:
+            pass
+
+        # Step 5: Check final memory
+        final_memory = psutil.virtual_memory()
+        final_percent = final_memory.percent
+        memory_freed_mb = (initial_memory.used - final_memory.used) / (1024**2)
+
+        log.info(f"   ├─ Objects collected: {total_collected}")
+        log.info(f"   ├─ Memory freed: {memory_freed_mb:.1f} MB")
+        log.info(f"   └─ Final memory usage: {final_percent:.1f}%")
+
+        return final_percent
+
+    except Exception as e:
+        log.error(f"Memory crisis handling failed: {e}")
+        # Fallback: return a safe high value
+        try:
+            return psutil.virtual_memory().percent
+        except:
+            return 90.0  # Assume high usage if we can't measure
 
 
 # =============================================================================
@@ -904,7 +1102,6 @@ def _download_images(df: pd.DataFrame, img_dir: Path, max_workers: int = 16, for
             f"   ⚠️  LOW COVERAGE - only {len(valid_indices):,} images available")
         log.warning(
             f"   └─ Consider using text-only mode or checking data sources")
-
 
     gc.collect()
 
@@ -2212,17 +2409,17 @@ def is_ingredient_keto(ingredient: str) -> bool:
         if _pipeline_state['vectorizer']:
             try:
                 X = _pipeline_state['vectorizer'].transform([norm])
-                
+
                 # Check if model expects more features (was trained with images)
                 if hasattr(model, 'n_features_in_'):
                     expected_features = model.n_features_in_
                     actual_features = X.shape[1]
-                    
+
                     if expected_features > actual_features:
                         # Model expects images, pad with zeros using combine_features
                         padding = np.zeros((1, 2048), dtype=np.float32)
                         X = combine_features(X, padding)
-                
+
                 prob = model.predict_proba(X)[0, 1]
             except Exception as e:
                 log.warning("Vectorizer failed: %s. Falling back to rules.", e)
@@ -2286,17 +2483,17 @@ def is_ingredient_vegan(ingredient: str) -> bool:
         if _pipeline_state['vectorizer']:
             try:
                 X = _pipeline_state['vectorizer'].transform([normalized])
-                
+
                 # Check if model expects more features (was trained with images)
                 if hasattr(model, 'n_features_in_'):
                     expected_features = model.n_features_in_
                     actual_features = X.shape[1]
-                    
+
                     if expected_features > actual_features:
                         # Model expects images, pad with zeros using combine_features
                         padding = np.zeros((1, 2048), dtype=np.float32)
                         X = combine_features(X, padding)
-                
+
                 prob = model.predict_proba(X)[0, 1]
             except Exception as e:
                 log.warning(
@@ -2605,16 +2802,16 @@ class EnsembleWrapper(BaseEstimator, ClassifierMixin):
 # These checks run on module import to catch configuration errors early.
 # """
 
-# # Test whitelist functionality
-# assert is_ingredient_keto("almond flour"), "Whitelist check failed"
+# Test whitelist functionality
+assert is_ingredient_keto("almond flour"), "Whitelist check failed"
 
-# # Test numeric rule (rice has ~28g carbs/100g)
-# assert not is_ingredient_keto("white rice"), "Numeric carb rule failed"
+# Test numeric rule (rice has ~28g carbs/100g)
+assert not is_ingredient_keto("white rice"), "Numeric carb rule failed"
 
-# # Test rule model delegation
-# rule = RuleModel("keto", None, None)
-# assert rule._pos("banana") is False, "Rule model delegation failed"
-# log.info("✅ All sanity checks passed")
+# Test rule model delegation
+rule = RuleModel("keto", None, None)
+assert rule._pos("banana") is False, "Rule model delegation failed"
+log.info("✅ All sanity checks passed")
 
 
 # =============================================================================
@@ -2698,189 +2895,6 @@ def _ensure_pipeline():
         }
 
     _pipeline_state['initialized'] = True
-
-
-# =============================================================================
-# MEMORY OPTIMIZATION
-# =============================================================================
-"""
-Functions for managing memory usage during training. Critical for handling
-large datasets and preventing out-of-memory errors, especially when working
-with both text and image features.
-"""
-
-
-def optimize_memory_usage(stage_name=""):
-    """
-    Optimize memory usage during training with detailed logging.
-
-    This function performs garbage collection and clears GPU memory if available.
-    It's called between major pipeline stages to prevent memory accumulation.
-
-    Args:
-        stage_name: Optional name of the current stage for logging
-
-    Returns:
-        String indicating memory status: "normal", "moderate", "high", or "error"
-
-    Example:
-        >>> optimize_memory_usage("After image processing")
-        🧹 After image processing: Memory cleanup
-        ├─ RAM: 45.2% used (7234 MB)
-        ├─ RAM freed: 523.4 MB
-        └─ Objects collected: 1247
-    """
-
-    # Get memory before cleanup
-    try:
-        memory_before = psutil.virtual_memory()
-        memory_before_used = memory_before.used
-        memory_before_percent = memory_before.percent
-    except Exception as e:
-        log.error(f"Failed to get initial memory stats: {e}")
-        return "error"
-
-    # Force garbage collection
-    try:
-        collected = gc.collect()
-    except Exception as e:
-        log.debug(f"Garbage collection failed: {e}")
-        collected = 0
-
-    # Clear GPU cache if available
-    gpu_freed = 0
-    if torch and torch.cuda.is_available():
-        try:
-            gpu_before = torch.cuda.memory_allocated() / (1024**2)  # MB
-            torch.cuda.empty_cache()
-            gpu_after = torch.cuda.memory_allocated() / (1024**2)  # MB
-            gpu_freed = max(0, gpu_before - gpu_after)
-        except Exception as e:
-            log.debug(f"GPU memory cleanup failed: {e}")
-            gpu_freed = 0
-
-    # Get memory after cleanup
-    try:
-        memory_after = psutil.virtual_memory()
-        memory_after_used = memory_after.used
-        memory_after_percent = memory_after.percent
-
-        # Calculate memory freed
-        memory_freed_bytes = max(0, memory_before_used - memory_after_used)
-        memory_freed_mb = memory_freed_bytes / (1024**2)
-
-    except Exception as e:
-        log.error(f"Failed to get final memory stats: {e}")
-        return "error"
-
-    # Log results
-    stage_prefix = f"{stage_name}: " if stage_name else ""
-    log.info(f"   🧹 {stage_prefix}Memory cleanup")
-    log.info(
-        f"      ├─ RAM: {memory_after_percent:.1f}% used ({memory_after_used // (1024**2)} MB)")
-
-    if memory_freed_mb > 1.0:  # Only log if significant
-        log.info(f"      ├─ RAM freed: {memory_freed_mb:.1f} MB")
-
-    if collected > 0:
-        log.info(f"      ├─ Objects collected: {collected}")
-
-    if gpu_freed > 1.0:
-        log.info(f"      ├─ GPU freed: {gpu_freed:.1f} MB")
-
-    # Return status based on memory usage
-    if memory_after_percent > 85:
-        log.warning(
-            f"      ⚠️  High memory usage: {memory_after_percent:.1f}%")
-        return "high"
-    elif memory_after_percent > 70:
-        log.warning(
-            f"      ⚠️  Moderate memory usage: {memory_after_percent:.1f}%")
-        return "moderate"
-    else:
-        log.info(f"      ✅ Memory usage normal: {memory_after_percent:.1f}%")
-        return "normal"
-
-
-def handle_memory_crisis():
-    """
-    Emergency memory cleanup when usage is critical.
-
-    Applies aggressive memory optimization techniques including:
-    - Multiple garbage collection passes
-    - Complete GPU memory clearing
-    - Python cache invalidation
-    - Memory compaction
-
-    Returns:
-        Final memory usage percentage after cleanup
-    """
-
-    log.warning("🚨 MEMORY CRISIS - Applying emergency cleanup")
-
-    try:
-        initial_memory = psutil.virtual_memory()
-        initial_percent = initial_memory.percent
-        log.info(f"   ├─ Initial memory: {initial_percent:.1f}%")
-
-        # Step 1: Multiple aggressive garbage collection passes
-        total_collected = 0
-        for i in range(5):
-            try:
-                collected = gc.collect()
-                total_collected += collected
-                if collected > 0:
-                    log.info(
-                        f"   ├─ GC pass {i+1}: {collected} objects collected")
-            except Exception as e:
-                log.debug(f"GC pass {i+1} failed: {e}")
-
-        # Step 2: Clear all GPU memory
-        gpu_freed = 0
-        if torch and torch.cuda.is_available():
-            try:
-                gpu_before = torch.cuda.memory_allocated() / (1024**2)
-                torch.cuda.empty_cache()
-                torch.cuda.synchronize()
-                gpu_after = torch.cuda.memory_allocated() / (1024**2)
-                gpu_freed = max(0, gpu_before - gpu_after)
-                log.info(f"   ├─ GPU memory freed: {gpu_freed:.1f} MB")
-            except Exception as e:
-                log.debug(f"   ├─ GPU cleanup failed: {e}")
-
-        # Step 3: Clear Python internal caches
-        try:
-            import importlib
-            if hasattr(importlib, 'invalidate_caches'):
-                importlib.invalidate_caches()
-        except Exception as e:
-            log.debug(f"   ├─ Cache cleanup failed: {e}")
-
-        # Step 4: Force memory compaction
-        try:
-            gc.set_debug(0)  # Disable debugging to save memory
-            gc.collect()
-        except Exception:
-            pass
-
-        # Step 5: Check final memory
-        final_memory = psutil.virtual_memory()
-        final_percent = final_memory.percent
-        memory_freed_mb = (initial_memory.used - final_memory.used) / (1024**2)
-
-        log.info(f"   ├─ Objects collected: {total_collected}")
-        log.info(f"   ├─ Memory freed: {memory_freed_mb:.1f} MB")
-        log.info(f"   └─ Final memory usage: {final_percent:.1f}%")
-
-        return final_percent
-
-    except Exception as e:
-        log.error(f"Memory crisis handling failed: {e}")
-        # Fallback: return a safe high value
-        try:
-            return psutil.virtual_memory().percent
-        except:
-            return 90.0  # Assume high usage if we can't measure
 
 
 # =============================================================================
@@ -4235,34 +4249,34 @@ def build_image_embeddings(df: pd.DataFrame,
                            mode: str,
                            force: bool = False) -> Tuple[np.ndarray, List[int]]:
     """
-    Extract ResNet-50 embeddings for recipe images with batch saving to disk.
+    Extract ResNet-50 embeddings for recipe images with memory-efficient batch processing.
 
-    This function implements a sophisticated image feature extraction pipeline:
-    1. Checks for cached embeddings to avoid recomputation
-    2. Loads pre-trained ResNet-50 (without classification head)
-    3. Processes images in batches with disk-based storage for memory efficiency
-    4. Handles errors gracefully with detailed logging
-    5. Applies quality filtering to remove bad images
-    6. Saves embeddings with backup for reliability
-
-    Args:
-        df: DataFrame with image indices
-        mode: Mode identifier ('silver', 'gold', etc.)
-        force: Force recomputation even if cache exists
-
-    Returns:
-        Tuple of (embeddings_array, valid_indices)
-        - embeddings_array: NumPy array of shape (n_images, 2048)
-        - valid_indices: List of indices that have valid embeddings
-
-    Note:
-        The function returns both embeddings and indices to maintain
-        alignment with the original dataset after filtering.
+    This enhanced version includes:
+    - Adaptive batch sizing based on available memory
+    - Disk-based storage for memory efficiency
+    - Checkpoint/resume capability
+    - Better memory cleanup between batches
     """
-
     from collections import defaultdict, Counter
 
     embedding_start = time.time()
+
+    # Get available memory for adaptive batch sizing
+    available_memory_gb = get_available_memory(safety_factor=0.9)
+
+    # Calculate adaptive batch size
+    if torch.cuda.is_available():
+        # GPU memory is more limited
+        gpu_memory_gb = torch.cuda.get_device_properties(
+            0).total_memory / (1024**3)
+        # Roughly 4-8 images per GB of GPU memory
+        batch_size = max(1, min(32, int(gpu_memory_gb * 4)))
+    else:
+        # CPU: estimate ~100MB per image for processing
+        batch_size = max(1, min(16, int(available_memory_gb * 10)))
+
+    log.info(
+        f"   💾 Memory-aware batch size: {batch_size} (based on {available_memory_gb:.1f} GB available)")
 
     # ------------------------------------------------------------------
     # Initialization and System Check
@@ -4275,7 +4289,6 @@ def build_image_embeddings(df: pd.DataFrame,
     # Check PyTorch availability
     if not TORCH_AVAILABLE:
         log.warning("   ❌ PyTorch not available - returning zero vectors")
-        log.info(f"   └─ Zero vector shape: ({len(df)}, 2048)")
         return np.zeros((len(df), 2048), dtype=np.float32), list(df.index)
 
     # Check GPU availability
@@ -4289,287 +4302,136 @@ def build_image_embeddings(df: pd.DataFrame,
     log.info(f"   🔧 Device Configuration:")
     log.info(f"   ├─ Device: {device_info['device']}")
     log.info(f"   ├─ CUDA available: {device_info['cuda_available']}")
-    if device_info['cuda_available']:
-        log.info(f"   ├─ GPU count: {device_info['device_count']}")
-        log.info(f"   └─ GPU name: {device_info['device_name']}")
-    else:
-        log.info(f"   └─ Using CPU (warning: much slower)")
 
     # Set up paths
     img_dir = CFG.image_dir / mode
     embed_path = img_dir / "embeddings.npy"
     backup_path = CFG.artifacts_dir / f"embeddings_{mode}_backup.npy"
     metadata_path = img_dir / "embedding_metadata.json"
+    checkpoint_path = img_dir / "embedding_checkpoint.npz"
+    temp_embed_path = embed_path.with_suffix('.tmp.npy')
 
     # Ensure artifacts directory exists
     CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
-    log.info(f"   📁 Paths:")
-    log.info(f"   ├─ Image directory: {img_dir}")
-    log.info(f"   ├─ Cache file: {embed_path}")
-    log.info(f"   └─ Backup file: {backup_path}")
 
     # ------------------------------------------------------------------
     # Cache Loading and Validation
     # ------------------------------------------------------------------
     if not force:
-        log.info(f"\n   🔍 Cache Validation:")
-
         cache_options = [
-            # Check artifacts first since that's where Docker mounts
             ("Artifacts backup", backup_path),
             ("Primary cache", embed_path),
-            # Old location for compatibility
             ("Legacy backup", Path(f"embeddings_{mode}_backup.npy"))
         ]
 
-        with tqdm(cache_options, desc="      ├─ Checking caches", position=1, leave=False,
-                  bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as cache_pbar:
-
-            for cache_name, cache_path in cache_pbar:
-                cache_pbar.set_description(
-                    f"      ├─ Checking {cache_name.lower()}")
-
-                if cache_path.exists():
-                    try:
-                        cache_start = time.time()
-                        emb = np.load(cache_path)
-                        load_time = time.time() - cache_start
-
+        for cache_name, cache_path in cache_options:
+            if cache_path.exists():
+                try:
+                    emb = np.load(cache_path)
+                    if emb.shape[0] == len(df):
                         log.info(
-                            f"      ├─ {cache_name}: Found ({emb.shape}) - loaded in {load_time:.2f}s")
-
-                        if emb.shape[0] == len(df):
-                            log.info(
-                                f"      ✅ {cache_name} matches target size - using cached embeddings")
-
-                            # Load metadata if available
-                            if metadata_path.exists():
-                                try:
-                                    with open(metadata_path, 'r') as f:
-                                        metadata = json.load(f)
-                                    log.info(
-                                        f"      ├─ Cache metadata: {metadata.get('creation_time', 'Unknown time')}")
-                                    log.info(f"      └─ Original stats: {metadata.get('success', '?')} success, "
-                                             f"{metadata.get('failed', '?')} failed")
-                                except Exception as e:
-                                    log.debug(
-                                        f"      └─ Metadata load failed: {e}")
-
-                            return emb, list(df.index)
-
-                        else:
-                            log.warning(
-                                f"      ⚠️  {cache_name} size mismatch: {emb.shape[0]} != {len(df)}")
-
-                            # Truncate oversize cache if possible
-                            if emb.shape[0] > len(df):
-                                log.info(
-                                    f"      ├─ Truncating cache from {emb.shape[0]} to {len(df)}")
-                                return emb[:len(df)], list(df.index)
-
-                    except Exception as e:
-                        log.error(
-                            f"      ❌ {cache_name} load failed: {str(e)[:60]}...")
-                else:
-                    log.info(f"      ├─ {cache_name}: Not found")
-
-        log.info(f"      └─ No valid cache found - will compute embeddings")
-
-    else:
-        log.info(f"\n   🔄 Cache bypassed (force=True) - recomputing embeddings")
+                            f"   ✅ Using cached embeddings from {cache_name}")
+                        return emb, list(df.index)
+                except Exception as e:
+                    log.warning(f"   Failed to load {cache_name}: {e}")
 
     # ------------------------------------------------------------------
-    # Pre-processing Analysis
+    # Check for checkpoint to resume
     # ------------------------------------------------------------------
-    log.info(f"\n   📊 Pre-processing Analysis:")
+    start_batch = 0
+    processed_indices = set()
 
-    with tqdm(total=3, desc="      ├─ Analyzing images", position=1, leave=False,
-              bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as analysis_pbar:
-
-        analysis_pbar.set_description("      ├─ Scanning directory")
-
-        # Check which images exist
-        existing_images = []
-        missing_images = []
-        corrupted_images = []
-
-        for idx in df.index:
-            img_file = img_dir / f"{idx}.jpg"
-            if img_file.exists():
-                try:
-                    # Quick validation
-                    with Image.open(img_file) as img:
-                        img.verify()  # Verify image integrity
-                    existing_images.append(idx)
-                except Exception:
-                    corrupted_images.append(idx)
-            else:
-                missing_images.append(idx)
-
-        analysis_pbar.update(1)
-
-        analysis_pbar.set_description("      ├─ Computing statistics")
-
-        # Calculate statistics
-        total_images = len(df)
-        existing_count = len(existing_images)
-        missing_count = len(missing_images)
-        corrupted_count = len(corrupted_images)
-
-        log.info(f"      📈 Image Availability:")
-        log.info(f"      ├─ Total expected: {total_images:,}")
-        log.info(
-            f"      ├─ Available: {existing_count:,} ({existing_count/total_images*100:.1f}%)")
-        log.info(
-            f"      ├─ Missing: {missing_count:,} ({missing_count/total_images*100:.1f}%)")
-        log.info(
-            f"      └─ Corrupted: {corrupted_count:,} ({corrupted_count/total_images*100:.1f}%)")
-
-        analysis_pbar.update(1)
-
-        # Sample image analysis
-        analysis_pbar.set_description("      ├─ Sampling quality")
-
-        if existing_images:
-            sample_size = min(100, len(existing_images))
-            sample_indices = np.random.choice(
-                existing_images, sample_size, replace=False)
-
-            image_stats = {
-                'sizes': [],
-                'modes': Counter(),
-                'formats': Counter(),
-                'file_sizes': []
-            }
-
-            # Analyze sample for statistics
-            for idx in sample_indices[:10]:
-                img_file = img_dir / f"{idx}.jpg"
-                try:
-                    with Image.open(img_file) as img:
-                        image_stats['sizes'].append(img.size)
-                        image_stats['modes'][img.mode] += 1
-                        image_stats['formats'][img.format] += 1
-                        image_stats['file_sizes'].append(
-                            img_file.stat().st_size)
-                except Exception:
-                    pass
-
-            if image_stats['sizes']:
-                avg_width = sum(s[0] for s in image_stats['sizes']
-                                ) / len(image_stats['sizes'])
-                avg_height = sum(
-                    s[1] for s in image_stats['sizes']) / len(image_stats['sizes'])
-                avg_file_size = sum(
-                    image_stats['file_sizes']) / len(image_stats['file_sizes'])
-
-                log.info(
-                    f"      📊 Sample Analysis ({len(image_stats['sizes'])} images):")
-                log.info(
-                    f"      ├─ Average size: {avg_width:.0f}×{avg_height:.0f} pixels")
-                log.info(
-                    f"      ├─ Average file size: {avg_file_size/1024:.1f} KB")
-                log.info(f"      ├─ Color modes: {dict(image_stats['modes'])}")
-                log.info(f"      └─ Formats: {dict(image_stats['formats'])}")
-
-        analysis_pbar.update(1)
+    if checkpoint_path.exists() and not force:
+        try:
+            checkpoint = np.load(checkpoint_path, allow_pickle=True)
+            start_batch = int(checkpoint['batch_idx'])
+            processed_indices = set(checkpoint['processed_indices'].tolist())
+            log.info(
+                f"   📂 Resuming from checkpoint: batch {start_batch}, {len(processed_indices)} already processed")
+        except Exception as e:
+            log.warning(f"   Could not load checkpoint: {e}")
 
     # ------------------------------------------------------------------
-    # Model Setup and Initialization
+    # Model Setup with Memory Optimization
     # ------------------------------------------------------------------
     log.info(f"\n   🤖 Model Setup:")
 
-    with tqdm(total=4, desc="      ├─ Loading model", position=1, leave=False,
-              bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as model_pbar:
+    # Load model with gradient checkpointing disabled for inference
+    model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+    model.fc = torch.nn.Identity()
+    model.eval()
 
-        model_pbar.set_description("      ├─ Loading ResNet-50")
-        model_start = time.time()
-
-        # Load pre-trained ResNet-50
-        model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
-        model_pbar.update(1)
-
-        model_pbar.set_description("      ├─ Modifying architecture")
-        # Remove classification head for feature extraction
-        model.fc = torch.nn.Identity()
-        model.eval()  # Set to evaluation mode
-        model_pbar.update(1)
-
-        model_pbar.set_description("      ├─ Moving to device")
-        model.to(device_info['device'])
-        model_time = time.time() - model_start
-        model_pbar.update(1)
-
-        model_pbar.set_description("      ├─ Setting up preprocessing")
-        # Standard ImageNet preprocessing
-        preprocess = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225]),
-        ])
-        model_pbar.update(1)
-
-    log.info(f"      ✅ Model loaded in {model_time:.2f}s")
-    log.info(f"      ├─ Architecture: ResNet-50 (feature extractor)")
-    log.info(f"      ├─ Output dimension: 2048")
-    log.info(f"      ├─ Device: {device_info['device']}")
-    log.info(
-        f"      └─ Parameters: {sum(p.numel() for p in model.parameters()):,}")
-
-    # Memory usage after model loading
+    # Move to device with memory optimization
     if device_info['cuda_available']:
-        gpu_memory = torch.cuda.memory_allocated() / (1024**2)
-        log.info(f"      📊 GPU memory allocated: {gpu_memory:.1f} MB")
+        # Set memory fraction for PyTorch
+        torch.cuda.set_per_process_memory_fraction(
+            0.8)  # Use only 80% of GPU memory
+
+    model.to(device_info['device'])
+
+    # Standard ImageNet preprocessing
+    preprocess = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                             std=[0.229, 0.224, 0.225]),
+    ])
 
     # ------------------------------------------------------------------
-    # Embedding Extraction with Batch Saving to Disk
+    # Memory-Efficient Processing
     # ------------------------------------------------------------------
     log.info(f"\n   ⚡ Feature Extraction:")
 
     # Use memory-mapped array for efficient disk-based storage
     embedding_shape = (len(df), 2048)
-    temp_embed_path = embed_path.with_suffix('.tmp.npy')
-    
-    # Create memory-mapped array for writing
-    embeddings_mmap = np.memmap(temp_embed_path, dtype='float32', mode='w+', shape=embedding_shape)
-    
+
+    # For large datasets, use memory-mapped storage
+    use_memmap = len(df) > 10000 or available_memory_gb < 16
+
+    if use_memmap:
+        log.info(f"   💾 Using memory-mapped storage for {len(df):,} images")
+        embeddings_mmap = np.memmap(
+            temp_embed_path, dtype='float32', mode='w+', shape=embedding_shape)
+    else:
+        embeddings_mmap = np.zeros(embedding_shape, dtype=np.float32)
+
     processing_stats = {
-        'success': 0,
+        'success': len(processed_indices),
         'missing': 0,
         'failed': 0,
-        'processing_times': [],
-        'error_types': Counter(),
-        'batch_times': []
+        'batch_times': [],
+        'memory_cleanups': 0
     }
 
-    failed_details = []
-    valid_indices = []
-
-    # Determine batch size based on available memory
-    if device_info['cuda_available']:
-        gpu_memory_gb = torch.cuda.get_device_properties(
-            0).total_memory / (1024**3)
-        batch_size = max(1, min(32, int(gpu_memory_gb * 2)))
-    else:
-        batch_size = 8  # Conservative CPU batch size
-
-    log.info(f"      🔧 Processing Configuration:")
-    log.info(f"      ├─ Batch size: {batch_size}")
-    log.info(f"      ├─ Total images: {len(df)}")
-    log.info(f"      ├─ Memory-mapped file: {temp_embed_path}")
-    log.info(f"      └─ Expected output shape: {embedding_shape}")
-
-    # Process in batches
+    valid_indices = list(processed_indices)
     num_batches = (len(df) + batch_size - 1) // batch_size
 
-    with tqdm(range(num_batches), desc=f"      ├─ Processing {mode} batches",
-              position=1, leave=False,
-              bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}] {rate_fmt}") as batch_pbar:
+    log.info(f"   📊 Processing Configuration:")
+    log.info(f"   ├─ Batch size: {batch_size}")
+    log.info(f"   ├─ Total batches: {num_batches}")
+    log.info(f"   ├─ Memory-mapped: {use_memmap}")
+    log.info(f"   └─ Starting from batch: {start_batch}")
+
+    # Process in batches with memory monitoring
+    with tqdm(range(start_batch, num_batches), desc="   ├─ Processing batches",
+              initial=start_batch, total=num_batches) as batch_pbar:
 
         for batch_idx in batch_pbar:
             batch_start_time = time.time()
+
+            # Check memory before processing
+            mem_before = psutil.virtual_memory()
+            if mem_before.percent > 85:
+                log.warning(
+                    f"   ⚠️  High memory before batch {batch_idx}: {mem_before.percent:.1f}%")
+                # Emergency cleanup
+                gc.collect()
+                if device_info['cuda_available']:
+                    torch.cuda.empty_cache()
+                processing_stats['memory_cleanups'] += 1
+                time.sleep(2)  # Give system time to free memory
+
             batch_start = batch_idx * batch_size
             batch_end = min(batch_start + batch_size, len(df))
             batch_indices = df.index[batch_start:batch_end]
@@ -4580,184 +4442,134 @@ def build_image_embeddings(df: pd.DataFrame,
             batch_positions = []
 
             for pos, idx in enumerate(batch_indices):
+                if idx in processed_indices:
+                    continue
+
                 img_file = img_dir / f"{idx}.jpg"
 
                 if not img_file.exists():
                     processing_stats['missing'] += 1
-                    # Write zeros directly to memory-mapped array
-                    embeddings_mmap[batch_start + pos] = np.zeros(2048, dtype=np.float32)
+                    embeddings_mmap[batch_start +
+                                    pos] = np.zeros(2048, dtype=np.float32)
                     continue
 
                 try:
-                    # Load and preprocess image
-                    img = Image.open(img_file).convert('RGB')
-                    tensor = preprocess(img).unsqueeze(0)
+                    # Load and preprocess image with explicit cleanup
+                    with Image.open(img_file).convert('RGB') as img:
+                        tensor = preprocess(img).unsqueeze(0)
+
                     batch_tensors.append(tensor)
                     batch_valid_indices.append(idx)
                     batch_positions.append(batch_start + pos)
 
                 except Exception as e:
                     processing_stats['failed'] += 1
-                    error_type = type(e).__name__
-                    processing_stats['error_types'][error_type] += 1
-                    failed_details.append((idx, img_file, error_type, str(e)[:100]))
-
-                    # Write zeros for failed images
-                    embeddings_mmap[batch_start + pos] = np.zeros(2048, dtype=np.float32)
+                    embeddings_mmap[batch_start +
+                                    pos] = np.zeros(2048, dtype=np.float32)
 
             # Process valid images in this batch
             if batch_tensors:
                 try:
                     with torch.no_grad():
                         # Stack tensors and move to device
-                        batch_tensor = torch.cat(batch_tensors, dim=0).to(device_info['device'])
+                        batch_tensor = torch.cat(batch_tensors, dim=0).to(
+                            device_info['device'])
 
                         # Extract features
                         batch_features = model(batch_tensor).cpu().numpy()
+
+                        # Clear GPU memory immediately
+                        del batch_tensor
+                        if device_info['cuda_available']:
+                            torch.cuda.empty_cache()
 
                         # Write to memory-mapped array
                         for i, pos in enumerate(batch_positions):
                             embeddings_mmap[pos] = batch_features[i]
                             valid_indices.append(batch_valid_indices[i])
+                            processed_indices.add(batch_valid_indices[i])
 
                         processing_stats['success'] += len(batch_tensors)
 
-                    # Clear GPU memory after each batch
-                    if device_info['cuda_available']:
-                        torch.cuda.empty_cache()
-
                 except Exception as e:
-                    log.error(f"      ❌ Batch {batch_idx} processing failed: {str(e)[:60]}...")
-                    # Write zeros for failed batch
+                    log.error(
+                        f"   ❌ Batch {batch_idx} processing failed: {str(e)[:60]}...")
                     for pos in batch_positions:
                         embeddings_mmap[pos] = np.zeros(2048, dtype=np.float32)
+
+            # Clean up batch tensors
+            del batch_tensors
 
             # Update statistics
             batch_time = time.time() - batch_start_time
             processing_stats['batch_times'].append(batch_time)
 
-            # Periodic progress update
-            if batch_idx % 10 == 0:
-                success_rate = processing_stats['success'] / max(1, batch_end) * 100
-                batch_pbar.set_postfix({
-                    'Success': f"{processing_stats['success']}",
-                    'Failed': f"{processing_stats['failed']}",
-                    'Missing': f"{processing_stats['missing']}",
-                    'Rate': f"{success_rate:.1f}%"
-                })
+            # Update progress
+            batch_pbar.set_postfix({
+                'Success': processing_stats['success'],
+                'Memory': f"{psutil.virtual_memory().percent:.1f}%",
+                'Time': f"{batch_time:.1f}s"
+            })
 
-            # Flush changes to disk periodically
-            if batch_idx % 50 == 0:
-                embeddings_mmap.flush()
+            # Periodic operations
+            if (batch_idx + 1) % 10 == 0:
+                # Save checkpoint
+                np.savez_compressed(
+                    checkpoint_path,
+                    batch_idx=batch_idx + 1,
+                    processed_indices=np.array(list(processed_indices)),
+                    stats=processing_stats
+                )
 
-            # Memory cleanup every N batches
-            if batch_idx % 100 == 0 and batch_idx > 0:
+                # Flush to disk if using memmap
+                if use_memmap:
+                    embeddings_mmap.flush()
+
+                # Memory cleanup
                 gc.collect()
-                if log.level <= logging.DEBUG:
-                    memory = psutil.virtual_memory()
-                    log.debug(f"      ├─ Memory usage after {batch_idx} batches: {memory.percent:.1f}%")
 
-    # Ensure all data is written
-    embeddings_mmap.flush()
+                log.info(f"   💾 Checkpoint saved at batch {batch_idx + 1}")
 
     # ------------------------------------------------------------------
-    # Post-processing and Results Analysis
+    # Post-processing and Save
     # ------------------------------------------------------------------
     extraction_time = time.time() - embedding_start
 
     log.info(f"\n   📊 Extraction Results:")
-    log.info(f"   ├─ Total processing time: {extraction_time:.1f}s")
     log.info(f"   ├─ Successfully processed: {processing_stats['success']:,}")
     log.info(f"   ├─ Missing images: {processing_stats['missing']:,}")
     log.info(f"   ├─ Failed processing: {processing_stats['failed']:,}")
-    log.info(
-        f"   └─ Overall success rate: {processing_stats['success']/len(df)*100:.1f}%")
+    log.info(f"   ├─ Memory cleanups: {processing_stats['memory_cleanups']}")
+    log.info(f"   └─ Total time: {extraction_time:.1f}s")
 
-    # Performance metrics
-    if processing_stats['processing_times']:
-        avg_time = np.mean(processing_stats['batch_times']) if processing_stats['batch_times'] else 0
-        throughput = processing_stats['success'] / extraction_time
+    # Convert to regular array if using memmap
+    if use_memmap:
+        log.info(f"   Converting memory-mapped array to regular array...")
+        embeddings = np.array(embeddings_mmap)
+        del embeddings_mmap  # Close memmap
+    else:
+        embeddings = embeddings_mmap
 
-        log.info(f"   ⚡ Performance Metrics:")
-        log.info(f"   ├─ Average batch time: {avg_time:.3f}s")
-        log.info(f"   ├─ Throughput: {throughput:.1f} images/second")
-        log.info(f"   └─ Device efficiency: {device_info['device']}")
-
-    # Error analysis
-    if processing_stats['failed'] > 0:
-        log.info(f"   ⚠️  Error Analysis:")
-        total_errors = sum(processing_stats['error_types'].values())
-
-        for error_type, count in processing_stats['error_types'].most_common():
-            percentage = count / total_errors * 100
-            log.info(f"   ├─ {error_type}: {count} ({percentage:.1f}%)")
-
-        # Save error log
-        if failed_details:
-            error_log_path = img_dir / "embedding_errors.txt"
-            try:
-                with open(error_log_path, "w") as f:
-                    f.write("Index\tFile\tErrorType\tErrorMessage\n")
-                    for idx, img_file, error_type, error_msg in failed_details:
-                        f.write(
-                            f"{idx}\t{img_file.name}\t{error_type}\t{error_msg}\n")
-                log.info(f"   💾 Error details saved to: {error_log_path}")
-            except Exception as e:
-                log.warning(f"   ⚠️  Failed to save error log: {e}")
-
-    # ------------------------------------------------------------------
-    # Quality Filtering and Final Save
-    # ------------------------------------------------------------------
-    log.info(f"\n   🔍 Applying quality filtering...")
-
-    # Read the memory-mapped file as a regular array
-    embeddings = np.array(embeddings_mmap)
-    del embeddings_mmap  # Close memory map
-
-    # Apply quality filtering
+    # Apply quality filtering if we have enough valid embeddings
     if len(valid_indices) > 10:
-        # Only process valid embeddings for filtering
-        valid_embeddings = np.zeros((len(valid_indices), 2048), dtype=np.float32)
-        for i, idx in enumerate(valid_indices):
-            pos = df.index.get_loc(idx)
-            valid_embeddings[i] = embeddings[pos]
-        
+        # Extract only valid embeddings for filtering
+        valid_embeddings = embeddings[[
+            df.index.get_loc(idx) for idx in valid_indices]]
         filtered_embeddings, filtered_indices = filter_low_quality_images(
             img_dir, valid_embeddings, valid_indices
         )
+        embeddings = filtered_embeddings
+        valid_indices = filtered_indices
 
-        if len(filtered_indices) != len(valid_indices):
-            log.info(f"   📊 Quality filtering reduced images from {len(valid_indices)} to {len(filtered_indices)}")
-            embeddings = filtered_embeddings
-            valid_indices = filtered_indices
-        else:
-            embeddings = valid_embeddings
-    else:
-        # If too few images, keep all valid ones
-        if valid_indices:
-            valid_embeddings = np.zeros((len(valid_indices), 2048), dtype=np.float32)
-            for i, idx in enumerate(valid_indices):
-                pos = df.index.get_loc(idx)
-                valid_embeddings[i] = embeddings[pos]
-            embeddings = valid_embeddings
-
-    # ------------------------------------------------------------------
-    # Save Final Results
-    # ------------------------------------------------------------------
-    log.info(f"\n   💾 Saving Results:")
-
-    # Save to final location
+    # Save results
     np.save(embed_path, embeddings)
-    log.info(f"   ├─ Saved to primary cache: {embed_path}")
-
-    # Save backup
     np.save(backup_path, embeddings)
-    log.info(f"   ├─ Saved to backup: {backup_path}")
 
-    # Clean up temporary file
+    # Clean up temporary files
     if temp_embed_path.exists():
         temp_embed_path.unlink()
-        log.info(f"   └─ Cleaned up temporary file")
+    if checkpoint_path.exists():
+        checkpoint_path.unlink()
 
     # Save metadata
     metadata = {
@@ -4765,58 +4577,29 @@ def build_image_embeddings(df: pd.DataFrame,
         'mode': mode,
         'total_images': len(df),
         'success': processing_stats['success'],
-        'missing': processing_stats['missing'],
-        'failed': processing_stats['failed'],
-        'valid_after_filtering': len(valid_indices),
+        'valid_indices': len(valid_indices),
         'processing_time_seconds': extraction_time,
-        'device': str(device_info['device']),
-        'model': 'ResNet-50',
-        'output_shape': list(embeddings.shape),
         'batch_size': batch_size,
-        'avg_batch_time': np.mean(processing_stats['batch_times']) if processing_stats['batch_times'] else 0,
-        'memory_efficient': True
+        'memory_cleanups': processing_stats['memory_cleanups'],
+        'available_memory_gb': available_memory_gb
     }
 
     try:
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
-        log.info(f"   💾 Metadata saved to: {metadata_path}")
     except Exception as e:
-        log.warning(f"   ⚠️  Failed to save metadata: {e}")
+        log.warning(f"   Failed to save metadata: {e}")
 
-    # File size information
-    try:
-        primary_size = embed_path.stat().st_size / (1024**2)
-        backup_size = backup_path.stat().st_size / (1024**2)
-
-        log.info(f"   📊 File Information:")
-        log.info(f"   ├─ Primary cache: {primary_size:.1f} MB ({embed_path})")
-        log.info(f"   ├─ Backup cache: {backup_size:.1f} MB ({backup_path})")
-        log.info(f"   └─ Array shape: {embeddings.shape}")
-
-    except Exception as e:
-        log.warning(f"   ⚠️  File size analysis failed: {e}")
-
-    # Memory cleanup
+    # Final cleanup
     del model
     gc.collect()
     if device_info['cuda_available']:
         torch.cuda.empty_cache()
-        final_gpu_memory = torch.cuda.memory_allocated() / (1024**2)
-        log.info(f"   🧹 GPU memory after cleanup: {final_gpu_memory:.1f} MB")
 
-    # ------------------------------------------------------------------
-    # Final Summary
-    # ------------------------------------------------------------------
-    log.info(f"\n   🏁 EMBEDDING EXTRACTION COMPLETE:")
-    log.info(f"   ├─ Output shape: {embeddings.shape}")
-    log.info(f"   ├─ Valid indices: {len(valid_indices)}")
-    log.info(f"   ├─ Success rate: {processing_stats['success']/len(df)*100:.1f}%")
-    log.info(f"   ├─ Total time: {extraction_time:.1f}s")
-    log.info(f"   ├─ Memory efficiency: Batch processing with disk storage")
-    log.info(f"   └─ Files saved: Primary + Backup + Metadata")
+    log.info(f"   🏁 Embedding extraction complete!")
 
     return embeddings, valid_indices
+
 
 # =============================================================================
 # ENSEMBLE METHODS
@@ -4948,7 +4731,7 @@ def best_two_domains(
 ):
     """
     Blend predictions from best text and image models.
-    
+
     FIXED: Handles different sample sizes between text and image models.
     """
     # Find best models from each domain
@@ -4957,7 +4740,8 @@ def best_two_domains(
         key=lambda r: r["F1"]
     )
     best_img = max(
-        (r for r in image_results if r["task"] == task and len(r.get("prob", [])) > 0),
+        (r for r in image_results if r["task"]
+         == task and len(r.get("prob", [])) > 0),
         key=lambda r: r["F1"],
         default=None
     )
@@ -4973,25 +4757,28 @@ def best_two_domains(
     y_true = gold_df[f"label_{task}"].values
 
     if best_img is None:  # No image model available
-        log.warning(f"   ⚠️  No image model available for {task}, using text-only")
+        log.warning(
+            f"   ⚠️  No image model available for {task}, using text-only")
         final_prob = txt_prob
     else:
         # Image predictions are only available for a subset of rows
         img_prob = best_img["prob"]
-        img_indices = gold_df.index[:len(img_prob)]  # Indices with image predictions
-        
+        # Indices with image predictions
+        img_indices = gold_df.index[:len(img_prob)]
+
         log.info(f"   ├─ Text predictions: {len(txt_prob)} samples")
         log.info(f"   ├─ Image predictions: {len(img_prob)} samples")
         log.info(f"   └─ Blending with alpha={alpha}")
 
         # Initialize final predictions with text predictions
         final_prob = np.array(txt_prob).copy()
-        
+
         # For rows with images, blend text and image predictions
         for i, idx in enumerate(img_indices):
             if i < len(img_prob):
                 # Blend: alpha * image + (1-alpha) * text
-                final_prob[idx] = alpha * img_prob[i] + (1 - alpha) * txt_prob[idx]
+                final_prob[idx] = alpha * img_prob[i] + \
+                    (1 - alpha) * txt_prob[idx]
 
     # Apply verification and calculate metrics
     final_prob = verify_with_rules(task, gold_df.clean, final_prob)
@@ -5020,6 +4807,7 @@ def best_two_domains(
         "rows_with_images": len(img_prob) if best_img else 0,
         "rows_text_only": len(gold_df) - (len(img_prob) if best_img else 0),
     }
+
 
 def dynamic_ensemble(estimators, X_gold, gold, task: str):
     """
@@ -5854,8 +5642,6 @@ def run_full_pipeline(mode: str = "both",
     and detailed progress tracking throughout all stages.
     """
 
-
-
     # Initialize pipeline tracking
     pipeline_start = time.time()
 
@@ -6478,17 +6264,21 @@ def run_full_pipeline(mode: str = "both",
                     image_models = [r for r in res_img if r["task"] == task]
 
                     if not text_models:
-                        log.warning(f"      ⚠️  No text models available for {task}")
+                        log.warning(
+                            f"      ⚠️  No text models available for {task}")
                         continue
-                        
+
                     if not image_models:
-                        log.warning(f"      ⚠️  No image models available for {task}")
+                        log.warning(
+                            f"      ⚠️  No image models available for {task}")
                         # Still create ensemble with text-only
-                        best_text_result = max(text_models, key=lambda x: x['F1'])
+                        best_text_result = max(
+                            text_models, key=lambda x: x['F1'])
                         ensemble_results.append(best_text_result)
                         continue
 
-                    log.info(f"      ├─ {task}: Testing alpha values {alpha_values}")
+                    log.info(
+                        f"      ├─ {task}: Testing alpha values {alpha_values}")
 
                     best_ensemble_result = None
                     best_f1 = -1
@@ -6509,36 +6299,41 @@ def run_full_pipeline(mode: str = "both",
                                 best_alpha = alpha
                                 best_ensemble_result = result
 
-                            log.info(f"         ├─ alpha={alpha}: F1={result['F1']:.3f}")
+                            log.info(
+                                f"         ├─ alpha={alpha}: F1={result['F1']:.3f}")
 
                         except Exception as e:
-                            log.error(f"         ❌ alpha={alpha} failed: {str(e)[:50]}...")
+                            log.error(
+                                f"         ❌ alpha={alpha} failed: {str(e)[:50]}...")
                             continue
 
                     if best_ensemble_result:
                         best_ensemble_result['model'] = f"BestTwo_alpha{best_alpha}"
                         ensemble_results.append(best_ensemble_result)
-                        log.info(f"      ✅ {task} best ensemble: alpha={best_alpha}, F1={best_f1:.3f}")
+                        log.info(
+                            f"      ✅ {task} best ensemble: alpha={best_alpha}, F1={best_f1:.3f}")
                     else:
                         # Fallback to best text model
-                        log.warning(f"      ⚠️  Ensemble failed for {task}, using best text model")
+                        log.warning(
+                            f"      ⚠️  Ensemble failed for {task}, using best text model")
                         best_text = max(text_models, key=lambda x: x['F1'])
                         ensemble_results.append(best_text)
 
                 except Exception as e:
-                    log.error(f"      ❌ {task} ensemble creation failed: {str(e)[:50]}...")
+                    log.error(
+                        f"      ❌ {task} ensemble creation failed: {str(e)[:50]}...")
                     continue
 
             if ensemble_results:
                 table("Text+Image Ensembles", ensemble_results)
                 results.extend(ensemble_results)
-                log.info(f"      ✅ Created {len(ensemble_results)} ensemble configurations")
+                log.info(
+                    f"      ✅ Created {len(ensemble_results)} ensemble configurations")
             else:
                 log.warning(f"      ⚠️  No successful ensembles created")
 
             train_pbar.update(1)
-        
-        
+
         # FINAL COMBINED MODEL TRAINING
         if mode == "both":
             # Check if we have valid image data
@@ -6879,11 +6674,34 @@ def main():
     The function includes comprehensive error handling and prevents
     restart loops through environment variable tracking.
     """
+
     import argparse
     import sys
     import atexit
 
+    # Memory optimization for Docker environments
+    log.info(f"🚀 Starting main with args: {args}")
+
+    # Check and log memory configuration
+    available_memory = get_available_memory(safety_factor=0.9)
+    log.info(f"💾 Available memory for processing: {available_memory:.1f} GB")
+
+    # Set memory-related environment variables
+    if available_memory < 32:  # Less than 32GB available
+        log.warning(
+            f"⚠️  Limited memory detected. Enabling memory optimizations...")
+        os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'
+
+        # Reduce number of threads to save memory
+        if 'OMP_NUM_THREADS' not in os.environ:
+            os.environ['OMP_NUM_THREADS'] = '4'
+
+        # Enable Python memory optimizations
+        import sys
+        sys.setcheckinterval(1000)  # Reduce GC overhead
+
     # Register exit handler
+
     def prevent_restart():
         log.info("🛑 Process exiting - no restarts allowed")
 
@@ -6992,7 +6810,6 @@ def main():
                 log.info("🚫 EXITING WITHOUT RESTART")
                 sys.exit(1)
 
-            
         elif args.ground_truth:
             log.info(f"📊 Evaluating on ground truth: {args.ground_truth}")
 
@@ -7001,31 +6818,36 @@ def main():
                 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 
                 if not os.path.exists(args.ground_truth):
-                    log.error(f"❌ Ground truth file not found: {args.ground_truth}")
+                    log.error(
+                        f"❌ Ground truth file not found: {args.ground_truth}")
                     sys.exit(1)
 
                 df = pd.read_csv(args.ground_truth)
                 log.info(f"✅ Loaded ground truth with {len(df)} rows")
-                
+
                 # DEBUG: Log the column names to see what we have
                 log.info(f"📋 Available columns: {list(df.columns)}")
-                
+
                 # Detect the correct label column names
                 def detect_label_columns(df):
                     """Detect the correct label column names."""
-                    keto_cols = [col for col in df.columns if 'keto' in col.lower()]
-                    vegan_cols = [col for col in df.columns if 'vegan' in col.lower()]
-                    
+                    keto_cols = [
+                        col for col in df.columns if 'keto' in col.lower()]
+                    vegan_cols = [
+                        col for col in df.columns if 'vegan' in col.lower()]
+
                     keto_col = keto_cols[0] if keto_cols else None
                     vegan_col = vegan_cols[0] if vegan_cols else None
-                    
-                    log.info(f"🏷️  Detected label columns: keto={keto_col}, vegan={vegan_col}")
+
+                    log.info(
+                        f"🏷️  Detected label columns: keto={keto_col}, vegan={vegan_col}")
                     return keto_col, vegan_col
-                
+
                 keto_col, vegan_col = detect_label_columns(df)
-                
+
                 if not keto_col or not vegan_col:
-                    log.error(f"❌ Missing required label columns. Found: keto={keto_col}, vegan={vegan_col}")
+                    log.error(
+                        f"❌ Missing required label columns. Found: keto={keto_col}, vegan={vegan_col}")
                     sys.exit(1)
 
                 # Load models, vectorizer, and metadata
@@ -7034,7 +6856,8 @@ def main():
                 metadata_path = CFG.artifacts_dir / "model_metadata.json"
 
                 if not (model_path.exists() and vec_path.exists()):
-                    log.warning("⚠️ Models not found in artifacts/ — trying pretrained_models/ fallback...")
+                    log.warning(
+                        "⚠️ Models not found in artifacts/ — trying pretrained_models/ fallback...")
                     model_path = CFG.pretrained_models_dir / "models.pkl"
                     vec_path = CFG.pretrained_models_dir / "vectorizer.pkl"
                     metadata_path = CFG.pretrained_models_dir / "model_metadata.json"
@@ -7064,16 +6887,20 @@ def main():
                 def analyze_model_requirements(task, model, metadata):
                     """Determine what features a model needs."""
                     if task in metadata:
-                        requires_images = metadata[task].get('requires_images', False)
+                        requires_images = metadata[task].get(
+                            'requires_images', False)
                         model_type = metadata[task].get('type', 'unknown')
-                        log.info(f"   ├─ {task} ({model_type}): requires_images={requires_images}")
+                        log.info(
+                            f"   ├─ {task} ({model_type}): requires_images={requires_images}")
                         return requires_images, model_type
-                    
+
                     # Fallback: inspect model properties
                     if hasattr(model, 'ensemble_type'):
                         # It's an ensemble model
-                        requires_images = model.ensemble_type in ['best_two', 'smart_ensemble', 'both']
-                        log.info(f"   ├─ {task} (ensemble): {model.ensemble_type}, requires_images={requires_images}")
+                        requires_images = model.ensemble_type in [
+                            'best_two', 'smart_ensemble', 'both']
+                        log.info(
+                            f"   ├─ {task} (ensemble): {model.ensemble_type}, requires_images={requires_images}")
                         return requires_images, 'ensemble'
                     elif hasattr(model, 'n_features_in_'):
                         # Check feature count: text=~6341, image=2048, combined=~8389
@@ -7087,7 +6914,8 @@ def main():
                         else:
                             requires_images = False  # Text-only model
                             model_type = 'text'
-                        log.info(f"   ├─ {task} ({model_type}): {n_features} features, requires_images={requires_images}")
+                        log.info(
+                            f"   ├─ {task} ({model_type}): {n_features} features, requires_images={requires_images}")
                         return requires_images, model_type
                     else:
                         log.info(f"   ├─ {task} (unknown): assuming text-only")
@@ -7096,29 +6924,34 @@ def main():
                 # Analyze all models
                 model_requirements = {}
                 for task, model in models.items():
-                    requires_images, model_type = analyze_model_requirements(task, model, model_metadata)
+                    requires_images, model_type = analyze_model_requirements(
+                        task, model, model_metadata)
                     model_requirements[task] = {
                         'requires_images': requires_images,
                         'type': model_type
                     }
 
                 # Prepare text features (always needed)
-                df['clean'] = df['ingredients'].fillna("").apply(lambda x: normalise(x))
+                df['clean'] = df['ingredients'].fillna(
+                    "").apply(lambda x: normalise(x))
                 X_text = vectorizer.transform(df['clean'])
                 log.info(f"✅ Text features shape: {X_text.shape}")
 
                 # Prepare image features if needed
-                need_any_images = any(req['requires_images'] for req in model_requirements.values())
+                need_any_images = any(req['requires_images']
+                                      for req in model_requirements.values())
                 X_combined = None
-                
+
                 if need_any_images:
-                    log.info(f"\n🖼️  Some models require images - preparing combined features...")
-                    
+                    log.info(
+                        f"\n🖼️  Some models require images - preparing combined features...")
+
                     # Check if we have photos and can process them
                     if 'photo_url' in df.columns:
                         df_with_photos = filter_photo_rows(df)
-                        log.info(f"   ├─ Rows with valid photo URLs: {len(df_with_photos)}")
-                        
+                        log.info(
+                            f"   ├─ Rows with valid photo URLs: {len(df_with_photos)}")
+
                         if len(df_with_photos) > 10:  # Only process if we have enough images
                             try:
                                 # Quick image processing for evaluation
@@ -7126,28 +6959,32 @@ def main():
                                 downloaded_indices = _download_images(
                                     df_with_photos, eval_img_dir, max_workers=8, force=False
                                 )
-                                
+
                                 if downloaded_indices:
                                     df_downloaded = df_with_photos.loc[downloaded_indices]
                                     embeddings, valid_indices = build_image_embeddings(
                                         df_downloaded, "eval_temp", force=False
                                     )
-                                    
+
                                     if embeddings is not None and embeddings.size > 0:
-                                        log.info(f"   ✅ Extracted embeddings for {len(valid_indices)} images")
-                                        
+                                        log.info(
+                                            f"   ✅ Extracted embeddings for {len(valid_indices)} images")
+
                                         # Create combined features
-                                        padding_matrix = np.zeros((len(df), 2048), dtype=np.float32)
-                                        
+                                        padding_matrix = np.zeros(
+                                            (len(df), 2048), dtype=np.float32)
+
                                         # Fill in actual embeddings where available
                                         for i, idx in enumerate(valid_indices):
                                             if idx in df.index:
                                                 row_pos = df.index.get_loc(idx)
                                                 padding_matrix[row_pos] = embeddings[i]
-                                        
-                                        X_combined = combine_features(X_text, padding_matrix)
-                                        log.info(f"   ✅ Created combined features: {X_combined.shape}")
-                                    
+
+                                        X_combined = combine_features(
+                                            X_text, padding_matrix)
+                                        log.info(
+                                            f"   ✅ Created combined features: {X_combined.shape}")
+
                                 # Cleanup
                                 if eval_img_dir.exists():
                                     import shutil
@@ -7155,71 +6992,82 @@ def main():
                                         shutil.rmtree(eval_img_dir)
                                     except:
                                         pass
-                                        
+
                             except Exception as e:
-                                log.warning(f"   ⚠️  Image processing failed: {e}")
-                    
+                                log.warning(
+                                    f"   ⚠️  Image processing failed: {e}")
+
                     # Fallback: zero-padded features
                     if X_combined is None:
-                        log.info(f"   ├─ Using zero-padded image features (no real images)")
-                        padding_matrix = np.zeros((len(df), 2048), dtype=np.float32)
+                        log.info(
+                            f"   ├─ Using zero-padded image features (no real images)")
+                        padding_matrix = np.zeros(
+                            (len(df), 2048), dtype=np.float32)
                         X_combined = combine_features(X_text, padding_matrix)
 
                 # Make predictions
                 log.info(f"\n🔮 Making predictions...")
-                
+
                 predictions = {
                     'keto_pred': [],
                     'vegan_pred': [],
                     'keto_true': [],
                     'vegan_true': []
                 }
-                
+
                 for idx, row in df.iterrows():
                     row_idx = df.index.get_loc(idx)
-                    
+
                     # Store true labels
                     predictions['keto_true'].append(row[keto_col])
                     predictions['vegan_true'].append(row[vegan_col])
-                    
+
                     for task in ["keto", "vegan"]:
                         if task in models:
                             model = models[task]
                             requirements = model_requirements[task]
-                            
+
                             try:
                                 # Select appropriate features based on model requirements
                                 if requirements['requires_images']:
                                     if X_combined is not None:
                                         features = X_combined[row_idx:row_idx+1]
-                                        log.debug(f"   Using combined features for {task}")
+                                        log.debug(
+                                            f"   Using combined features for {task}")
                                     else:
-                                        log.warning(f"   Model {task} needs images but none available - using text only")
+                                        log.warning(
+                                            f"   Model {task} needs images but none available - using text only")
                                         features = X_text[row_idx:row_idx+1]
                                 else:
                                     features = X_text[row_idx:row_idx+1]
-                                    log.debug(f"   Using text features for {task}")
-                                
+                                    log.debug(
+                                        f"   Using text features for {task}")
+
                                 # Make prediction
                                 if hasattr(model, 'predict_proba'):
                                     try:
-                                        prob = model.predict_proba(features)[0, 1]
+                                        prob = model.predict_proba(features)[
+                                            0, 1]
                                         pred = 1 if prob >= 0.5 else 0
                                     except Exception as e:
-                                        log.warning(f"   predict_proba failed for {task}: {e}")
+                                        log.warning(
+                                            f"   predict_proba failed for {task}: {e}")
                                         pred = model.predict(features)[0]
                                 else:
                                     pred = model.predict(features)[0]
-                                
+
                                 predictions[f'{task}_pred'].append(int(pred))
-                                
+
                                 # Log first few predictions for debugging
                                 if idx < 3:
-                                    log.debug(f"   Row {idx} {task}: pred={pred}, true={row[keto_col if task=='keto' else vegan_col]}")
-                                
+                                    log.debug(
+                                        f"   Row {idx} {task}: pred={pred}, true={row[keto_col if task == 'keto' else vegan_col]}")
+
                             except Exception as e:
-                                log.error(f"   ❌ Prediction failed for {task} row {idx}: {str(e)[:60]}...")
-                                predictions[f'{task}_pred'].append(0)  # Default to negative
+                                log.error(
+                                    f"   ❌ Prediction failed for {task} row {idx}: {str(e)[:60]}...")
+                                predictions[f'{task}_pred'].append(
+                                    0)  # Default to negative
                         else:
                             log.warning(f"   ⚠️ No model found for {task}")
                             predictions[f'{task}_pred'].append(0)
@@ -7228,18 +7076,18 @@ def main():
                 results_df = pd.DataFrame(predictions)
                 results_df['ingredients'] = df['ingredients'].values
                 results_df['index'] = df.index
-                
+
                 pred_path = CFG.artifacts_dir / "ground_truth_predictions.csv"
                 results_df.to_csv(pred_path, index=False)
                 log.info(f"✅ Saved predictions to {pred_path}")
 
                 # Calculate metrics with safe handling
                 log.info(f"\n📊 Calculating evaluation metrics...")
-                
+
                 def safe_int_conversion(series):
                     """Safely convert series to int, handling None values."""
                     return pd.to_numeric(series, errors='coerce').fillna(0).astype(int)
-                
+
                 metrics = []
                 for task in ["keto", "vegan"]:
                     true_col = f"{task}_true"
@@ -7249,18 +7097,22 @@ def main():
                         # Safely convert to integers
                         y_true = safe_int_conversion(results_df[true_col])
                         y_pred = safe_int_conversion(results_df[pred_col])
-                        
+
                         # Remove any rows where true labels are invalid
                         valid_mask = (y_true >= 0) & (y_true <= 1)
                         y_true_valid = y_true[valid_mask]
                         y_pred_valid = y_pred[valid_mask]
-                        
+
                         if len(y_true_valid) > 0:
                             try:
-                                acc = accuracy_score(y_true_valid, y_pred_valid)
-                                prec = precision_score(y_true_valid, y_pred_valid, zero_division=0)
-                                rec = recall_score(y_true_valid, y_pred_valid, zero_division=0)
-                                f1 = f1_score(y_true_valid, y_pred_valid, zero_division=0)
+                                acc = accuracy_score(
+                                    y_true_valid, y_pred_valid)
+                                prec = precision_score(
+                                    y_true_valid, y_pred_valid, zero_division=0)
+                                rec = recall_score(
+                                    y_true_valid, y_pred_valid, zero_division=0)
+                                f1 = f1_score(
+                                    y_true_valid, y_pred_valid, zero_division=0)
                                 n_samples = len(y_true_valid)
 
                                 metrics.append({
@@ -7273,26 +7125,33 @@ def main():
                                 })
 
                                 log.info(f"✅ {task.upper()} - ACC: {acc:.3f} | PREC: {prec:.3f} | "
-                                        f"REC: {rec:.3f} | F1: {f1:.3f} | N: {n_samples}")
-                                
+                                         f"REC: {rec:.3f} | F1: {f1:.3f} | N: {n_samples}")
+
                                 # Log confusion matrix for debugging
-                                cm = confusion_matrix(y_true_valid, y_pred_valid)
+                                cm = confusion_matrix(
+                                    y_true_valid, y_pred_valid)
                                 log.info(f"   Confusion Matrix for {task}:")
-                                log.info(f"   [[TN={cm[0,0]}, FP={cm[0,1]}],")
-                                log.info(f"    [FN={cm[1,0]}, TP={cm[1,1]}]]")
-                                
+                                log.info(
+                                    f"   [[TN={cm[0, 0]}, FP={cm[0, 1]}],")
+                                log.info(
+                                    f"    [FN={cm[1, 0]}, TP={cm[1, 1]}]]")
+
                                 # Additional debugging: show prediction distribution
                                 pos_preds = (y_pred_valid == 1).sum()
                                 neg_preds = (y_pred_valid == 0).sum()
                                 pos_true = (y_true_valid == 1).sum()
                                 neg_true = (y_true_valid == 0).sum()
-                                log.info(f"   Predictions: {pos_preds} positive, {neg_preds} negative")
-                                log.info(f"   True labels: {pos_true} positive, {neg_true} negative")
-                                
+                                log.info(
+                                    f"   Predictions: {pos_preds} positive, {neg_preds} negative")
+                                log.info(
+                                    f"   True labels: {pos_true} positive, {neg_true} negative")
+
                             except Exception as e:
-                                log.error(f"❌ Metric calculation failed for {task}: {e}")
+                                log.error(
+                                    f"❌ Metric calculation failed for {task}: {e}")
                         else:
-                            log.warning(f"⚠️ No valid samples for {task} evaluation")
+                            log.warning(
+                                f"⚠️ No valid samples for {task} evaluation")
 
                 # Save metrics
                 if metrics:
@@ -7300,12 +7159,12 @@ def main():
                     metrics_path = CFG.artifacts_dir / "eval_metrics.csv"
                     metrics_df.to_csv(metrics_path, index=False)
                     log.info(f"📈 Saved evaluation metrics to {metrics_path}")
-                    
+
                     # Print summary
                     log.info(f"\n🎯 EVALUATION SUMMARY:")
                     for metric in metrics:
                         log.info(f"   {metric['task'].upper()}: F1={metric['f1_score']:.3f}, "
-                                f"Accuracy={metric['accuracy']:.3f}, Samples={metric['n_samples']}")
+                                 f"Accuracy={metric['accuracy']:.3f}, Samples={metric['n_samples']}")
                 else:
                     log.warning(f"⚠️ No metrics calculated")
 
@@ -7314,8 +7173,6 @@ def main():
                 import traceback
                 log.error(f"Full traceback:\n{traceback.format_exc()}")
                 sys.exit(1)
-
-
 
         elif args.predict:
             log.info(f"🔮 Running prediction on unlabeled data: {args.predict}")
@@ -7365,28 +7222,30 @@ def main():
 
                 # Predict
                 preds = []
-                
+
                 # Check if models need images
                 for task, model in models.items():
                     if hasattr(model, 'n_features_in_') and model.n_features_in_ > X.shape[1]:
-                        log.info(f"   ├─ {task} model expects {model.n_features_in_} features (text has {X.shape[1]})")
-                
+                        log.info(
+                            f"   ├─ {task} model expects {model.n_features_in_} features (text has {X.shape[1]})")
+
                 for idx, row in df.iterrows():
                     row_preds = {"index": idx,
                                  "ingredients": row["ingredients"]}
                     for task in ["keto", "vegan"]:
                         if task in models:
                             model = models[task]
-                            
+
                             # Get features for this row
                             features = X[idx]
-                            
+
                             # Check if model needs images
                             if hasattr(model, 'n_features_in_') and model.n_features_in_ > X.shape[1]:
                                 # Pad with zeros for images
                                 padding = np.zeros((1, 2048), dtype=np.float32)
-                                features = combine_features(features.reshape(1, -1), padding)
-                            
+                                features = combine_features(
+                                    features.reshape(1, -1), padding)
+
                             pred = model.predict(features)
                             row_preds[f"{task}_pred"] = int(pred[0])
                         else:

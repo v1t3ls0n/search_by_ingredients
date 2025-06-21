@@ -1,430 +1,0 @@
-
-================================================================================
-NEW RUN STARTED AT 2025-06-21 05:51:32
-Process ID: 36
-================================================================================
-05:51:32 │ INFO │ Logging system initialized successfully
-
-================================================================================
-NEW RUN STARTED AT 2025-06-21 05:51:53
-Process ID: 103
-================================================================================
-05:51:53 │ INFO │ Logging system initialized successfully
-05:51:53 │ INFO │ 🚀 Starting main with args: Namespace(ground_truth=None, train=True, ingredients=None, mode='both', force=False, sample_frac=1.0)
-05:51:53 │ INFO │ 🧠 SINGLE training run - sample_frac=1.0
-05:51:53 │ INFO │ 🚀 STARTING FULL ML PIPELINE
-05:51:53 │ INFO │    Mode: both
-05:51:53 │ INFO │    Force recomputation: False
-05:51:53 │ INFO │    Sample fraction: 1.0
-05:51:53 │ INFO │    Start time: 2025-06-21 05:51:53
-05:51:53 │ INFO │    Available CPU cores: 24
-05:51:53 │ INFO │    Available memory: 31 GB
-05:51:53 │ INFO │ 
-📂 STAGE 1: DATA LOADING AND PREPARATION
-05:51:53 │ INFO │ 
-📂 DATASET LOADING PIPELINE
-05:51:53 │ INFO │    Configuration: 2 data sources
-05:51:53 │ INFO │    Data directory: /app/data
-05:51:53 │ INFO │    📊 Data Sources:
-05:51:53 │ INFO │    ├─ allrecipes.parquet: Local
-05:51:53 │ INFO │    │  └─ /app/data/allrecipes.parquet
-05:51:53 │ INFO │    ├─ ground_truth_sample.csv: Local
-05:51:53 │ INFO │    │  └─ /app/data/ground_truth_sample.csv
-05:51:53 │ INFO │ 
-   🍳 STAGE 1: LOADING RECIPES DATASET
-05:51:53 │ INFO │    ├─ Source: /app/data/allrecipes.parquet
-05:51:53 │ INFO │       ├─ Local file size: 49.2 MB
-05:51:53 │ INFO │       📊 Recipes Dataset:
-05:51:53 │ INFO │       ├─ Shape: (225602, 5)
-05:51:53 │ INFO │       ├─ Columns: ['title', 'description', 'instructions', 'ingredients', 'photo_url']
-05:51:53 │ INFO │       ├─ Memory usage: 145.4 MB
-05:51:54 │ INFO │       └─ Load time: 0.4s
-
-================================================================================
-NEW RUN STARTED AT 2025-06-21 05:51:54
-Process ID: 152
-================================================================================
-05:51:54 │ INFO │ Logging system initialized successfully
-05:51:57 │ INFO │       📈 Data Quality:
-05:51:57 │ INFO │       ├─ Total recipes: 225,602
-05:51:57 │ INFO │       ├─ Null ingredients: 0
-05:51:57 │ INFO │       ├─ Empty ingredients: 0
-05:51:57 │ INFO │       └─ With photos: 225,602 (100.0%)
-05:51:57 │ INFO │    ✅ Recipes loaded successfully in 3.9s
-05:51:57 │ INFO │       💾 Recipes loaded: 16.4% memory used (4654 MB / 32015 MB)
-05:51:57 │ INFO │ 
-   🎯 STAGE 2: LOADING GROUND TRUTH DATASET
-05:51:57 │ INFO │    ├─ Source: /app/data/ground_truth_sample.csv
-05:51:57 │ INFO │       ├─ File size: 79.1 KB
-05:51:57 │ INFO │       📊 Ground Truth Dataset:
-05:51:57 │ INFO │       ├─ Shape: (100, 7)
-05:51:57 │ INFO │       ├─ Columns: ['title', 'description', 'instructions', 'ingredients', 'photo_url', 'vegan', 'keto']
-05:51:57 │ INFO │       ├─ Keto columns found: ['keto']
-05:51:57 │ INFO │       ├─ Vegan columns found: ['vegan']
-05:51:57 │ INFO │       └─ Load time: 0.00s
-05:51:57 │ INFO │       ├─ Keto labels: 40/100 (40.0% positive)
-05:51:57 │ INFO │       ├─ Vegan labels: 40/100 (40.0% positive)
-05:51:59 │ INFO │    ✅ Ground truth loaded successfully in 1.8s
-05:51:59 │ INFO │       💾 Ground truth loaded: 16.8% memory used (4758 MB / 32015 MB)
-05:51:59 │ INFO │ 
-   🥈 STAGE 3: GENERATING SILVER LABELS
-05:52:14 │ INFO │ USDA carb table loaded: 303 distinct food descriptions
-05:52:14 │ INFO │ Carb map initialised (303 keys)
-05:53:40 │ INFO │       📊 Silver Labels Generated:
-05:53:40 │ INFO │       ├─ Total recipes: 225,602
-05:53:40 │ INFO │       ├─ Keto positive: 36,722 (16.3%)
-05:53:40 │ INFO │       ├─ Vegan positive: 16,378 (7.3%)
-05:53:40 │ INFO │       ├─ With photos: 225,602 (100.0%)
-05:53:40 │ INFO │       └─ Generation time: 101.0s
-05:53:40 │ INFO │    ✅ Silver labels generated successfully in 101.1s
-05:53:40 │ INFO │       💾 Silver labels generated: 17.0% memory used (4817 MB / 32015 MB)
-05:53:40 │ INFO │ 
-   ✅ STAGE 4: DATA VALIDATION AND CROSS-CHECKS
-05:53:40 │ INFO │       💾 Memory Usage by Dataset:
-05:53:40 │ INFO │       ├─ Recipes: 145.4 MB
-05:53:40 │ INFO │       ├─ Silver: 106.4 MB
-05:53:40 │ INFO │       ├─ Ground_truth: 0.1 MB
-05:53:40 │ INFO │       └─ Total: 251.9 MB
-05:53:40 │ INFO │       📊 Label Distribution Comparison:
-05:53:40 │ INFO │       ├─ Keto: Gold=40.0%, Silver=16.3%
-05:53:40 │ INFO │       └─ Vegan: Gold=40.0%, Silver=7.3%
-05:53:40 │ WARNING │       ⚠️  Large keto distribution difference: 23.7%
-05:53:40 │ WARNING │       ⚠️  Large vegan distribution difference: 32.7%
-05:53:40 │ INFO │       ✅ Validation Summary:
-05:53:40 │ INFO │       ├─ Recipes Loaded: ✅
-05:53:40 │ INFO │       ├─ Ground Truth Loaded: ✅
-05:53:40 │ INFO │       ├─ Silver Generated: ✅
-05:53:40 │ INFO │       ├─ Required Columns Present: ✅
-05:53:40 │ INFO │       ├─ Labels Processed: ✅
-05:53:40 │ INFO │       ├─ Consistency Issues: 0
-05:53:40 │ INFO │    ✅ Data validation completed in 0.4s
-05:53:40 │ INFO │       💾 Validation complete: 17.0% memory used (4827 MB / 32015 MB)
-05:53:40 │ INFO │ USDA carb table loaded: 303 distinct food descriptions
-05:53:40 │ INFO │    ✅ USDA table loaded in 0.1s – 303 rows
-05:53:40 │ INFO │ 
-🏁 DATASET LOADING COMPLETE
-05:53:40 │ INFO │    ├─ Total loading time: 107.4s
-05:53:40 │ INFO │    ├─ Datasets loaded: 4 (recipes, ground_truth, silver, usda)
-05:53:40 │ INFO │    ├─ Total memory usage: 251.9 MB
-05:53:40 │ INFO │    └─ All validations passed: ✅
-05:53:40 │ INFO │ 
-   📋 Final Dataset Summary:
-05:53:40 │ INFO │    ├─ Recipes: 225,602 rows × 5 columns
-05:53:40 │ INFO │    ├─ Ground Truth: 100 rows × 10 columns
-05:53:40 │ INFO │    ├─ Silver Labels: 225,602 rows × 5 columns
-05:53:40 │ INFO │    ├─ USDA Carb Tbl:  303 rows × 2 columns (0.0 MB)
-05:53:40 │ INFO │    ├─ Total memory usage: 251.9 MB
-05:53:40 │ INFO │    └─ Ready for ML pipeline: ✅
-05:53:41 │ INFO │ 
-   📊 Dataset Statistics:
-05:53:41 │ INFO │    ├─ Silver (All): 225,602 recipes
-05:53:41 │ INFO │    ├─ Silver (Text): 225,602 recipes
-05:53:41 │ INFO │    ├─ Silver (Images): 72,485 recipes
-05:53:41 │ INFO │    ├─ Gold (All): 100 recipes
-05:53:41 │ INFO │    └─ Gold (Images): 66 recipes
-05:53:41 │ INFO │ 
-   ⚖️  Class Balance Analysis:
-05:53:41 │ INFO │ 
-── Gold set set class counts ─────────────
-05:53:41 │ INFO │  keto:     40/100 (40.0%)
-05:53:41 │ INFO │ vegan:     40/100 (40.0%)
-05:53:41 │ INFO │ 
-── Silver (Text) set set class counts ─────────────
-05:53:41 │ INFO │  keto:  36722/225602 (16.3%)
-05:53:41 │ INFO │ vegan:  16378/225602 ( 7.3%)
-05:53:41 │ INFO │ 
-── Silver (Image) set set class counts ─────────────
-05:53:41 │ INFO │  keto:  28518/72485 (39.3%)
-05:53:41 │ INFO │ vegan:  12577/72485 (17.4%)
-05:53:41 │ INFO │    ✅ Data loading completed in 108.1s
-05:53:41 │ INFO │    📊 Data Loading - Memory: 17.0% used (4838 MB / 32015 MB)
-05:53:41 │ INFO │    🧹 Data Loading: Memory cleanup
-05:53:41 │ INFO │       ├─ RAM: 17.0% used (4838 MB)
-05:53:41 │ INFO │       ✅ Memory usage normal: 17.0%
-05:53:41 │ INFO │ 
-🔤 STAGE 2: TEXT FEATURE PROCESSING
-05:53:41 │ INFO │    ├─ Vectorizer config: {'min_df': 2, 'ngram_range': (1, 3), 'max_features': 50000, 'sublinear_tf': True}
-05:53:41 │ INFO │ USDA carb table loaded: 303 distinct food descriptions
-05:53:41 │ INFO │    ├─ USDA examples added: 303
-05:53:54 │ INFO │    📊 Text Processing Results:
-05:53:54 │ INFO │    ├─ Vocabulary size: 50,000
-05:53:54 │ INFO │    ├─ Silver features: (225905, 50000)
-05:53:54 │ INFO │    ├─ Gold features: (100, 50000)
-05:53:54 │ INFO │    ├─ Sparsity: 0.0%
-05:53:54 │ INFO │    └─ Memory usage: ~103 MB
-05:53:54 │ INFO │    ✅ Text processing completed in 12.9s
-05:53:54 │ INFO │    📊 Text Processing - Memory: 17.7% used (5071 MB / 32015 MB)
-05:53:54 │ INFO │    🧹 Text Processing: Memory cleanup
-05:53:54 │ INFO │       ├─ RAM: 17.7% used (5071 MB)
-05:53:54 │ INFO │       ✅ Memory usage normal: 17.7%
-05:53:54 │ INFO │ 
-🖼️  STAGE 3: IMAGE FEATURE PROCESSING
-05:53:54 │ INFO │    ├─ Processing 72,485 sampled silver images
-05:53:54 │ INFO │    └─ Processing 66 gold images
-05:53:54 │ INFO │ 
-🧠 EMBEDDINGS-FIRST IMAGE PIPELINE: silver
-05:53:54 │ INFO │    Target directory: dataset/arg_max/images/silver
-05:53:54 │ INFO │    Total samples: 72,485
-05:53:54 │ INFO │    Force recompute: False
-05:53:54 │ INFO │    🔍 Searching for existing embeddings...
-05:53:54 │ INFO │    ❌ No suitable embeddings found - proceeding with downloads
-05:53:54 │ INFO │ 
-   📋 DOWNLOAD PLANNING:
-05:53:56 │ INFO │       📊 Analysis Results:
-05:53:56 │ INFO │       ├─ Total samples: 72,485
-05:53:56 │ INFO │       ├─ Existing valid files: 0
-05:53:56 │ INFO │       ├─ Corrupted files cleaned: 0
-05:53:56 │ INFO │       ├─ Valid URLs to download: 72,485
-05:53:56 │ INFO │       ├─ Missing URLs: 0
-05:53:56 │ INFO │       └─ Invalid URLs: 0
-05:53:56 │ WARNING │    ⚠️  Large download required: 72,485 files
-05:53:56 │ INFO │       └─ This may take a while...
-05:53:56 │ INFO │    🎯 Download Queue: 72,485 files
-05:53:56 │ INFO │ 
-   🚀 EXECUTING ROBUST DOWNLOADS:
-06:36:47 │ INFO │ 
-   📊 DOWNLOAD RESULTS:
-06:36:47 │ INFO │    ├─ Processing time: 2572.9s
-06:36:47 │ INFO │    ├─ Files downloaded: 71,906
-06:36:47 │ INFO │    ├─ Files skipped: 0
-06:36:47 │ INFO │    ├─ Download failures: 579
-06:36:47 │ INFO │    ├─ Retry attempts: 0
-06:36:47 │ INFO │    └─ Data transferred: 2173.6 MB
-06:36:47 │ INFO │ 
-   📈 SUCCESS METRICS:
-06:36:47 │ INFO │    ├─ Download success rate: 99.2%
-06:36:47 │ INFO │    ├─ Total valid files: 71,906
-06:36:47 │ INFO │    ├─ Coverage: 99.2% of dataset
-06:36:47 │ INFO │    ✅ ACCEPTABLE COVERAGE - proceeding with 71,906 images
-06:36:48 │ INFO │       ├─ Silver download: 71,906/72,485 successful
-06:36:48 │ INFO │ 
-🧠 EMBEDDINGS-FIRST IMAGE PIPELINE: gold
-06:36:48 │ INFO │    Target directory: dataset/arg_max/images/gold
-06:36:48 │ INFO │    Total samples: 66
-06:36:48 │ INFO │    Force recompute: False
-06:36:48 │ INFO │    🔍 Searching for existing embeddings...
-06:36:48 │ INFO │    ❌ No suitable embeddings found - proceeding with downloads
-06:36:48 │ INFO │ 
-   📋 DOWNLOAD PLANNING:
-06:36:48 │ INFO │       📊 Analysis Results:
-06:36:48 │ INFO │       ├─ Total samples: 66
-06:36:48 │ INFO │       ├─ Existing valid files: 0
-06:36:48 │ INFO │       ├─ Corrupted files cleaned: 0
-06:36:48 │ INFO │       ├─ Valid URLs to download: 66
-06:36:48 │ INFO │       ├─ Missing URLs: 0
-06:36:48 │ INFO │       └─ Invalid URLs: 0
-06:36:48 │ WARNING │    ⚠️  Large download required: 66 files
-06:36:48 │ INFO │       └─ This may take a while...
-06:36:48 │ INFO │    🎯 Download Queue: 66 files
-06:36:48 │ INFO │ 
-   🚀 EXECUTING ROBUST DOWNLOADS:
-06:36:51 │ INFO │ 
-   📊 DOWNLOAD RESULTS:
-06:36:51 │ INFO │    ├─ Processing time: 3.7s
-06:36:51 │ INFO │    ├─ Files downloaded: 66
-06:36:51 │ INFO │    ├─ Files skipped: 0
-06:36:51 │ INFO │    ├─ Download failures: 0
-06:36:51 │ INFO │    ├─ Retry attempts: 0
-06:36:51 │ INFO │    └─ Data transferred: 2.1 MB
-06:36:51 │ INFO │ 
-   📈 SUCCESS METRICS:
-06:36:51 │ INFO │    ├─ Download success rate: 100.0%
-06:36:51 │ INFO │    ├─ Total valid files: 66
-06:36:51 │ INFO │    ├─ Coverage: 100.0% of dataset
-06:36:51 │ INFO │    ✅ ACCEPTABLE COVERAGE - proceeding with 66 images
-06:36:52 │ INFO │       ├─ Gold download: 66/66 successful
-06:36:52 │ INFO │       ├─ Silver filtered: 71,906 with valid images
-06:36:52 │ INFO │       ├─ Gold filtered: 66 with valid images
-06:36:52 │ INFO │       ├─ Gold filtered: 66 with valid images
-06:36:52 │ INFO │ 
-🧠 IMAGE EMBEDDING EXTRACTION: silver
-06:36:52 │ INFO │    Target images: 71,906
-06:36:52 │ INFO │    Mode: silver
-06:36:52 │ INFO │    Force recomputation: False
-06:36:52 │ INFO │    🔧 Device Configuration:
-06:36:52 │ INFO │    ├─ Device: cpu
-06:36:52 │ INFO │    ├─ CUDA available: False
-06:36:52 │ INFO │    └─ Using CPU (warning: much slower)
-06:36:52 │ INFO │    📁 Paths:
-06:36:52 │ INFO │    ├─ Image directory: dataset/arg_max/images/silver
-06:36:52 │ INFO │    ├─ Cache file: dataset/arg_max/images/silver/embeddings.npy
-06:36:52 │ INFO │    └─ Backup file: /app/artifacts/embeddings_silver_backup.npy
-06:36:52 │ INFO │ 
-   🔍 Cache Validation:
-06:36:52 │ INFO │       ├─ Artifacts backup: Not found
-06:36:52 │ INFO │       ├─ Primary cache: Not found
-06:36:52 │ INFO │       ├─ Legacy backup: Not found
-06:36:52 │ INFO │       └─ No valid cache found - will compute embeddings
-06:36:52 │ INFO │ 
-   📊 Pre-processing Analysis:
-06:37:08 │ INFO │       📈 Image Availability:
-06:37:08 │ INFO │       ├─ Total expected: 71,906
-06:37:08 │ INFO │       ├─ Available: 71,906 (100.0%)
-06:37:08 │ INFO │       ├─ Missing: 0 (0.0%)
-06:37:08 │ INFO │       └─ Corrupted: 0 (0.0%)
-06:37:08 │ INFO │       📊 Sample Analysis (10 images):
-06:37:08 │ INFO │       ├─ Average size: 374×276 pixels
-06:37:08 │ INFO │       ├─ Average file size: 29.3 KB
-06:37:08 │ INFO │       ├─ Color modes: {'RGB': 10}
-06:37:08 │ INFO │       └─ Formats: {'JPEG': 10}
-06:37:08 │ INFO │ 
-   🤖 Model Setup:
-06:41:54 │ INFO │       ✅ Model loaded in 285.34s
-06:41:54 │ INFO │       ├─ Architecture: ResNet-50 (feature extractor)
-06:41:54 │ INFO │       ├─ Output dimension: 2048
-06:41:54 │ INFO │       ├─ Device: cpu
-06:41:54 │ INFO │       └─ Parameters: 23,508,032
-06:41:54 │ INFO │ 
-   ⚡ Feature Extraction:
-06:41:54 │ INFO │       🔧 Processing Configuration:
-06:41:54 │ INFO │       ├─ Batch size: 8
-06:41:54 │ INFO │       ├─ Total batches: 8989
-06:41:54 │ INFO │       └─ Expected output shape: (71906, 2048)
-06:42:21 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:42:21 │ INFO │       ├─ RAM: 18.5% used (5297 MB)
-06:42:21 │ INFO │       ✅ Memory usage normal: 18.5%
-06:42:47 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:42:47 │ INFO │       ├─ RAM: 19.1% used (5474 MB)
-06:42:47 │ INFO │       ✅ Memory usage normal: 19.1%
-06:43:16 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:43:16 │ INFO │       ├─ RAM: 21.3% used (6203 MB)
-06:43:16 │ INFO │       ✅ Memory usage normal: 21.3%
-06:43:44 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:43:44 │ INFO │       ├─ RAM: 21.7% used (6312 MB)
-06:43:44 │ INFO │       ✅ Memory usage normal: 21.7%
-06:44:12 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:44:12 │ INFO │       ├─ RAM: 22.3% used (6507 MB)
-06:44:12 │ INFO │       ✅ Memory usage normal: 22.3%
-06:44:41 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:44:41 │ INFO │       ├─ RAM: 22.7% used (6655 MB)
-06:44:41 │ INFO │       ✅ Memory usage normal: 22.7%
-06:45:09 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:45:09 │ INFO │       ├─ RAM: 23.3% used (6832 MB)
-06:45:09 │ INFO │       ✅ Memory usage normal: 23.3%
-06:45:38 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:45:38 │ INFO │       ├─ RAM: 23.4% used (6850 MB)
-06:45:38 │ INFO │       ✅ Memory usage normal: 23.4%
-06:46:07 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:46:07 │ INFO │       ├─ RAM: 24.2% used (7113 MB)
-06:46:07 │ INFO │       ✅ Memory usage normal: 24.2%
-06:46:36 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:46:36 │ INFO │       ├─ RAM: 25.8% used (7634 MB)
-06:46:36 │ INFO │       ✅ Memory usage normal: 25.8%
-06:47:05 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:47:05 │ INFO │       ├─ RAM: 28.2% used (8388 MB)
-06:47:05 │ INFO │       ✅ Memory usage normal: 28.2%
-06:47:34 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:47:35 │ INFO │       ├─ RAM: 31.0% used (9304 MB)
-06:47:35 │ INFO │       ├─ RAM freed: 2.5 MB
-06:47:35 │ INFO │       ✅ Memory usage normal: 31.0%
-06:48:04 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:48:04 │ INFO │       ├─ RAM: 32.4% used (9751 MB)
-06:48:04 │ INFO │       ├─ RAM freed: 2.3 MB
-06:48:04 │ INFO │       ✅ Memory usage normal: 32.4%
-06:48:33 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:48:33 │ INFO │       ├─ RAM: 33.5% used (10094 MB)
-06:48:33 │ INFO │       ├─ RAM freed: 1.1 MB
-06:48:33 │ INFO │       ✅ Memory usage normal: 33.5%
-06:49:03 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:49:03 │ INFO │       ├─ RAM: 35.5% used (10734 MB)
-06:49:03 │ INFO │       ✅ Memory usage normal: 35.5%
-06:49:32 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:49:32 │ INFO │       ├─ RAM: 37.6% used (11420 MB)
-06:49:32 │ INFO │       ✅ Memory usage normal: 37.6%
-06:50:01 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:50:01 │ INFO │       ├─ RAM: 39.1% used (11881 MB)
-06:50:01 │ INFO │       ✅ Memory usage normal: 39.1%
-06:50:31 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:50:31 │ INFO │       ├─ RAM: 39.8% used (12113 MB)
-06:50:31 │ INFO │       ✅ Memory usage normal: 39.8%
-06:51:01 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:51:01 │ INFO │       ├─ RAM: 39.8% used (12129 MB)
-06:51:01 │ INFO │       ✅ Memory usage normal: 39.8%
-06:51:30 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:51:30 │ INFO │       ├─ RAM: 40.4% used (12309 MB)
-06:51:30 │ INFO │       ✅ Memory usage normal: 40.4%
-06:52:00 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:52:00 │ INFO │       ├─ RAM: 42.1% used (12848 MB)
-06:52:00 │ INFO │       ✅ Memory usage normal: 42.1%
-06:52:30 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:52:30 │ INFO │       ├─ RAM: 45.7% used (13995 MB)
-06:52:30 │ INFO │       ✅ Memory usage normal: 45.7%
-06:53:00 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:53:00 │ INFO │       ├─ RAM: 48.8% used (15013 MB)
-06:53:00 │ INFO │       ├─ RAM freed: 2.3 MB
-06:53:00 │ INFO │       ✅ Memory usage normal: 48.8%
-06:53:30 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:53:30 │ INFO │       ├─ RAM: 52.2% used (16101 MB)
-06:53:30 │ INFO │       ✅ Memory usage normal: 52.2%
-06:54:01 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:54:01 │ INFO │       ├─ RAM: 53.7% used (16577 MB)
-06:54:01 │ INFO │       ✅ Memory usage normal: 53.7%
-06:54:32 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:54:32 │ INFO │       ├─ RAM: 54.8% used (16930 MB)
-06:54:32 │ INFO │       ✅ Memory usage normal: 54.8%
-06:55:01 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:55:01 │ INFO │       ├─ RAM: 55.8% used (17244 MB)
-06:55:01 │ INFO │       ✅ Memory usage normal: 55.8%
-06:55:31 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:55:31 │ INFO │       ├─ RAM: 56.0% used (17314 MB)
-06:55:31 │ INFO │       ✅ Memory usage normal: 56.0%
-06:56:01 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:56:01 │ INFO │       ├─ RAM: 56.1% used (17336 MB)
-06:56:01 │ INFO │       ✅ Memory usage normal: 56.1%
-06:56:30 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:56:30 │ INFO │       ├─ RAM: 56.1% used (17336 MB)
-06:56:30 │ INFO │       ✅ Memory usage normal: 56.1%
-06:57:00 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:57:00 │ INFO │       ├─ RAM: 56.4% used (17432 MB)
-06:57:00 │ INFO │       ✅ Memory usage normal: 56.4%
-06:57:31 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:57:31 │ INFO │       ├─ RAM: 59.4% used (18390 MB)
-06:57:31 │ INFO │       ✅ Memory usage normal: 59.4%
-06:58:02 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:58:02 │ INFO │       ├─ RAM: 60.3% used (18677 MB)
-06:58:02 │ INFO │       ✅ Memory usage normal: 60.3%
-06:58:33 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:58:33 │ INFO │       ├─ RAM: 61.0% used (18908 MB)
-06:58:33 │ INFO │       ✅ Memory usage normal: 61.0%
-06:59:05 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:59:05 │ INFO │       ├─ RAM: 61.2% used (18964 MB)
-06:59:05 │ INFO │       ✅ Memory usage normal: 61.2%
-06:59:36 │ INFO │    🧹 Batch Processing: Memory cleanup
-06:59:36 │ INFO │       ├─ RAM: 61.4% used (19020 MB)
-06:59:36 │ INFO │       ✅ Memory usage normal: 61.4%
-07:00:08 │ INFO │    🧹 Batch Processing: Memory cleanup
-07:00:08 │ INFO │       ├─ RAM: 61.5% used (19078 MB)
-07:00:08 │ INFO │       ✅ Memory usage normal: 61.5%
-07:00:39 │ INFO │    🧹 Batch Processing: Memory cleanup
-07:00:39 │ INFO │       ├─ RAM: 61.9% used (19205 MB)
-07:00:39 │ INFO │       ✅ Memory usage normal: 61.9%
-07:01:10 │ INFO │    🧹 Batch Processing: Memory cleanup
-07:01:10 │ INFO │       ├─ RAM: 61.3% used (19002 MB)
-07:01:10 │ INFO │       ✅ Memory usage normal: 61.3%
-
-================================================================================
-NEW RUN STARTED AT 2025-06-21 07:01:13
-Process ID: 254
-================================================================================
-07:01:13 │ INFO │ Logging system initialized successfully
-07:01:41 │ INFO │    🧹 Batch Processing: Memory cleanup
-07:01:41 │ INFO │       ├─ RAM: 63.9% used (19824 MB)
-07:01:41 │ INFO │       ✅ Memory usage normal: 63.9%
-07:02:11 │ INFO │    🧹 Batch Processing: Memory cleanup
-07:02:11 │ INFO │       ├─ RAM: 64.7% used (20102 MB)
-07:02:11 │ INFO │       ✅ Memory usage normal: 64.7%
-
-================================================================================
-NEW RUN STARTED AT 2025-06-21 07:02:39
-Process ID: 303
-================================================================================
-07:02:40 │ INFO │ Logging system initialized successfully
-07:02:43 │ INFO │    🧹 Batch Processing: Memory cleanup
-07:02:43 │ INFO │       ├─ RAM: 67.5% used (20983 MB)
-07:02:43 │ INFO │       ✅ Memory usage normal: 67.5%
-07:03:14 │ INFO │    🧹 Batch Processing: Memory cleanup
-07:03:14 │ INFO │       ├─ RAM: 67.8% used (21085 MB)
-07:03:14 │ INFO │       ✅ Memory usage normal: 67.8%
-07:03:44 │ INFO │    🧹 Batch Processing: Memory cleanup
-07:03:44 │ INFO │       ├─ RAM: 68.6% used (21330 MB)
-07:03:44 │ INFO │       ✅ Memory usage normal: 68.6%
