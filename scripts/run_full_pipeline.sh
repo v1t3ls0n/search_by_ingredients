@@ -14,12 +14,12 @@ usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  --sample_frac <value>   Set sample fraction for training (default: 0.1)"
+    echo "  --sample_frac <value>   Set sample fraction for training (default: 1.0)"
     echo "  --force                 Force recomputation of embeddings"
     echo "  --help                  Show this help message"
     echo ""
     echo "Examples:"
-    echo "  $0                      # Use defaults (sample_frac=0.1)"
+    echo "  $0                      # Use defaults (sample_frac=1.0)"
     echo "  $0 --sample_frac 0.5    # Use 50% of data"
     echo "  $0 --sample_frac 1.0    # Use full dataset"
     echo "  $0 --force              # Force recompute with default sample_frac"
@@ -66,7 +66,11 @@ echo ""
 # Create timestamp for this run
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
-# Define log file in shared directory
+# Ensure artifacts/logs directory exists BEFORE trying to create log file
+echo "📁 Setting up artifacts directory structure..."
+mkdir -p artifacts/logs
+
+# NOW we can define and create the log file
 LOG_FILE="artifacts/logs/pipeline_run_${TIMESTAMP}.log"
 echo "📝 Logging to: $LOG_FILE"
 
@@ -75,7 +79,7 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
 }
 
-# Start logging
+# Start logging (now the directory exists)
 {
     echo "============================================"
     echo "Pipeline Run Started: $(date)"
@@ -88,16 +92,42 @@ log() {
 log "🛠️  Shutting down existing containers..."
 docker-compose down 2>&1 | tee -a "$LOG_FILE"
 
-echo "📁 Delete old artifacts from earlier run" 
-# Delete old artifacts directory if it exists
+# Check if we should preserve certain artifacts
 if [ -d "artifacts" ]; then
-    echo "🗑️  Removing old artifacts directory..."
+    echo "📁 Found existing artifacts directory"
+    
+    # Option to preserve logs from previous runs
+    if [ -d "artifacts/logs" ]; then
+        echo "📋 Preserving previous log files..."
+        # Create temporary backup
+        mv artifacts/logs artifacts/logs_backup_${TIMESTAMP}
+    fi
+    
+    echo "🗑️  Removing old artifacts..."
     rm -rf artifacts
+    
+    # Restore logs if they were backed up
+    if [ -d "artifacts/logs_backup_${TIMESTAMP}" ]; then
+        mkdir -p artifacts
+        mv "artifacts/logs_backup_${TIMESTAMP}" artifacts/logs
+        echo "✅ Previous logs restored"
+    fi
 fi
 
-# Since artifacts is shared, create logs subdirectory there
-echo "📁 Setting up logging in shared artifacts directory..."
+# Ensure the directory structure exists (in case it was removed)
 mkdir -p artifacts/logs
+
+# Re-create the log file if it was removed
+if [ ! -f "$LOG_FILE" ]; then
+    {
+        echo "============================================"
+        echo "Pipeline Run Started: $(date)"
+        echo "Configuration:"
+        echo "  - Sample Fraction: $SAMPLE_FRAC"
+        echo "  - Force Recompute: $([ -n "$FORCE_FLAG" ] && echo "Yes" || echo "No")"
+        echo "============================================"
+    } > "$LOG_FILE"
+fi
 
 log "🛠️  Building Docker images..."
 docker-compose build 2>&1 | tee -a "$LOG_FILE"
@@ -143,6 +173,9 @@ log "   Using sample_frac=$SAMPLE_FRAC"
 docker-compose exec web bash -c "
     set -euo pipefail
     
+    # Ensure log directory exists inside container too
+    mkdir -p /app/artifacts/logs
+    
     # Create a pipeline-specific log inside container
     CONTAINER_LOG=/app/artifacts/logs/container_pipeline_${TIMESTAMP}.log
     
@@ -173,7 +206,7 @@ docker-compose ps >> "$LOG_FILE" 2>&1
 
 # List artifacts generated
 log "📦 Artifacts generated:"
-ls -la artifacts/ | tee -a "$LOG_FILE"
+ls -la artifacts/ 2>/dev/null | tee -a "$LOG_FILE" || echo "No artifacts directory found"
 
 # Create summary file
 SUMMARY_FILE="artifacts/logs/summary_${TIMESTAMP}.txt"
@@ -189,7 +222,7 @@ SUMMARY_FILE="artifacts/logs/summary_${TIMESTAMP}.txt"
     echo "Log Files:"
     echo "  - Main log: $LOG_FILE"
     echo "  - Container log: artifacts/logs/container_pipeline_${TIMESTAMP}.log"
-    echo "  - Python Source Code Logger:  artifacts/logs/diet_classifiers.py.log (if exists)"
+    echo "  - Python Source Code Logger: artifacts/logs/diet_classifiers.py.log (if exists)"
     echo ""
     echo "Artifacts Generated:"
     ls -la artifacts/*.pkl artifacts/*.csv artifacts/*.json 2>/dev/null || echo "No model artifacts yet"
@@ -204,7 +237,7 @@ echo "📊 Results saved to artifacts/"
 echo "📋 Logs available at:"
 echo "   - Main log: $LOG_FILE"
 echo "   - Summary: $SUMMARY_FILE"
-echo "   - Python Source Code Logger:  artifacts/logs/diet_classifiers.py.log"
+echo "   - Python Source Code Logger: artifacts/logs/diet_classifiers.py.log"
 echo ""
 echo "💡 View logs:"
 echo "   tail -f $LOG_FILE                    # Follow main log"
