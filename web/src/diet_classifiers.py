@@ -4235,12 +4235,12 @@ def build_image_embeddings(df: pd.DataFrame,
                            mode: str,
                            force: bool = False) -> Tuple[np.ndarray, List[int]]:
     """
-    Extract ResNet-50 embeddings for recipe images with comprehensive monitoring.
+    Extract ResNet-50 embeddings for recipe images with batch saving to disk.
 
     This function implements a sophisticated image feature extraction pipeline:
     1. Checks for cached embeddings to avoid recomputation
     2. Loads pre-trained ResNet-50 (without classification head)
-    3. Processes images in batches for efficiency
+    3. Processes images in batches with disk-based storage for memory efficiency
     4. Handles errors gracefully with detailed logging
     5. Applies quality filtering to remove bad images
     6. Saves embeddings with backup for reliability
@@ -4298,10 +4298,6 @@ def build_image_embeddings(df: pd.DataFrame,
     # Set up paths
     img_dir = CFG.image_dir / mode
     embed_path = img_dir / "embeddings.npy"
-    # Set up paths consistently
-    img_dir = CFG.image_dir / mode
-    embed_path = img_dir / "embeddings.npy"
-    # Save in artifacts where Docker can see it
     backup_path = CFG.artifacts_dir / f"embeddings_{mode}_backup.npy"
     metadata_path = img_dir / "embedding_metadata.json"
 
@@ -4528,11 +4524,17 @@ def build_image_embeddings(df: pd.DataFrame,
         log.info(f"      📊 GPU memory allocated: {gpu_memory:.1f} MB")
 
     # ------------------------------------------------------------------
-    # Embedding Extraction with Detailed Progress
+    # Embedding Extraction with Batch Saving to Disk
     # ------------------------------------------------------------------
     log.info(f"\n   ⚡ Feature Extraction:")
 
-    vectors = []
+    # Use memory-mapped array for efficient disk-based storage
+    embedding_shape = (len(df), 2048)
+    temp_embed_path = embed_path.with_suffix('.tmp.npy')
+    
+    # Create memory-mapped array for writing
+    embeddings_mmap = np.memmap(temp_embed_path, dtype='float32', mode='w+', shape=embedding_shape)
+    
     processing_stats = {
         'success': 0,
         'missing': 0,
@@ -4543,102 +4545,120 @@ def build_image_embeddings(df: pd.DataFrame,
     }
 
     failed_details = []
+    valid_indices = []
 
     # Determine batch size based on available memory
     if device_info['cuda_available']:
         gpu_memory_gb = torch.cuda.get_device_properties(
             0).total_memory / (1024**3)
-        batch_size = max(1, min(32, int(gpu_memory_gb * 2))
-                         )  # Conservative estimate
+        batch_size = max(1, min(32, int(gpu_memory_gb * 2)))
     else:
         batch_size = 8  # Conservative CPU batch size
 
     log.info(f"      🔧 Processing Configuration:")
     log.info(f"      ├─ Batch size: {batch_size}")
-    log.info(
-        f"      ├─ Total batches: {(len(df) + batch_size - 1) // batch_size}")
-    log.info(f"      └─ Expected output shape: ({len(df)}, 2048)")
+    log.info(f"      ├─ Total images: {len(df)}")
+    log.info(f"      ├─ Memory-mapped file: {temp_embed_path}")
+    log.info(f"      └─ Expected output shape: {embedding_shape}")
 
-    # Main processing loop
-    with tqdm(df.index, desc=f"      ├─ Extracting {mode} embeddings",
+    # Process in batches
+    num_batches = (len(df) + batch_size - 1) // batch_size
+
+    with tqdm(range(num_batches), desc=f"      ├─ Processing {mode} batches",
               position=1, leave=False,
-              bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}] {rate_fmt}") as extract_pbar:
+              bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}] {rate_fmt}") as batch_pbar:
 
-        for i, idx in enumerate(extract_pbar):
-            process_start = time.time()
-            img_file = img_dir / f"{idx}.jpg"
+        for batch_idx in batch_pbar:
+            batch_start_time = time.time()
+            batch_start = batch_idx * batch_size
+            batch_end = min(batch_start + batch_size, len(df))
+            batch_indices = df.index[batch_start:batch_end]
 
-            # Update progress bar periodically
-            if i % 100 == 0:
-                success_rate = processing_stats['success'] / max(1, i) * 100
-                extract_pbar.set_postfix({
+            # Collect batch tensors
+            batch_tensors = []
+            batch_valid_indices = []
+            batch_positions = []
+
+            for pos, idx in enumerate(batch_indices):
+                img_file = img_dir / f"{idx}.jpg"
+
+                if not img_file.exists():
+                    processing_stats['missing'] += 1
+                    # Write zeros directly to memory-mapped array
+                    embeddings_mmap[batch_start + pos] = np.zeros(2048, dtype=np.float32)
+                    continue
+
+                try:
+                    # Load and preprocess image
+                    img = Image.open(img_file).convert('RGB')
+                    tensor = preprocess(img).unsqueeze(0)
+                    batch_tensors.append(tensor)
+                    batch_valid_indices.append(idx)
+                    batch_positions.append(batch_start + pos)
+
+                except Exception as e:
+                    processing_stats['failed'] += 1
+                    error_type = type(e).__name__
+                    processing_stats['error_types'][error_type] += 1
+                    failed_details.append((idx, img_file, error_type, str(e)[:100]))
+
+                    # Write zeros for failed images
+                    embeddings_mmap[batch_start + pos] = np.zeros(2048, dtype=np.float32)
+
+            # Process valid images in this batch
+            if batch_tensors:
+                try:
+                    with torch.no_grad():
+                        # Stack tensors and move to device
+                        batch_tensor = torch.cat(batch_tensors, dim=0).to(device_info['device'])
+
+                        # Extract features
+                        batch_features = model(batch_tensor).cpu().numpy()
+
+                        # Write to memory-mapped array
+                        for i, pos in enumerate(batch_positions):
+                            embeddings_mmap[pos] = batch_features[i]
+                            valid_indices.append(batch_valid_indices[i])
+
+                        processing_stats['success'] += len(batch_tensors)
+
+                    # Clear GPU memory after each batch
+                    if device_info['cuda_available']:
+                        torch.cuda.empty_cache()
+
+                except Exception as e:
+                    log.error(f"      ❌ Batch {batch_idx} processing failed: {str(e)[:60]}...")
+                    # Write zeros for failed batch
+                    for pos in batch_positions:
+                        embeddings_mmap[pos] = np.zeros(2048, dtype=np.float32)
+
+            # Update statistics
+            batch_time = time.time() - batch_start_time
+            processing_stats['batch_times'].append(batch_time)
+
+            # Periodic progress update
+            if batch_idx % 10 == 0:
+                success_rate = processing_stats['success'] / max(1, batch_end) * 100
+                batch_pbar.set_postfix({
                     'Success': f"{processing_stats['success']}",
                     'Failed': f"{processing_stats['failed']}",
                     'Missing': f"{processing_stats['missing']}",
                     'Rate': f"{success_rate:.1f}%"
                 })
 
-            # Check if image exists
-            if not img_file.exists():
-                processing_stats['missing'] += 1
-                vectors.append(np.zeros(2048, dtype=np.float32))
-                continue
+            # Flush changes to disk periodically
+            if batch_idx % 50 == 0:
+                embeddings_mmap.flush()
 
-            try:
-                # Load and preprocess image
-                img = Image.open(img_file).convert('RGB')
-
-                # Log properties for first few images
-                if processing_stats['success'] < 5:
-                    log.debug(
-                        f"         ├─ Processing {img_file.name}: {img.size} {img.mode}")
-
-                with torch.no_grad():
-                    # Preprocess and add batch dimension
-                    tensor = preprocess(img).unsqueeze(
-                        0).to(device_info['device'])
-
-                    # Extract features
-                    features = model(tensor).squeeze().cpu().numpy()
-
-                    # Validate output shape
-                    if features.shape != (2048,):
-                        raise ValueError(
-                            f"Unexpected feature shape: {features.shape}")
-
-                vectors.append(features)
-                processing_stats['success'] += 1
-
-                # Track processing time
-                process_time = time.time() - process_start
-                processing_stats['processing_times'].append(process_time)
-
-            except Exception as e:
-                processing_stats['failed'] += 1
-
-                # Categorize error
-                error_type = type(e).__name__
-                processing_stats['error_types'][error_type] += 1
-
-                # Log error details
-                error_msg = str(e)[:100] + \
-                    "..." if len(str(e)) > 100 else str(e)
-                failed_details.append((idx, img_file, error_type, error_msg))
-
-                # Log first few errors
-                if processing_stats['failed'] <= 5:
-                    log.warning(
-                        f"         ❌ Failed {img_file.name}: {error_type} - {error_msg}")
-
-                # Add zero vector for failed processing
-                vectors.append(np.zeros(2048, dtype=np.float32))
-
-            # Periodic memory cleanup
-            if i % 1000 == 0 and i > 0:
+            # Memory cleanup every N batches
+            if batch_idx % 100 == 0 and batch_idx > 0:
                 gc.collect()
-                optimize_memory_usage("Batch Processing")
-                if device_info['cuda_available']:
-                    torch.cuda.empty_cache()
+                if log.level <= logging.DEBUG:
+                    memory = psutil.virtual_memory()
+                    log.debug(f"      ├─ Memory usage after {batch_idx} batches: {memory.percent:.1f}%")
+
+    # Ensure all data is written
+    embeddings_mmap.flush()
 
     # ------------------------------------------------------------------
     # Post-processing and Results Analysis
@@ -4655,12 +4675,11 @@ def build_image_embeddings(df: pd.DataFrame,
 
     # Performance metrics
     if processing_stats['processing_times']:
-        avg_time = sum(processing_stats['processing_times']) / \
-            len(processing_stats['processing_times'])
+        avg_time = np.mean(processing_stats['batch_times']) if processing_stats['batch_times'] else 0
         throughput = processing_stats['success'] / extraction_time
 
         log.info(f"   ⚡ Performance Metrics:")
-        log.info(f"   ├─ Average processing time: {avg_time:.3f}s per image")
+        log.info(f"   ├─ Average batch time: {avg_time:.3f}s")
         log.info(f"   ├─ Throughput: {throughput:.1f} images/second")
         log.info(f"   └─ Device efficiency: {device_info['device']}")
 
@@ -4687,32 +4706,58 @@ def build_image_embeddings(df: pd.DataFrame,
                 log.warning(f"   ⚠️  Failed to save error log: {e}")
 
     # ------------------------------------------------------------------
-    # Save Results and Metadata
+    # Quality Filtering and Final Save
+    # ------------------------------------------------------------------
+    log.info(f"\n   🔍 Applying quality filtering...")
+
+    # Read the memory-mapped file as a regular array
+    embeddings = np.array(embeddings_mmap)
+    del embeddings_mmap  # Close memory map
+
+    # Apply quality filtering
+    if len(valid_indices) > 10:
+        # Only process valid embeddings for filtering
+        valid_embeddings = np.zeros((len(valid_indices), 2048), dtype=np.float32)
+        for i, idx in enumerate(valid_indices):
+            pos = df.index.get_loc(idx)
+            valid_embeddings[i] = embeddings[pos]
+        
+        filtered_embeddings, filtered_indices = filter_low_quality_images(
+            img_dir, valid_embeddings, valid_indices
+        )
+
+        if len(filtered_indices) != len(valid_indices):
+            log.info(f"   📊 Quality filtering reduced images from {len(valid_indices)} to {len(filtered_indices)}")
+            embeddings = filtered_embeddings
+            valid_indices = filtered_indices
+        else:
+            embeddings = valid_embeddings
+    else:
+        # If too few images, keep all valid ones
+        if valid_indices:
+            valid_embeddings = np.zeros((len(valid_indices), 2048), dtype=np.float32)
+            for i, idx in enumerate(valid_indices):
+                pos = df.index.get_loc(idx)
+                valid_embeddings[i] = embeddings[pos]
+            embeddings = valid_embeddings
+
+    # ------------------------------------------------------------------
+    # Save Final Results
     # ------------------------------------------------------------------
     log.info(f"\n   💾 Saving Results:")
 
-    with tqdm(total=4, desc="      ├─ Saving files", position=1, leave=False,
-              bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as save_pbar:
+    # Save to final location
+    np.save(embed_path, embeddings)
+    log.info(f"   ├─ Saved to primary cache: {embed_path}")
 
-        save_pbar.set_description("      ├─ Stacking vectors")
-        # Convert list to numpy array
-        arr = np.vstack(vectors)
-        save_pbar.update(1)
+    # Save backup
+    np.save(backup_path, embeddings)
+    log.info(f"   ├─ Saved to backup: {backup_path}")
 
-        save_pbar.set_description("      ├─ Creating directories")
-        # Ensure directory exists
-        embed_path.parent.mkdir(parents=True, exist_ok=True)
-        save_pbar.update(1)
-
-        save_pbar.set_description("      ├─ Saving primary cache")
-        # Save primary cache
-        np.save(embed_path, arr)
-        save_pbar.update(1)
-
-        save_pbar.set_description("      ├─ Saving backup")
-        # Save backup
-        np.save(backup_path, arr)
-        save_pbar.update(1)
+    # Clean up temporary file
+    if temp_embed_path.exists():
+        temp_embed_path.unlink()
+        log.info(f"   └─ Cleaned up temporary file")
 
     # Save metadata
     metadata = {
@@ -4722,12 +4767,14 @@ def build_image_embeddings(df: pd.DataFrame,
         'success': processing_stats['success'],
         'missing': processing_stats['missing'],
         'failed': processing_stats['failed'],
+        'valid_after_filtering': len(valid_indices),
         'processing_time_seconds': extraction_time,
         'device': str(device_info['device']),
         'model': 'ResNet-50',
-        'output_shape': list(arr.shape),
-        'avg_processing_time': avg_time if 'avg_time' in locals() else 0,
-        'throughput_images_per_second': throughput if 'throughput' in locals() else 0
+        'output_shape': list(embeddings.shape),
+        'batch_size': batch_size,
+        'avg_batch_time': np.mean(processing_stats['batch_times']) if processing_stats['batch_times'] else 0,
+        'memory_efficient': True
     }
 
     try:
@@ -4745,13 +4792,13 @@ def build_image_embeddings(df: pd.DataFrame,
         log.info(f"   📊 File Information:")
         log.info(f"   ├─ Primary cache: {primary_size:.1f} MB ({embed_path})")
         log.info(f"   ├─ Backup cache: {backup_size:.1f} MB ({backup_path})")
-        log.info(f"   └─ Array shape: {arr.shape}")
+        log.info(f"   └─ Array shape: {embeddings.shape}")
 
     except Exception as e:
         log.warning(f"   ⚠️  File size analysis failed: {e}")
 
     # Memory cleanup
-    del model, vectors
+    del model
     gc.collect()
     if device_info['cuda_available']:
         torch.cuda.empty_cache()
@@ -4759,30 +4806,17 @@ def build_image_embeddings(df: pd.DataFrame,
         log.info(f"   🧹 GPU memory after cleanup: {final_gpu_memory:.1f} MB")
 
     # ------------------------------------------------------------------
-    # Final Summary and Quality Filtering
+    # Final Summary
     # ------------------------------------------------------------------
     log.info(f"\n   🏁 EMBEDDING EXTRACTION COMPLETE:")
-    log.info(f"   ├─ Output shape: {arr.shape}")
-    log.info(
-        f"   ├─ Success rate: {processing_stats['success']/len(df)*100:.1f}%")
+    log.info(f"   ├─ Output shape: {embeddings.shape}")
+    log.info(f"   ├─ Valid indices: {len(valid_indices)}")
+    log.info(f"   ├─ Success rate: {processing_stats['success']/len(df)*100:.1f}%")
     log.info(f"   ├─ Total time: {extraction_time:.1f}s")
-    log.info(
-        f"   ├─ Throughput: {processing_stats['success']/extraction_time:.1f} images/s")
+    log.info(f"   ├─ Memory efficiency: Batch processing with disk storage")
     log.info(f"   └─ Files saved: Primary + Backup + Metadata")
 
-    # Apply quality filtering
-    original_indices = list(df.index)
-    if arr.shape[0] > 10:  # Only filter if we have enough images
-        arr, valid_indices = filter_low_quality_images(
-            img_dir, arr, original_indices)
-        if len(valid_indices) != len(original_indices):
-            log.info(
-                f"   📊 Quality filtering reduced images from {len(original_indices)} to {len(valid_indices)}")
-    else:
-        valid_indices = original_indices
-
-    return arr, valid_indices
-
+    return embeddings, valid_indices
 
 # =============================================================================
 # ENSEMBLE METHODS
