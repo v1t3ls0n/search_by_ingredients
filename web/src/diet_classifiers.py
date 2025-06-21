@@ -81,6 +81,35 @@ Author: Guy Vitelson (aka @v1t3ls0n on GitHub)
 """
 
 from __future__ import annotations
+import gc  # Memory cleanup
+from functools import partial
+from tqdm import tqdm
+import sys
+import threading
+import json
+import logging
+import re
+import unicodedata
+import warnings
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
+from rapidfuzz import process
+import pickle
+import os
+import time
+import joblib
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from scipy.sparse import hstack, csr_matrix
+import psutil
+import nltk
+from nltk.stem import WordNetLemmatizer
+from imblearn.over_sampling import SMOTE, RandomOverSampler
+import uuid
+from datetime import datetime
 
 # =============================================================================
 # IMPORTS AND DEPENDENCIES
@@ -93,37 +122,6 @@ from __future__ import annotations
 - Deep learning libraries (PyTorch, torchvision)
 - Specialized libraries (NLTK, imbalanced-learn)
 """
-
-
-from datetime import datetime
-import uuid
-from imblearn.over_sampling import SMOTE, RandomOverSampler
-from nltk.stem import WordNetLemmatizer
-import nltk
-import psutil
-from scipy.sparse import hstack, csr_matrix
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import joblib
-import time
-import os
-import pickle
-from rapidfuzz import process
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
-from pathlib import Path
-from dataclasses import dataclass, field
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import warnings
-import unicodedata
-import re
-import logging
-import json
-import threading
-import sys
-from tqdm import tqdm
-from functools import partial
-import gc  # Memory cleanup
 
 
 # --- NLTK (used for lemmatization) ---
@@ -352,6 +350,8 @@ if not log.handlers:
     log.info("Logging system initialized successfully")
 
 # Exception hook
+
+
 def log_exception_hook(exc_type, exc_value, exc_traceback):
     """Log uncaught exceptions"""
     if issubclass(exc_type, KeyboardInterrupt):
@@ -2801,6 +2801,7 @@ class EnsembleWrapper(BaseEstimator, ClassifierMixin):
 # Basic tests to ensure the classification system is working correctly.
 # These checks run on module import to catch configuration errors early.
 # """
+
 
 # Test whitelist functionality
 assert is_ingredient_keto("almond flour"), "Whitelist check failed"
@@ -6679,9 +6680,8 @@ def main():
     import sys
     import atexit
 
-
-
     # Register exit handler
+
     def prevent_restart():
         log.info("🛑 Process exiting - no restarts allowed")
 
@@ -6721,8 +6721,12 @@ def main():
             os.environ['OMP_NUM_THREADS'] = '4'
 
         # Enable Python memory optimizations
-        import sys
-        sys.setcheckinterval(1000)  # Reduce GC overhead
+        if hasattr(sys, 'setswitchinterval'):
+            # Python 3.2+ uses setswitchinterval (value in seconds)
+            sys.setswitchinterval(0.1)  # Increase switch interval to reduce overhead
+        elif hasattr(sys, 'setcheckinterval'):
+            # Fallback for older Python versions (pre-3.2)
+            sys.setcheckinterval(1000)
 
     try:
         log.info(f"🚀 Starting main with args: {args}")
