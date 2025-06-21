@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # Default values
-SAMPLE_FRAC="0.1"
+SAMPLE_FRAC="1.0" # Default to using full dataset
 FORCE_FLAG=""
 
 # Function to show usage
