@@ -1,0 +1,7 @@
+📦 Verifying Python dependencies...
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+
+[notice] A new release of pip is available: 24.0 -> 25.1.1
+[notice] To update, run: pip install --upgrade pip
+🧠 Training with sample_frac=1.0...
+📝 Note: Will use cached embeddings if available (add --force to recompute)

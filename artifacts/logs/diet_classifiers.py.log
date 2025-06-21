@@ -1,0 +1,202 @@
+
+================================================================================
+NEW RUN STARTED AT 2025-06-21 08:38:49
+Process ID: 103
+================================================================================
+08:38:50 │ INFO │ Logging system initialized successfully
+08:38:51 │ INFO │ USDA carb table loaded: 303 distinct food descriptions
+08:38:51 │ INFO │ Carb map initialised (303 keys)
+08:38:51 │ INFO │ ✅ All sanity checks passed
+08:38:51 │ INFO │ 🚀 Starting main with args: Namespace(ground_truth=None, train=True, ingredients=None, mode='both', force=False, sample_frac=1.0)
+08:38:51 │ INFO │ System/Container total memory: 31.3 GB
+08:38:51 │ INFO │ Safe memory limit (90%): 28.1 GB
+08:38:51 │ INFO │ 💾 Available memory for processing: 28.1 GB
+08:38:51 │ WARNING │ ⚠️  Limited memory detected. Enabling memory optimizations...
+08:38:51 │ INFO │ 🚀 Starting main with args: Namespace(ground_truth=None, train=True, ingredients=None, mode='both', force=False, sample_frac=1.0)
+08:38:51 │ INFO │ 🧠 SINGLE training run - sample_frac=1.0
+08:38:51 │ INFO │ 🚀 STARTING FULL ML PIPELINE
+08:38:52 │ INFO │    Mode: both
+08:38:52 │ INFO │    Force recomputation: False
+08:38:52 │ INFO │    Sample fraction: 1.0
+08:38:52 │ INFO │    Start time: 2025-06-21 08:38:52
+08:38:52 │ INFO │    Available CPU cores: 24
+08:38:52 │ INFO │    Available memory: 31 GB
+08:38:52 │ INFO │ 
+📂 STAGE 1: DATA LOADING AND PREPARATION
+08:38:52 │ INFO │ 
+📂 DATASET LOADING PIPELINE
+08:38:52 │ INFO │    Configuration: 2 data sources
+08:38:52 │ INFO │    Data directory: /app/data
+08:38:52 │ INFO │    📊 Data Sources:
+08:38:52 │ INFO │    ├─ allrecipes.parquet: Local
+08:38:52 │ INFO │    │  └─ /app/data/allrecipes.parquet
+08:38:52 │ INFO │    ├─ ground_truth_sample.csv: Local
+08:38:52 │ INFO │    │  └─ /app/data/ground_truth_sample.csv
+08:38:52 │ INFO │ 
+   🍳 STAGE 1: LOADING RECIPES DATASET
+08:38:52 │ INFO │    ├─ Source: /app/data/allrecipes.parquet
+08:38:52 │ INFO │       ├─ Local file size: 49.2 MB
+08:38:52 │ INFO │       📊 Recipes Dataset:
+08:38:52 │ INFO │       ├─ Shape: (225602, 5)
+08:38:52 │ INFO │       ├─ Columns: ['title', 'description', 'instructions', 'ingredients', 'photo_url']
+08:38:52 │ INFO │       ├─ Memory usage: 145.4 MB
+08:38:52 │ INFO │       └─ Load time: 0.5s
+08:38:56 │ INFO │       📈 Data Quality:
+08:38:56 │ INFO │       ├─ Total recipes: 225,602
+08:38:56 │ INFO │       ├─ Null ingredients: 0
+08:38:56 │ INFO │       ├─ Empty ingredients: 0
+08:38:56 │ INFO │       └─ With photos: 225,602 (100.0%)
+08:38:56 │ INFO │    ✅ Recipes loaded successfully in 4.0s
+08:38:56 │ INFO │       💾 Recipes loaded: 14.4% memory used (3997 MB / 32015 MB)
+08:38:56 │ INFO │ 
+   🎯 STAGE 2: LOADING GROUND TRUTH DATASET
+08:38:56 │ INFO │    ├─ Source: /app/data/ground_truth_sample.csv
+08:38:56 │ INFO │       ├─ File size: 79.1 KB
+08:38:56 │ INFO │       📊 Ground Truth Dataset:
+08:38:56 │ INFO │       ├─ Shape: (100, 7)
+08:38:56 │ INFO │       ├─ Columns: ['title', 'description', 'instructions', 'ingredients', 'photo_url', 'vegan', 'keto']
+08:38:56 │ INFO │       ├─ Keto columns found: ['keto']
+08:38:56 │ INFO │       ├─ Vegan columns found: ['vegan']
+08:38:56 │ INFO │       └─ Load time: 0.01s
+08:38:56 │ INFO │       ├─ Keto labels: 40/100 (40.0% positive)
+08:38:56 │ INFO │       ├─ Vegan labels: 40/100 (40.0% positive)
+08:38:56 │ INFO │    ✅ Ground truth loaded successfully in 0.1s
+08:38:56 │ INFO │       💾 Ground truth loaded: 14.4% memory used (4003 MB / 32015 MB)
+08:38:56 │ INFO │ 
+   🥈 STAGE 3: GENERATING SILVER LABELS
+
+================================================================================
+NEW RUN STARTED AT 2025-06-21 08:38:56
+Process ID: 36
+================================================================================
+08:38:56 │ INFO │ Logging system initialized successfully
+08:38:58 │ INFO │ USDA carb table loaded: 303 distinct food descriptions
+08:38:58 │ INFO │ Carb map initialised (303 keys)
+08:38:58 │ INFO │ ✅ All sanity checks passed
+
+================================================================================
+NEW RUN STARTED AT 2025-06-21 08:39:01
+Process ID: 160
+================================================================================
+08:39:01 │ INFO │ Logging system initialized successfully
+08:39:03 │ INFO │ USDA carb table loaded: 303 distinct food descriptions
+08:39:03 │ INFO │ Carb map initialised (303 keys)
+08:39:03 │ INFO │ ✅ All sanity checks passed
+08:40:39 │ INFO │       📊 Silver Labels Generated:
+08:40:39 │ INFO │       ├─ Total recipes: 225,602
+08:40:39 │ INFO │       ├─ Keto positive: 36,722 (16.3%)
+08:40:39 │ INFO │       ├─ Vegan positive: 16,378 (7.3%)
+08:40:39 │ INFO │       ├─ With photos: 225,602 (100.0%)
+08:40:39 │ INFO │       └─ Generation time: 102.7s
+08:40:39 │ INFO │    ✅ Silver labels generated successfully in 102.8s
+08:40:39 │ INFO │       💾 Silver labels generated: 17.1% memory used (4865 MB / 32015 MB)
+08:40:39 │ INFO │ 
+   ✅ STAGE 4: DATA VALIDATION AND CROSS-CHECKS
+08:40:39 │ INFO │       💾 Memory Usage by Dataset:
+08:40:39 │ INFO │       ├─ Recipes: 145.4 MB
+08:40:39 │ INFO │       ├─ Silver: 106.4 MB
+08:40:39 │ INFO │       ├─ Ground_truth: 0.1 MB
+08:40:39 │ INFO │       └─ Total: 251.9 MB
+08:40:39 │ INFO │       📊 Label Distribution Comparison:
+08:40:39 │ INFO │       ├─ Keto: Gold=40.0%, Silver=16.3%
+08:40:39 │ INFO │       └─ Vegan: Gold=40.0%, Silver=7.3%
+08:40:39 │ WARNING │       ⚠️  Large keto distribution difference: 23.7%
+08:40:39 │ WARNING │       ⚠️  Large vegan distribution difference: 32.7%
+08:40:39 │ INFO │       ✅ Validation Summary:
+08:40:39 │ INFO │       ├─ Recipes Loaded: ✅
+08:40:39 │ INFO │       ├─ Ground Truth Loaded: ✅
+08:40:39 │ INFO │       ├─ Silver Generated: ✅
+08:40:39 │ INFO │       ├─ Required Columns Present: ✅
+08:40:39 │ INFO │       ├─ Labels Processed: ✅
+08:40:39 │ INFO │       ├─ Consistency Issues: 0
+08:40:39 │ INFO │    ✅ Data validation completed in 0.6s
+08:40:39 │ INFO │       💾 Validation complete: 17.2% memory used (4885 MB / 32015 MB)
+08:40:39 │ INFO │ USDA carb table loaded: 303 distinct food descriptions
+08:40:39 │ INFO │    ✅ USDA table loaded in 0.1s – 303 rows
+08:40:40 │ INFO │ 
+🏁 DATASET LOADING COMPLETE
+08:40:40 │ INFO │    ├─ Total loading time: 107.9s
+08:40:40 │ INFO │    ├─ Datasets loaded: 4 (recipes, ground_truth, silver, usda)
+08:40:40 │ INFO │    ├─ Total memory usage: 251.9 MB
+08:40:40 │ INFO │    └─ All validations passed: ✅
+08:40:40 │ INFO │ 
+   📋 Final Dataset Summary:
+08:40:40 │ INFO │    ├─ Recipes: 225,602 rows × 5 columns
+08:40:40 │ INFO │    ├─ Ground Truth: 100 rows × 10 columns
+08:40:40 │ INFO │    ├─ Silver Labels: 225,602 rows × 5 columns
+08:40:40 │ INFO │    ├─ USDA Carb Tbl:  303 rows × 2 columns (0.0 MB)
+08:40:40 │ INFO │    ├─ Total memory usage: 251.9 MB
+08:40:40 │ INFO │    └─ Ready for ML pipeline: ✅
+08:40:40 │ INFO │ 
+   📊 Dataset Statistics:
+08:40:40 │ INFO │    ├─ Silver (All): 225,602 recipes
+08:40:40 │ INFO │    ├─ Silver (Text): 225,602 recipes
+08:40:40 │ INFO │    ├─ Silver (Images): 72,485 recipes
+08:40:40 │ INFO │    ├─ Gold (All): 100 recipes
+08:40:40 │ INFO │    └─ Gold (Images): 66 recipes
+08:40:40 │ INFO │ 
+   ⚖️  Class Balance Analysis:
+08:40:40 │ INFO │ 
+── Gold set set class counts ─────────────
+08:40:40 │ INFO │  keto:     40/100 (40.0%)
+08:40:40 │ INFO │ vegan:     40/100 (40.0%)
+08:40:40 │ INFO │ 
+── Silver (Text) set set class counts ─────────────
+08:40:40 │ INFO │  keto:  36722/225602 (16.3%)
+08:40:40 │ INFO │ vegan:  16378/225602 ( 7.3%)
+08:40:40 │ INFO │ 
+── Silver (Image) set set class counts ─────────────
+08:40:40 │ INFO │  keto:  28518/72485 (39.3%)
+08:40:40 │ INFO │ vegan:  12577/72485 (17.4%)
+08:40:40 │ INFO │    ✅ Data loading completed in 108.9s
+08:40:40 │ INFO │    📊 Data Loading - Memory: 17.3% used (4919 MB / 32015 MB)
+08:40:40 │ INFO │ System/Container total memory: 31.3 GB
+08:40:40 │ INFO │ Safe memory limit (100%): 31.3 GB
+08:40:40 │ INFO │    🧹 Data Loading: Memory optimization
+08:40:41 │ INFO │       ├─ Container/System memory: 31.3 GB total
+08:40:41 │ INFO │       ├─ Currently used: 17.3% (4919 MB)
+08:40:41 │ INFO │       ✅ Memory usage normal: 17.3%
+08:40:41 │ INFO │ 
+🔤 STAGE 2: TEXT FEATURE PROCESSING
+08:40:41 │ INFO │    ├─ Vectorizer config: {'min_df': 2, 'ngram_range': (1, 3), 'max_features': 50000, 'sublinear_tf': True}
+08:40:41 │ INFO │ USDA carb table loaded: 303 distinct food descriptions
+08:40:41 │ INFO │    ├─ USDA examples added: 303
+08:40:54 │ INFO │    📊 Text Processing Results:
+08:40:54 │ INFO │    ├─ Vocabulary size: 50,000
+08:40:54 │ INFO │    ├─ Silver features: (225905, 50000)
+08:40:54 │ INFO │    ├─ Gold features: (100, 50000)
+08:40:54 │ INFO │    ├─ Sparsity: 0.0%
+08:40:54 │ INFO │    └─ Memory usage: ~103 MB
+08:40:54 │ INFO │    ✅ Text processing completed in 13.4s
+08:40:54 │ INFO │    📊 Text Processing - Memory: 18.0% used (5136 MB / 32015 MB)
+08:40:54 │ INFO │ System/Container total memory: 31.3 GB
+08:40:54 │ INFO │ Safe memory limit (100%): 31.3 GB
+08:40:54 │ INFO │    🧹 Text Processing: Memory optimization
+08:40:54 │ INFO │       ├─ Container/System memory: 31.3 GB total
+08:40:54 │ INFO │       ├─ Currently used: 18.0% (5137 MB)
+08:40:55 │ INFO │       ✅ Memory usage normal: 18.3%
+08:40:55 │ INFO │ 
+🖼️  STAGE 3: IMAGE FEATURE PROCESSING
+08:40:55 │ INFO │    ├─ Processing 72,485 sampled silver images
+08:40:55 │ INFO │    └─ Processing 66 gold images
+08:40:55 │ INFO │ 
+🧠 EMBEDDINGS-FIRST IMAGE PIPELINE: silver
+08:40:55 │ INFO │    Target directory: dataset/arg_max/images/silver
+08:40:55 │ INFO │    Total samples: 72,485
+08:40:55 │ INFO │    Force recompute: False
+08:40:55 │ INFO │    🔍 Searching for existing embeddings...
+08:40:55 │ INFO │    ❌ No suitable embeddings found - proceeding with downloads
+08:40:55 │ INFO │ 
+   📋 DOWNLOAD PLANNING:
+08:40:57 │ INFO │       📊 Analysis Results:
+08:40:57 │ INFO │       ├─ Total samples: 72,485
+08:40:57 │ INFO │       ├─ Existing valid files: 0
+08:40:57 │ INFO │       ├─ Corrupted files cleaned: 0
+08:40:57 │ INFO │       ├─ Valid URLs to download: 72,485
+08:40:57 │ INFO │       ├─ Missing URLs: 0
+08:40:57 │ INFO │       └─ Invalid URLs: 0
+08:40:57 │ WARNING │    ⚠️  Large download required: 72,485 files
+08:40:57 │ INFO │       └─ This may take a while...
+08:40:57 │ INFO │    🎯 Download Queue: 72,485 files
+08:40:57 │ INFO │ 
+   🚀 EXECUTING ROBUST DOWNLOADS:
