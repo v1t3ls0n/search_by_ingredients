@@ -2212,6 +2212,17 @@ def is_ingredient_keto(ingredient: str) -> bool:
         if _pipeline_state['vectorizer']:
             try:
                 X = _pipeline_state['vectorizer'].transform([norm])
+                
+                # Check if model expects more features (was trained with images)
+                if hasattr(model, 'n_features_in_'):
+                    expected_features = model.n_features_in_
+                    actual_features = X.shape[1]
+                    
+                    if expected_features > actual_features:
+                        # Model expects images, pad with zeros using combine_features
+                        padding = np.zeros((1, 2048), dtype=np.float32)
+                        X = combine_features(X, padding)
+                
                 prob = model.predict_proba(X)[0, 1]
             except Exception as e:
                 log.warning("Vectorizer failed: %s. Falling back to rules.", e)
@@ -2275,6 +2286,17 @@ def is_ingredient_vegan(ingredient: str) -> bool:
         if _pipeline_state['vectorizer']:
             try:
                 X = _pipeline_state['vectorizer'].transform([normalized])
+                
+                # Check if model expects more features (was trained with images)
+                if hasattr(model, 'n_features_in_'):
+                    expected_features = model.n_features_in_
+                    actual_features = X.shape[1]
+                    
+                    if expected_features > actual_features:
+                        # Model expects images, pad with zeros using combine_features
+                        padding = np.zeros((1, 2048), dtype=np.float32)
+                        X = combine_features(X, padding)
+                
                 prob = model.predict_proba(X)[0, 1]
             except Exception as e:
                 log.warning(
@@ -6938,6 +6960,7 @@ def main():
                 log.info("🚫 EXITING WITHOUT RESTART")
                 sys.exit(1)
 
+      
         elif args.ground_truth:
             log.info(f"📊 Evaluating on ground truth: {args.ground_truth}")
 
@@ -6946,106 +6969,226 @@ def main():
                 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 
                 if not os.path.exists(args.ground_truth):
-                    log.error(
-                        f"❌ Ground truth file not found: {args.ground_truth}")
-                    log.info("💡 Make sure to run the command with:")
-                    log.info(
-                        "   python diet_classifiers.py --ground_truth /usr/src/data/ground_truth_sample.csv")
+                    log.error(f"❌ Ground truth file not found: {args.ground_truth}")
                     sys.exit(1)
 
                 df = pd.read_csv(args.ground_truth)
                 log.info(f"✅ Loaded ground truth with {len(df)} rows")
+                
+                # DEBUG: Log the column names to see what we have
+                log.info(f"📋 Available columns: {list(df.columns)}")
+                
+                # Detect the correct label column names
+                def detect_label_columns(df):
+                    """Detect the correct label column names."""
+                    keto_cols = [col for col in df.columns if 'keto' in col.lower()]
+                    vegan_cols = [col for col in df.columns if 'vegan' in col.lower()]
+                    
+                    keto_col = keto_cols[0] if keto_cols else None
+                    vegan_col = vegan_cols[0] if vegan_cols else None
+                    
+                    log.info(f"🏷️  Detected label columns: keto={keto_col}, vegan={vegan_col}")
+                    return keto_col, vegan_col
+                
+                keto_col, vegan_col = detect_label_columns(df)
+                
+                if not keto_col or not vegan_col:
+                    log.error(f"❌ Missing required label columns. Found: keto={keto_col}, vegan={vegan_col}")
+                    sys.exit(1)
 
-                # Resolve model/vectorizer paths with fallback logic
+                # Load models and vectorizer
                 model_path = CFG.artifacts_dir / "models.pkl"
                 vec_path = CFG.artifacts_dir / "vectorizer.pkl"
 
                 if not (model_path.exists() and vec_path.exists()):
-                    log.warning(
-                        "⚠️ Models not found in artifacts/ — trying pretrained_models/ fallback...")
+                    log.warning("⚠️ Models not found in artifacts/ — trying pretrained_models/ fallback...")
                     model_path = CFG.pretrained_models_dir / "models.pkl"
                     vec_path = CFG.pretrained_models_dir / "vectorizer.pkl"
 
                 if not (model_path.exists() and vec_path.exists()):
-                    log.error(
-                        "❌ No trained models found in artifacts/ or pretrained_models/.")
+                    log.error("❌ No trained models found.")
                     sys.exit(1)
 
                 with open(vec_path, 'rb') as f:
                     vectorizer = pickle.load(f)
-                log.info(f"✅ Loaded vectorizer from {vec_path}")
-
                 with open(model_path, 'rb') as f:
                     models = pickle.load(f)
-                log.info(f"✅ Loaded models from {model_path}")
 
-                # Vectorize ingredients
-                texts = df['ingredients'].fillna("").tolist()
-                X = vectorizer.transform(texts)
-                log.info("✅ Transformed text to feature vectors")
+                log.info(f"✅ Loaded models and vectorizer")
 
-                # Predict
-                results = []
+                # Check model types and determine if we need images
+                models_need_images = {}
+                for task, model in models.items():
+                    # Check if model expects images
+                    if hasattr(model, 'ensemble_type'):
+                        needs_images = model.ensemble_type in ['best_two', 'smart_ensemble', 'both']
+                        log.info(f"   ├─ {task} is ensemble type: {model.ensemble_type} (needs images: {needs_images})")
+                    elif hasattr(model, 'n_features_in_'):
+                        # Text models: ~6000-50000 features, Image: 2048, Combined: text+2048
+                        n_features = model.n_features_in_
+                        needs_images = n_features == 2048 or n_features > 50000
+                        log.info(f"   ├─ {task} expects {n_features} features (needs images: {needs_images})")
+                    else:
+                        needs_images = False
+                        log.info(f"   ├─ {task} type unknown, assuming text-only")
+                    
+                    models_need_images[task] = needs_images
+
+                # Prepare text features (always needed)
+                df['clean'] = df['ingredients'].fillna("").apply(lambda x: normalise(x))
+                X_text = vectorizer.transform(df['clean'])
+                log.info(f"✅ Text features shape: {X_text.shape}")
+
+                # Make predictions
+                log.info(f"\n🔮 Making predictions...")
+                
+                # Check if models need images and prepare padding
+                need_images = {}
+                for task, model in models.items():
+                    if hasattr(model, 'n_features_in_'):
+                        need_images[task] = model.n_features_in_ > X_text.shape[1]
+                        if need_images[task]:
+                            log.info(f"   ├─ {task} model needs images: expects {model.n_features_in_} features, text has {X_text.shape[1]}")
+                
+                # Pre-create padded features for all rows if needed
+                if any(need_images.values()):
+                    log.info(f"   ├─ Creating combined features with zero padding for images")
+                    # Create padding matrix for all rows
+                    padding_matrix = np.zeros((len(df), 2048), dtype=np.float32)
+                    X_combined = combine_features(X_text, padding_matrix)
+
+                # Store predictions
+                predictions = {
+                    'keto_pred': [],
+                    'vegan_pred': [],
+                    'keto_true': [],
+                    'vegan_true': []
+                }
+                
                 for idx, row in df.iterrows():
-                    res = {"index": idx}
+                    row_idx = df.index.get_loc(idx)
+                    
+                    # Store true labels
+                    predictions['keto_true'].append(row[keto_col])
+                    predictions['vegan_true'].append(row[vegan_col])
+                    
                     for task in ["keto", "vegan"]:
                         if task in models:
-                            pred = models[task].predict(X[idx])
-                            res[f"{task}_pred"] = int(pred[0])
+                            model = models[task]
+                            
+                            try:
+                                # Select appropriate features
+                                if need_images.get(task, False):
+                                    # Use pre-combined features
+                                    features = X_combined[row_idx:row_idx+1]
+                                else:
+                                    # Text-only
+                                    features = X_text[row_idx:row_idx+1]
+                                
+                                # Predict - handle both predict and predict_proba
+                                if hasattr(model, 'predict_proba'):
+                                    prob = model.predict_proba(features)[0, 1]
+                                    pred = 1 if prob >= 0.5 else 0
+                                else:
+                                    pred = model.predict(features)[0]
+                                
+                                predictions[f'{task}_pred'].append(int(pred))
+                                
+                            except Exception as e:
+                                log.error(f"   ❌ Prediction failed for {task} row {idx}: {str(e)[:50]}...")
+                                predictions[f'{task}_pred'].append(0)  # Default to 0 instead of None
                         else:
-                            res[f"{task}_pred"] = None
-                            log.warning(
-                                f"⚠️ No trained model found for task: {task}")
-                    res["keto_true"] = row.get("label_keto")
-                    res["vegan_true"] = row.get("label_vegan")
-                    results.append(res)
+                            log.warning(f"   ⚠️ No model found for {task}")
+                            predictions[f'{task}_pred'].append(0)  # Default to 0 instead of None
 
-                results_df = pd.DataFrame(results)
-
+                # Convert to DataFrame for easier handling
+                results_df = pd.DataFrame(predictions)
+                
+                # Add original data
+                results_df['ingredients'] = df['ingredients'].values
+                results_df['index'] = df.index
+                
                 # Save predictions
                 pred_path = CFG.artifacts_dir / "ground_truth_predictions.csv"
                 results_df.to_csv(pred_path, index=False)
                 log.info(f"✅ Saved predictions to {pred_path}")
 
-                # Evaluation metrics
+                # Calculate metrics - with safe handling of data types
+                log.info(f"\n📊 Calculating evaluation metrics...")
+                
+                def safe_int_conversion(series):
+                    """Safely convert series to int, handling None values."""
+                    return pd.to_numeric(series, errors='coerce').fillna(0).astype(int)
+                
                 metrics = []
                 for task in ["keto", "vegan"]:
                     true_col = f"{task}_true"
                     pred_col = f"{task}_pred"
 
-                    if true_col in results_df.columns:
-                        y_true = results_df[true_col].dropna().astype(int)
-                        y_pred = results_df[pred_col].dropna().astype(int)
+                    if true_col in results_df.columns and pred_col in results_df.columns:
+                        # Safely convert to integers
+                        y_true = safe_int_conversion(results_df[true_col])
+                        y_pred = safe_int_conversion(results_df[pred_col])
+                        
+                        # Remove any rows where true labels are still invalid (originally NaN)
+                        valid_mask = (y_true >= 0) & (y_true <= 1)
+                        y_true_valid = y_true[valid_mask]
+                        y_pred_valid = y_pred[valid_mask]
+                        
+                        if len(y_true_valid) > 0:
+                            try:
+                                acc = accuracy_score(y_true_valid, y_pred_valid)
+                                prec = precision_score(y_true_valid, y_pred_valid, zero_division=0)
+                                rec = recall_score(y_true_valid, y_pred_valid, zero_division=0)
+                                f1 = f1_score(y_true_valid, y_pred_valid, zero_division=0)
+                                n_samples = len(y_true_valid)
 
-                        acc = accuracy_score(y_true, y_pred)
-                        prec = precision_score(y_true, y_pred, zero_division=0)
-                        rec = recall_score(y_true, y_pred, zero_division=0)
-                        f1 = f1_score(y_true, y_pred, zero_division=0)
+                                metrics.append({
+                                    "task": task,
+                                    "accuracy": acc,
+                                    "precision": prec,
+                                    "recall": rec,
+                                    "f1_score": f1,
+                                    "n_samples": n_samples
+                                })
 
-                        metrics.append({
-                            "task": task,
-                            "accuracy": acc,
-                            "precision": prec,
-                            "recall": rec,
-                            "f1_score": f1
-                        })
-
-                        log.info(
-                            f"✔️  {task.capitalize()} - ACC: {acc:.3f} | PREC: {prec:.3f} | REC: {rec:.3f} | F1: {f1:.3f}")
+                                log.info(f"✅ {task.upper()} - ACC: {acc:.3f} | PREC: {prec:.3f} | "
+                                        f"REC: {rec:.3f} | F1: {f1:.3f} | N: {n_samples}")
+                                
+                                # Log confusion matrix
+                                cm = confusion_matrix(y_true_valid, y_pred_valid)
+                                log.info(f"   Confusion Matrix for {task}:")
+                                log.info(f"   [[TN={cm[0,0]}, FP={cm[0,1]}],")
+                                log.info(f"    [FN={cm[1,0]}, TP={cm[1,1]}]]")
+                                
+                            except Exception as e:
+                                log.error(f"❌ Metric calculation failed for {task}: {e}")
+                        else:
+                            log.warning(f"⚠️ No valid samples for {task} evaluation")
 
                 # Save metrics
-                metrics_df = pd.DataFrame(metrics)
-                metrics_path = CFG.artifacts_dir / "eval_metrics.csv"
-                metrics_df.to_csv(metrics_path, index=False)
-                log.info(f"📈 Saved evaluation metrics to {metrics_path}")
+                if metrics:
+                    metrics_df = pd.DataFrame(metrics)
+                    metrics_path = CFG.artifacts_dir / "eval_metrics.csv"
+                    metrics_df.to_csv(metrics_path, index=False)
+                    log.info(f"📈 Saved evaluation metrics to {metrics_path}")
+                    
+                    # Print summary
+                    log.info(f"\n🎯 EVALUATION SUMMARY:")
+                    for metric in metrics:
+                        log.info(f"   {metric['task'].upper()}: F1={metric['f1_score']:.3f}, "
+                                f"Accuracy={metric['accuracy']:.3f}, Samples={metric['n_samples']}")
+                else:
+                    log.warning(f"⚠️ No metrics calculated")
 
             except Exception as e:
                 log.error(f"❌ Ground truth evaluation failed: {e}")
+                import traceback
+                log.error(f"Full traceback:\n{traceback.format_exc()}")
                 sys.exit(1)
 
-            except Exception as e:
-                log.error(f"❌ Ground truth evaluation failed: {e}")
-                sys.exit(1)
+
+
 
         elif args.predict:
             log.info(f"🔮 Running prediction on unlabeled data: {args.predict}")
@@ -7095,12 +7238,29 @@ def main():
 
                 # Predict
                 preds = []
+                
+                # Check if models need images
+                for task, model in models.items():
+                    if hasattr(model, 'n_features_in_') and model.n_features_in_ > X.shape[1]:
+                        log.info(f"   ├─ {task} model expects {model.n_features_in_} features (text has {X.shape[1]})")
+                
                 for idx, row in df.iterrows():
                     row_preds = {"index": idx,
                                  "ingredients": row["ingredients"]}
                     for task in ["keto", "vegan"]:
                         if task in models:
-                            pred = models[task].predict(X[idx])
+                            model = models[task]
+                            
+                            # Get features for this row
+                            features = X[idx]
+                            
+                            # Check if model needs images
+                            if hasattr(model, 'n_features_in_') and model.n_features_in_ > X.shape[1]:
+                                # Pad with zeros for images
+                                padding = np.zeros((1, 2048), dtype=np.float32)
+                                features = combine_features(features.reshape(1, -1), padding)
+                            
+                            pred = model.predict(features)
                             row_preds[f"{task}_pred"] = int(pred[0])
                         else:
                             row_preds[f"{task}_pred"] = None

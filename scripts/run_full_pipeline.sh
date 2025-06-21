@@ -15,9 +15,6 @@ fi
 # Create timestamp for this run
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
-# Since artifacts is shared, create logs subdirectory there
-echo "📁 Setting up logging in shared artifacts directory..."
-mkdir -p artifacts/logs
 
 # Define log file in shared directory
 LOG_FILE="artifacts/logs/pipeline_run_${TIMESTAMP}.log"
@@ -35,8 +32,25 @@ log() {
     echo "============================================"
 } > "$LOG_FILE"
 
+
+
+
 log "🛠️  Shutting down existing containers..."
 docker-compose down 2>&1 | tee -a "$LOG_FILE"
+
+echo "📁 Delete old artifacts from earlier run" 
+# Delete old artifacts directory if it exists
+if [ -d "artifacts" ]; then
+    echo "🗑️  Removing old artifacts directory..."
+    rm -rf artifacts
+fi
+
+
+# Since artifacts is shared, create logs subdirectory there
+echo "📁 Setting up logging in shared artifacts directory..."
+mkdir -p artifacts/logs
+
+
 
 log "🛠️  Building Docker images..."
 docker-compose build 2>&1 | tee -a "$LOG_FILE"
