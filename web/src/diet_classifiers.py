@@ -6960,7 +6960,7 @@ def main():
                 log.info("🚫 EXITING WITHOUT RESTART")
                 sys.exit(1)
 
-      
+            
         elif args.ground_truth:
             log.info(f"📊 Evaluating on ground truth: {args.ground_truth}")
 
@@ -6996,14 +6996,16 @@ def main():
                     log.error(f"❌ Missing required label columns. Found: keto={keto_col}, vegan={vegan_col}")
                     sys.exit(1)
 
-                # Load models and vectorizer
+                # Load models, vectorizer, and metadata
                 model_path = CFG.artifacts_dir / "models.pkl"
                 vec_path = CFG.artifacts_dir / "vectorizer.pkl"
+                metadata_path = CFG.artifacts_dir / "model_metadata.json"
 
                 if not (model_path.exists() and vec_path.exists()):
                     log.warning("⚠️ Models not found in artifacts/ — trying pretrained_models/ fallback...")
                     model_path = CFG.pretrained_models_dir / "models.pkl"
                     vec_path = CFG.pretrained_models_dir / "vectorizer.pkl"
+                    metadata_path = CFG.pretrained_models_dir / "model_metadata.json"
 
                 if not (model_path.exists() and vec_path.exists()):
                     log.error("❌ No trained models found.")
@@ -7014,50 +7016,126 @@ def main():
                 with open(model_path, 'rb') as f:
                     models = pickle.load(f)
 
+                # Load metadata if available
+                model_metadata = {}
+                if metadata_path.exists():
+                    try:
+                        with open(metadata_path, 'r') as f:
+                            model_metadata = json.load(f)
+                        log.info(f"✅ Loaded model metadata")
+                    except Exception as e:
+                        log.warning(f"⚠️ Could not load model metadata: {e}")
+
                 log.info(f"✅ Loaded models and vectorizer")
 
-                # Check model types and determine if we need images
-                models_need_images = {}
-                for task, model in models.items():
-                    # Check if model expects images
-                    if hasattr(model, 'ensemble_type'):
-                        needs_images = model.ensemble_type in ['best_two', 'smart_ensemble', 'both']
-                        log.info(f"   ├─ {task} is ensemble type: {model.ensemble_type} (needs images: {needs_images})")
-                    elif hasattr(model, 'n_features_in_'):
-                        # Text models: ~6000-50000 features, Image: 2048, Combined: text+2048
-                        n_features = model.n_features_in_
-                        needs_images = n_features == 2048 or n_features > 50000
-                        log.info(f"   ├─ {task} expects {n_features} features (needs images: {needs_images})")
-                    else:
-                        needs_images = False
-                        log.info(f"   ├─ {task} type unknown, assuming text-only")
+                # Analyze model requirements based on metadata or inspection
+                def analyze_model_requirements(task, model, metadata):
+                    """Determine what features a model needs."""
+                    if task in metadata:
+                        requires_images = metadata[task].get('requires_images', False)
+                        model_type = metadata[task].get('type', 'unknown')
+                        log.info(f"   ├─ {task} ({model_type}): requires_images={requires_images}")
+                        return requires_images, model_type
                     
-                    models_need_images[task] = needs_images
+                    # Fallback: inspect model properties
+                    if hasattr(model, 'ensemble_type'):
+                        # It's an ensemble model
+                        requires_images = model.ensemble_type in ['best_two', 'smart_ensemble', 'both']
+                        log.info(f"   ├─ {task} (ensemble): {model.ensemble_type}, requires_images={requires_images}")
+                        return requires_images, 'ensemble'
+                    elif hasattr(model, 'n_features_in_'):
+                        # Check feature count: text=~6341, image=2048, combined=~8389
+                        n_features = model.n_features_in_
+                        if n_features <= 2048:
+                            requires_images = True  # Image-only model
+                            model_type = 'image'
+                        elif n_features > 7000:  # Combined features
+                            requires_images = True
+                            model_type = 'both'
+                        else:
+                            requires_images = False  # Text-only model
+                            model_type = 'text'
+                        log.info(f"   ├─ {task} ({model_type}): {n_features} features, requires_images={requires_images}")
+                        return requires_images, model_type
+                    else:
+                        log.info(f"   ├─ {task} (unknown): assuming text-only")
+                        return False, 'text'
+
+                # Analyze all models
+                model_requirements = {}
+                for task, model in models.items():
+                    requires_images, model_type = analyze_model_requirements(task, model, model_metadata)
+                    model_requirements[task] = {
+                        'requires_images': requires_images,
+                        'type': model_type
+                    }
 
                 # Prepare text features (always needed)
                 df['clean'] = df['ingredients'].fillna("").apply(lambda x: normalise(x))
                 X_text = vectorizer.transform(df['clean'])
                 log.info(f"✅ Text features shape: {X_text.shape}")
 
+                # Prepare image features if needed
+                need_any_images = any(req['requires_images'] for req in model_requirements.values())
+                X_combined = None
+                
+                if need_any_images:
+                    log.info(f"\n🖼️  Some models require images - preparing combined features...")
+                    
+                    # Check if we have photos and can process them
+                    if 'photo_url' in df.columns:
+                        df_with_photos = filter_photo_rows(df)
+                        log.info(f"   ├─ Rows with valid photo URLs: {len(df_with_photos)}")
+                        
+                        if len(df_with_photos) > 10:  # Only process if we have enough images
+                            try:
+                                # Quick image processing for evaluation
+                                eval_img_dir = CFG.image_dir / "eval_temp"
+                                downloaded_indices = _download_images(
+                                    df_with_photos, eval_img_dir, max_workers=8, force=False
+                                )
+                                
+                                if downloaded_indices:
+                                    df_downloaded = df_with_photos.loc[downloaded_indices]
+                                    embeddings, valid_indices = build_image_embeddings(
+                                        df_downloaded, "eval_temp", force=False
+                                    )
+                                    
+                                    if embeddings is not None and embeddings.size > 0:
+                                        log.info(f"   ✅ Extracted embeddings for {len(valid_indices)} images")
+                                        
+                                        # Create combined features
+                                        padding_matrix = np.zeros((len(df), 2048), dtype=np.float32)
+                                        
+                                        # Fill in actual embeddings where available
+                                        for i, idx in enumerate(valid_indices):
+                                            if idx in df.index:
+                                                row_pos = df.index.get_loc(idx)
+                                                padding_matrix[row_pos] = embeddings[i]
+                                        
+                                        X_combined = combine_features(X_text, padding_matrix)
+                                        log.info(f"   ✅ Created combined features: {X_combined.shape}")
+                                    
+                                # Cleanup
+                                if eval_img_dir.exists():
+                                    import shutil
+                                    try:
+                                        shutil.rmtree(eval_img_dir)
+                                    except:
+                                        pass
+                                        
+                            except Exception as e:
+                                log.warning(f"   ⚠️  Image processing failed: {e}")
+                    
+                    # Fallback: zero-padded features
+                    if X_combined is None:
+                        log.info(f"   ├─ Using zero-padded image features (no real images)")
+                        padding_matrix = np.zeros((len(df), 2048), dtype=np.float32)
+                        X_combined = combine_features(X_text, padding_matrix)
+
                 # Make predictions
                 log.info(f"\n🔮 Making predictions...")
                 
-                # Check if models need images and prepare padding
-                need_images = {}
-                for task, model in models.items():
-                    if hasattr(model, 'n_features_in_'):
-                        need_images[task] = model.n_features_in_ > X_text.shape[1]
-                        if need_images[task]:
-                            log.info(f"   ├─ {task} model needs images: expects {model.n_features_in_} features, text has {X_text.shape[1]}")
-                
-                # Pre-create padded features for all rows if needed
-                if any(need_images.values()):
-                    log.info(f"   ├─ Creating combined features with zero padding for images")
-                    # Create padding matrix for all rows
-                    padding_matrix = np.zeros((len(df), 2048), dtype=np.float32)
-                    X_combined = combine_features(X_text, padding_matrix)
-
-                # Store predictions
                 predictions = {
                     'keto_pred': [],
                     'vegan_pred': [],
@@ -7075,45 +7153,55 @@ def main():
                     for task in ["keto", "vegan"]:
                         if task in models:
                             model = models[task]
+                            requirements = model_requirements[task]
                             
                             try:
-                                # Select appropriate features
-                                if need_images.get(task, False):
-                                    # Use pre-combined features
-                                    features = X_combined[row_idx:row_idx+1]
+                                # Select appropriate features based on model requirements
+                                if requirements['requires_images']:
+                                    if X_combined is not None:
+                                        features = X_combined[row_idx:row_idx+1]
+                                        log.debug(f"   Using combined features for {task}")
+                                    else:
+                                        log.warning(f"   Model {task} needs images but none available - using text only")
+                                        features = X_text[row_idx:row_idx+1]
                                 else:
-                                    # Text-only
                                     features = X_text[row_idx:row_idx+1]
+                                    log.debug(f"   Using text features for {task}")
                                 
-                                # Predict - handle both predict and predict_proba
+                                # Make prediction
                                 if hasattr(model, 'predict_proba'):
-                                    prob = model.predict_proba(features)[0, 1]
-                                    pred = 1 if prob >= 0.5 else 0
+                                    try:
+                                        prob = model.predict_proba(features)[0, 1]
+                                        pred = 1 if prob >= 0.5 else 0
+                                    except Exception as e:
+                                        log.warning(f"   predict_proba failed for {task}: {e}")
+                                        pred = model.predict(features)[0]
                                 else:
                                     pred = model.predict(features)[0]
                                 
                                 predictions[f'{task}_pred'].append(int(pred))
                                 
+                                # Log first few predictions for debugging
+                                if idx < 3:
+                                    log.debug(f"   Row {idx} {task}: pred={pred}, true={row[keto_col if task=='keto' else vegan_col]}")
+                                
                             except Exception as e:
-                                log.error(f"   ❌ Prediction failed for {task} row {idx}: {str(e)[:50]}...")
-                                predictions[f'{task}_pred'].append(0)  # Default to 0 instead of None
+                                log.error(f"   ❌ Prediction failed for {task} row {idx}: {str(e)[:60]}...")
+                                predictions[f'{task}_pred'].append(0)  # Default to negative
                         else:
                             log.warning(f"   ⚠️ No model found for {task}")
-                            predictions[f'{task}_pred'].append(0)  # Default to 0 instead of None
+                            predictions[f'{task}_pred'].append(0)
 
-                # Convert to DataFrame for easier handling
+                # Convert to DataFrame and save
                 results_df = pd.DataFrame(predictions)
-                
-                # Add original data
                 results_df['ingredients'] = df['ingredients'].values
                 results_df['index'] = df.index
                 
-                # Save predictions
                 pred_path = CFG.artifacts_dir / "ground_truth_predictions.csv"
                 results_df.to_csv(pred_path, index=False)
                 log.info(f"✅ Saved predictions to {pred_path}")
 
-                # Calculate metrics - with safe handling of data types
+                # Calculate metrics with safe handling
                 log.info(f"\n📊 Calculating evaluation metrics...")
                 
                 def safe_int_conversion(series):
@@ -7130,7 +7218,7 @@ def main():
                         y_true = safe_int_conversion(results_df[true_col])
                         y_pred = safe_int_conversion(results_df[pred_col])
                         
-                        # Remove any rows where true labels are still invalid (originally NaN)
+                        # Remove any rows where true labels are invalid
                         valid_mask = (y_true >= 0) & (y_true <= 1)
                         y_true_valid = y_true[valid_mask]
                         y_pred_valid = y_pred[valid_mask]
@@ -7155,11 +7243,19 @@ def main():
                                 log.info(f"✅ {task.upper()} - ACC: {acc:.3f} | PREC: {prec:.3f} | "
                                         f"REC: {rec:.3f} | F1: {f1:.3f} | N: {n_samples}")
                                 
-                                # Log confusion matrix
+                                # Log confusion matrix for debugging
                                 cm = confusion_matrix(y_true_valid, y_pred_valid)
                                 log.info(f"   Confusion Matrix for {task}:")
                                 log.info(f"   [[TN={cm[0,0]}, FP={cm[0,1]}],")
                                 log.info(f"    [FN={cm[1,0]}, TP={cm[1,1]}]]")
+                                
+                                # Additional debugging: show prediction distribution
+                                pos_preds = (y_pred_valid == 1).sum()
+                                neg_preds = (y_pred_valid == 0).sum()
+                                pos_true = (y_true_valid == 1).sum()
+                                neg_true = (y_true_valid == 0).sum()
+                                log.info(f"   Predictions: {pos_preds} positive, {neg_preds} negative")
+                                log.info(f"   True labels: {pos_true} positive, {neg_true} negative")
                                 
                             except Exception as e:
                                 log.error(f"❌ Metric calculation failed for {task}: {e}")
@@ -7186,7 +7282,6 @@ def main():
                 import traceback
                 log.error(f"Full traceback:\n{traceback.format_exc()}")
                 sys.exit(1)
-
 
 
 

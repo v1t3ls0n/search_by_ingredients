@@ -1,6 +1,6 @@
-*.npy
-embeddings/
-embeddings_backup/
+# *.npy
+# embeddings/
+# embeddings_backup/
 dataset/
 
 
@@ -11,7 +11,6 @@ __pycache__/
 *.py[cod]
 # artifacts/
 *$py.class
-*.csv
 allrecipes.parquet
 best_params.json
 # C extensions

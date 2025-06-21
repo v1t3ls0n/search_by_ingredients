@@ -1,18 +1,18 @@
 Pipeline Run Summary
 ===================
 Start Time: #1 transferring dockerfile: 32B done
-End Time: שבת 21 יונ 2025 08:00:28
+End Time: שבת 21 יונ 2025 08:10:05
 Log Files:
-  - Main log: artifacts/logs/pipeline_run_20250621_075501.log
-  - Container log: artifacts/logs/container_pipeline_20250621_075501.log
+  - Main log: artifacts/logs/pipeline_run_20250621_080428.log
+  - Container log: artifacts/logs/container_pipeline_20250621_080428.log
   - Python Source Code Logger:  artifacts/logs/diet_classifiers.py.log (if exists)
 
 Artifacts Generated:
--rw-r--r-- 1 Studio 197121     101 יונ 21 08:00 artifacts/eval_metrics.csv
--rw-r--r-- 1 Studio 197121   21821 יונ 21 08:00 artifacts/ground_truth_predictions.csv
--rw-r--r-- 1 Studio 197121  336776 יונ 21 08:00 artifacts/models.pkl
--rw-r--r-- 1 Studio 197121 1207558 יונ 21 07:58 artifacts/silver_extended.csv
--rw-r--r-- 1 Studio 197121  280215 יונ 21 08:00 artifacts/vectorizer.pkl
+-rw-r--r-- 1 Studio 197121     133 יונ 21 08:09 artifacts/eval_metrics.csv
+-rw-r--r-- 1 Studio 197121   21821 יונ 21 08:09 artifacts/ground_truth_predictions.csv
+-rw-r--r-- 1 Studio 197121  336776 יונ 21 08:09 artifacts/models.pkl
+-rw-r--r-- 1 Studio 197121 1207558 יונ 21 08:07 artifacts/silver_extended.csv
+-rw-r--r-- 1 Studio 197121  280215 יונ 21 08:09 artifacts/vectorizer.pkl
 No model artifacts yet
 
 Container Final Status:

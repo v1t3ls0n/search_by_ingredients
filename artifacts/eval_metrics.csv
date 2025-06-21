@@ -1,0 +1,3 @@
+task,accuracy,precision,recall,f1_score,n_samples
+keto,0.62,0.6666666666666666,0.1,0.17391304347826086,100
+vegan,0.6,0.0,0.0,0.0,100
