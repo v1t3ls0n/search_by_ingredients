@@ -200,3 +200,827 @@ Process ID: 160
 08:40:57 │ INFO │    🎯 Download Queue: 72,485 files
 08:40:57 │ INFO │ 
    🚀 EXECUTING ROBUST DOWNLOADS:
+09:24:27 │ INFO │ 
+   📊 DOWNLOAD RESULTS:
+09:24:27 │ INFO │    ├─ Processing time: 2612.0s
+09:24:27 │ INFO │    ├─ Files downloaded: 72,419
+09:24:27 │ INFO │    ├─ Files skipped: 0
+09:24:27 │ INFO │    ├─ Download failures: 66
+09:24:27 │ INFO │    ├─ Retry attempts: 0
+09:24:27 │ INFO │    └─ Data transferred: 2188.8 MB
+09:24:27 │ INFO │ 
+   📈 SUCCESS METRICS:
+09:24:27 │ INFO │    ├─ Download success rate: 99.9%
+09:24:27 │ INFO │    ├─ Total valid files: 72,419
+09:24:27 │ INFO │    ├─ Coverage: 99.9% of dataset
+09:24:27 │ INFO │    ✅ ACCEPTABLE COVERAGE - proceeding with 72,419 images
+09:24:27 │ INFO │       ├─ Silver download: 72,419/72,485 successful
+09:24:27 │ INFO │ 
+🧠 EMBEDDINGS-FIRST IMAGE PIPELINE: gold
+09:24:27 │ INFO │    Target directory: dataset/arg_max/images/gold
+09:24:27 │ INFO │    Total samples: 66
+09:24:27 │ INFO │    Force recompute: False
+09:24:27 │ INFO │    🔍 Searching for existing embeddings...
+09:24:27 │ INFO │    ❌ No suitable embeddings found - proceeding with downloads
+09:24:27 │ INFO │ 
+   📋 DOWNLOAD PLANNING:
+09:24:27 │ INFO │       📊 Analysis Results:
+09:24:27 │ INFO │       ├─ Total samples: 66
+09:24:27 │ INFO │       ├─ Existing valid files: 0
+09:24:27 │ INFO │       ├─ Corrupted files cleaned: 0
+09:24:27 │ INFO │       ├─ Valid URLs to download: 66
+09:24:27 │ INFO │       ├─ Missing URLs: 0
+09:24:27 │ INFO │       └─ Invalid URLs: 0
+09:24:27 │ WARNING │    ⚠️  Large download required: 66 files
+09:24:27 │ INFO │       └─ This may take a while...
+09:24:28 │ INFO │    🎯 Download Queue: 66 files
+09:24:28 │ INFO │ 
+   🚀 EXECUTING ROBUST DOWNLOADS:
+09:24:30 │ INFO │ 
+   📊 DOWNLOAD RESULTS:
+09:24:30 │ INFO │    ├─ Processing time: 2.6s
+09:24:30 │ INFO │    ├─ Files downloaded: 66
+09:24:30 │ INFO │    ├─ Files skipped: 0
+09:24:30 │ INFO │    ├─ Download failures: 0
+09:24:30 │ INFO │    ├─ Retry attempts: 0
+09:24:30 │ INFO │    └─ Data transferred: 2.1 MB
+09:24:30 │ INFO │ 
+   📈 SUCCESS METRICS:
+09:24:30 │ INFO │    ├─ Download success rate: 100.0%
+09:24:30 │ INFO │    ├─ Total valid files: 66
+09:24:30 │ INFO │    ├─ Coverage: 100.0% of dataset
+09:24:30 │ INFO │    ✅ ACCEPTABLE COVERAGE - proceeding with 66 images
+09:24:30 │ INFO │       ├─ Gold download: 66/66 successful
+09:24:30 │ INFO │       ├─ Silver filtered: 72,419 with valid images
+09:24:30 │ INFO │       ├─ Gold filtered: 66 with valid images
+09:24:30 │ INFO │       ├─ Gold filtered: 66 with valid images
+09:24:30 │ INFO │ System/Container total memory: 31.3 GB
+09:24:30 │ INFO │ Safe memory limit (90%): 28.1 GB
+09:24:30 │ INFO │    💾 Memory-aware batch size: 16 (based on 28.1 GB available)
+09:24:30 │ INFO │ 
+🧠 IMAGE EMBEDDING EXTRACTION: silver
+09:24:30 │ INFO │    Target images: 72,419
+09:24:30 │ INFO │    Mode: silver
+09:24:30 │ INFO │    Force recomputation: False
+09:24:30 │ INFO │    🔧 Device Configuration:
+09:24:30 │ INFO │    ├─ Device: cpu
+09:24:30 │ INFO │    ├─ CUDA available: False
+09:24:30 │ INFO │ 
+   🤖 Model Setup:
+09:26:28 │ INFO │ 
+   ⚡ Feature Extraction:
+09:26:28 │ INFO │    💾 Using memory-mapped storage for 72,419 images
+09:26:28 │ INFO │    📊 Processing Configuration:
+09:26:28 │ INFO │    ├─ Batch size: 16
+09:26:28 │ INFO │    ├─ Total batches: 4527
+09:26:28 │ INFO │    ├─ Memory-mapped: True
+09:26:28 │ INFO │    └─ Starting from batch: 0
+09:26:31 │ INFO │    💾 Checkpoint saved at batch 10
+09:26:35 │ INFO │    💾 Checkpoint saved at batch 20
+09:26:39 │ INFO │    💾 Checkpoint saved at batch 30
+09:26:42 │ INFO │    💾 Checkpoint saved at batch 40
+09:26:46 │ INFO │    💾 Checkpoint saved at batch 50
+09:26:49 │ INFO │    💾 Checkpoint saved at batch 60
+09:26:53 │ INFO │    💾 Checkpoint saved at batch 70
+09:26:56 │ INFO │    💾 Checkpoint saved at batch 80
+09:27:00 │ INFO │    💾 Checkpoint saved at batch 90
+09:27:03 │ INFO │    💾 Checkpoint saved at batch 100
+09:27:07 │ INFO │    💾 Checkpoint saved at batch 110
+09:27:10 │ INFO │    💾 Checkpoint saved at batch 120
+09:27:13 │ INFO │    💾 Checkpoint saved at batch 130
+09:27:17 │ INFO │    💾 Checkpoint saved at batch 140
+09:27:20 │ INFO │    💾 Checkpoint saved at batch 150
+09:27:24 │ INFO │    💾 Checkpoint saved at batch 160
+09:27:28 │ INFO │    💾 Checkpoint saved at batch 170
+09:27:31 │ INFO │    💾 Checkpoint saved at batch 180
+09:27:35 │ INFO │    💾 Checkpoint saved at batch 190
+09:27:38 │ INFO │    💾 Checkpoint saved at batch 200
+09:27:42 │ INFO │    💾 Checkpoint saved at batch 210
+09:27:45 │ INFO │    💾 Checkpoint saved at batch 220
+09:27:49 │ INFO │    💾 Checkpoint saved at batch 230
+09:27:52 │ INFO │    💾 Checkpoint saved at batch 240
+09:27:56 │ INFO │    💾 Checkpoint saved at batch 250
+09:27:59 │ INFO │    💾 Checkpoint saved at batch 260
+09:28:03 │ INFO │    💾 Checkpoint saved at batch 270
+09:28:06 │ INFO │    💾 Checkpoint saved at batch 280
+09:28:10 │ INFO │    💾 Checkpoint saved at batch 290
+09:28:13 │ INFO │    💾 Checkpoint saved at batch 300
+09:28:17 │ INFO │    💾 Checkpoint saved at batch 310
+09:28:20 │ INFO │    💾 Checkpoint saved at batch 320
+09:28:24 │ INFO │    💾 Checkpoint saved at batch 330
+09:28:27 │ INFO │    💾 Checkpoint saved at batch 340
+09:28:31 │ INFO │    💾 Checkpoint saved at batch 350
+09:28:34 │ INFO │    💾 Checkpoint saved at batch 360
+09:28:38 │ INFO │    💾 Checkpoint saved at batch 370
+09:28:41 │ INFO │    💾 Checkpoint saved at batch 380
+09:28:45 │ INFO │    💾 Checkpoint saved at batch 390
+09:28:48 │ INFO │    💾 Checkpoint saved at batch 400
+09:28:52 │ INFO │    💾 Checkpoint saved at batch 410
+09:28:55 │ INFO │    💾 Checkpoint saved at batch 420
+09:28:59 │ INFO │    💾 Checkpoint saved at batch 430
+09:29:02 │ INFO │    💾 Checkpoint saved at batch 440
+09:29:06 │ INFO │    💾 Checkpoint saved at batch 450
+09:29:09 │ INFO │    💾 Checkpoint saved at batch 460
+09:29:13 │ INFO │    💾 Checkpoint saved at batch 470
+09:29:16 │ INFO │    💾 Checkpoint saved at batch 480
+09:29:20 │ INFO │    💾 Checkpoint saved at batch 490
+09:29:23 │ INFO │    💾 Checkpoint saved at batch 500
+09:29:27 │ INFO │    💾 Checkpoint saved at batch 510
+09:29:30 │ INFO │    💾 Checkpoint saved at batch 520
+09:29:34 │ INFO │    💾 Checkpoint saved at batch 530
+09:29:37 │ INFO │    💾 Checkpoint saved at batch 540
+09:29:41 │ INFO │    💾 Checkpoint saved at batch 550
+09:29:44 │ INFO │    💾 Checkpoint saved at batch 560
+09:29:48 │ INFO │    💾 Checkpoint saved at batch 570
+09:29:51 │ INFO │    💾 Checkpoint saved at batch 580
+09:29:55 │ INFO │    💾 Checkpoint saved at batch 590
+09:29:58 │ INFO │    💾 Checkpoint saved at batch 600
+09:30:02 │ INFO │    💾 Checkpoint saved at batch 610
+09:30:05 │ INFO │    💾 Checkpoint saved at batch 620
+09:30:09 │ INFO │    💾 Checkpoint saved at batch 630
+09:30:12 │ INFO │    💾 Checkpoint saved at batch 640
+09:30:16 │ INFO │    💾 Checkpoint saved at batch 650
+09:30:19 │ INFO │    💾 Checkpoint saved at batch 660
+09:30:23 │ INFO │    💾 Checkpoint saved at batch 670
+09:30:27 │ INFO │    💾 Checkpoint saved at batch 680
+09:30:30 │ INFO │    💾 Checkpoint saved at batch 690
+09:30:33 │ INFO │    💾 Checkpoint saved at batch 700
+09:30:37 │ INFO │    💾 Checkpoint saved at batch 710
+09:30:41 │ INFO │    💾 Checkpoint saved at batch 720
+09:30:44 │ INFO │    💾 Checkpoint saved at batch 730
+09:30:48 │ INFO │    💾 Checkpoint saved at batch 740
+09:30:51 │ INFO │    💾 Checkpoint saved at batch 750
+09:30:55 │ INFO │    💾 Checkpoint saved at batch 760
+09:30:58 │ INFO │    💾 Checkpoint saved at batch 770
+09:31:02 │ INFO │    💾 Checkpoint saved at batch 780
+09:31:05 │ INFO │    💾 Checkpoint saved at batch 790
+09:31:08 │ INFO │    💾 Checkpoint saved at batch 800
+09:31:12 │ INFO │    💾 Checkpoint saved at batch 810
+09:31:15 │ INFO │    💾 Checkpoint saved at batch 820
+09:31:19 │ INFO │    💾 Checkpoint saved at batch 830
+09:31:23 │ INFO │    💾 Checkpoint saved at batch 840
+09:31:26 │ INFO │    💾 Checkpoint saved at batch 850
+09:31:30 │ INFO │    💾 Checkpoint saved at batch 860
+09:31:33 │ INFO │    💾 Checkpoint saved at batch 870
+09:31:37 │ INFO │    💾 Checkpoint saved at batch 880
+09:31:40 │ INFO │    💾 Checkpoint saved at batch 890
+09:31:44 │ INFO │    💾 Checkpoint saved at batch 900
+09:31:47 │ INFO │    💾 Checkpoint saved at batch 910
+09:31:51 │ INFO │    💾 Checkpoint saved at batch 920
+09:31:54 │ INFO │    💾 Checkpoint saved at batch 930
+09:31:58 │ INFO │    💾 Checkpoint saved at batch 940
+09:32:01 │ INFO │    💾 Checkpoint saved at batch 950
+09:32:05 │ INFO │    💾 Checkpoint saved at batch 960
+09:32:08 │ INFO │    💾 Checkpoint saved at batch 970
+09:32:12 │ INFO │    💾 Checkpoint saved at batch 980
+09:32:15 │ INFO │    💾 Checkpoint saved at batch 990
+09:32:19 │ INFO │    💾 Checkpoint saved at batch 1000
+09:32:22 │ INFO │    💾 Checkpoint saved at batch 1010
+09:32:26 │ INFO │    💾 Checkpoint saved at batch 1020
+09:32:29 │ INFO │    💾 Checkpoint saved at batch 1030
+09:32:33 │ INFO │    💾 Checkpoint saved at batch 1040
+09:32:36 │ INFO │    💾 Checkpoint saved at batch 1050
+09:32:40 │ INFO │    💾 Checkpoint saved at batch 1060
+09:32:43 │ INFO │    💾 Checkpoint saved at batch 1070
+09:32:47 │ INFO │    💾 Checkpoint saved at batch 1080
+09:32:50 │ INFO │    💾 Checkpoint saved at batch 1090
+09:32:54 │ INFO │    💾 Checkpoint saved at batch 1100
+09:32:57 │ INFO │    💾 Checkpoint saved at batch 1110
+09:33:01 │ INFO │    💾 Checkpoint saved at batch 1120
+09:33:04 │ INFO │    💾 Checkpoint saved at batch 1130
+09:33:08 │ INFO │    💾 Checkpoint saved at batch 1140
+09:33:11 │ INFO │    💾 Checkpoint saved at batch 1150
+09:33:14 │ INFO │    💾 Checkpoint saved at batch 1160
+09:33:18 │ INFO │    💾 Checkpoint saved at batch 1170
+09:33:21 │ INFO │    💾 Checkpoint saved at batch 1180
+09:33:25 │ INFO │    💾 Checkpoint saved at batch 1190
+09:33:28 │ INFO │    💾 Checkpoint saved at batch 1200
+09:33:32 │ INFO │    💾 Checkpoint saved at batch 1210
+09:33:35 │ INFO │    💾 Checkpoint saved at batch 1220
+09:33:39 │ INFO │    💾 Checkpoint saved at batch 1230
+09:33:42 │ INFO │    💾 Checkpoint saved at batch 1240
+09:33:46 │ INFO │    💾 Checkpoint saved at batch 1250
+09:33:49 │ INFO │    💾 Checkpoint saved at batch 1260
+09:33:52 │ INFO │    💾 Checkpoint saved at batch 1270
+09:33:56 │ INFO │    💾 Checkpoint saved at batch 1280
+09:33:59 │ INFO │    💾 Checkpoint saved at batch 1290
+09:34:03 │ INFO │    💾 Checkpoint saved at batch 1300
+09:34:06 │ INFO │    💾 Checkpoint saved at batch 1310
+09:34:10 │ INFO │    💾 Checkpoint saved at batch 1320
+09:34:13 │ INFO │    💾 Checkpoint saved at batch 1330
+09:34:16 │ INFO │    💾 Checkpoint saved at batch 1340
+09:34:20 │ INFO │    💾 Checkpoint saved at batch 1350
+09:34:23 │ INFO │    💾 Checkpoint saved at batch 1360
+09:34:27 │ INFO │    💾 Checkpoint saved at batch 1370
+09:34:30 │ INFO │    💾 Checkpoint saved at batch 1380
+09:34:34 │ INFO │    💾 Checkpoint saved at batch 1390
+09:34:37 │ INFO │    💾 Checkpoint saved at batch 1400
+09:34:41 │ INFO │    💾 Checkpoint saved at batch 1410
+09:34:44 │ INFO │    💾 Checkpoint saved at batch 1420
+09:34:48 │ INFO │    💾 Checkpoint saved at batch 1430
+09:34:51 │ INFO │    💾 Checkpoint saved at batch 1440
+09:34:54 │ INFO │    💾 Checkpoint saved at batch 1450
+09:34:58 │ INFO │    💾 Checkpoint saved at batch 1460
+09:35:01 │ INFO │    💾 Checkpoint saved at batch 1470
+09:35:05 │ INFO │    💾 Checkpoint saved at batch 1480
+09:35:08 │ INFO │    💾 Checkpoint saved at batch 1490
+09:35:12 │ INFO │    💾 Checkpoint saved at batch 1500
+09:35:15 │ INFO │    💾 Checkpoint saved at batch 1510
+09:35:18 │ INFO │    💾 Checkpoint saved at batch 1520
+09:35:22 │ INFO │    💾 Checkpoint saved at batch 1530
+09:35:25 │ INFO │    💾 Checkpoint saved at batch 1540
+09:35:29 │ INFO │    💾 Checkpoint saved at batch 1550
+09:35:32 │ INFO │    💾 Checkpoint saved at batch 1560
+09:35:36 │ INFO │    💾 Checkpoint saved at batch 1570
+09:35:39 │ INFO │    💾 Checkpoint saved at batch 1580
+09:35:43 │ INFO │    💾 Checkpoint saved at batch 1590
+09:35:46 │ INFO │    💾 Checkpoint saved at batch 1600
+09:35:49 │ INFO │    💾 Checkpoint saved at batch 1610
+09:35:53 │ INFO │    💾 Checkpoint saved at batch 1620
+09:35:56 │ INFO │    💾 Checkpoint saved at batch 1630
+09:36:00 │ INFO │    💾 Checkpoint saved at batch 1640
+09:36:03 │ INFO │    💾 Checkpoint saved at batch 1650
+09:36:07 │ INFO │    💾 Checkpoint saved at batch 1660
+09:36:10 │ INFO │    💾 Checkpoint saved at batch 1670
+09:36:14 │ INFO │    💾 Checkpoint saved at batch 1680
+09:36:17 │ INFO │    💾 Checkpoint saved at batch 1690
+09:36:20 │ INFO │    💾 Checkpoint saved at batch 1700
+09:36:24 │ INFO │    💾 Checkpoint saved at batch 1710
+09:36:27 │ INFO │    💾 Checkpoint saved at batch 1720
+09:36:31 │ INFO │    💾 Checkpoint saved at batch 1730
+09:36:34 │ INFO │    💾 Checkpoint saved at batch 1740
+09:36:38 │ INFO │    💾 Checkpoint saved at batch 1750
+09:36:41 │ INFO │    💾 Checkpoint saved at batch 1760
+09:36:45 │ INFO │    💾 Checkpoint saved at batch 1770
+09:36:48 │ INFO │    💾 Checkpoint saved at batch 1780
+09:36:52 │ INFO │    💾 Checkpoint saved at batch 1790
+09:36:55 │ INFO │    💾 Checkpoint saved at batch 1800
+09:36:58 │ INFO │    💾 Checkpoint saved at batch 1810
+09:37:02 │ INFO │    💾 Checkpoint saved at batch 1820
+09:37:05 │ INFO │    💾 Checkpoint saved at batch 1830
+09:37:09 │ INFO │    💾 Checkpoint saved at batch 1840
+09:37:12 │ INFO │    💾 Checkpoint saved at batch 1850
+09:37:16 │ INFO │    💾 Checkpoint saved at batch 1860
+09:37:19 │ INFO │    💾 Checkpoint saved at batch 1870
+09:37:23 │ INFO │    💾 Checkpoint saved at batch 1880
+09:37:26 │ INFO │    💾 Checkpoint saved at batch 1890
+09:37:29 │ INFO │    💾 Checkpoint saved at batch 1900
+09:37:33 │ INFO │    💾 Checkpoint saved at batch 1910
+09:37:36 │ INFO │    💾 Checkpoint saved at batch 1920
+09:37:40 │ INFO │    💾 Checkpoint saved at batch 1930
+09:37:43 │ INFO │    💾 Checkpoint saved at batch 1940
+09:37:47 │ INFO │    💾 Checkpoint saved at batch 1950
+09:37:50 │ INFO │    💾 Checkpoint saved at batch 1960
+09:37:53 │ INFO │    💾 Checkpoint saved at batch 1970
+09:37:57 │ INFO │    💾 Checkpoint saved at batch 1980
+09:38:00 │ INFO │    💾 Checkpoint saved at batch 1990
+09:38:04 │ INFO │    💾 Checkpoint saved at batch 2000
+09:38:07 │ INFO │    💾 Checkpoint saved at batch 2010
+09:38:11 │ INFO │    💾 Checkpoint saved at batch 2020
+09:38:14 │ INFO │    💾 Checkpoint saved at batch 2030
+09:38:18 │ INFO │    💾 Checkpoint saved at batch 2040
+09:38:21 │ INFO │    💾 Checkpoint saved at batch 2050
+09:38:24 │ INFO │    💾 Checkpoint saved at batch 2060
+09:38:28 │ INFO │    💾 Checkpoint saved at batch 2070
+09:38:31 │ INFO │    💾 Checkpoint saved at batch 2080
+09:38:35 │ INFO │    💾 Checkpoint saved at batch 2090
+09:38:38 │ INFO │    💾 Checkpoint saved at batch 2100
+09:38:42 │ INFO │    💾 Checkpoint saved at batch 2110
+09:38:45 │ INFO │    💾 Checkpoint saved at batch 2120
+09:38:48 │ INFO │    💾 Checkpoint saved at batch 2130
+09:38:52 │ INFO │    💾 Checkpoint saved at batch 2140
+09:38:55 │ INFO │    💾 Checkpoint saved at batch 2150
+09:38:59 │ INFO │    💾 Checkpoint saved at batch 2160
+09:39:02 │ INFO │    💾 Checkpoint saved at batch 2170
+09:39:06 │ INFO │    💾 Checkpoint saved at batch 2180
+09:39:09 │ INFO │    💾 Checkpoint saved at batch 2190
+09:39:13 │ INFO │    💾 Checkpoint saved at batch 2200
+09:39:16 │ INFO │    💾 Checkpoint saved at batch 2210
+09:39:19 │ INFO │    💾 Checkpoint saved at batch 2220
+09:39:23 │ INFO │    💾 Checkpoint saved at batch 2230
+09:39:26 │ INFO │    💾 Checkpoint saved at batch 2240
+09:39:30 │ INFO │    💾 Checkpoint saved at batch 2250
+09:39:33 │ INFO │    💾 Checkpoint saved at batch 2260
+09:39:37 │ INFO │    💾 Checkpoint saved at batch 2270
+09:39:40 │ INFO │    💾 Checkpoint saved at batch 2280
+09:39:44 │ INFO │    💾 Checkpoint saved at batch 2290
+09:39:47 │ INFO │    💾 Checkpoint saved at batch 2300
+09:39:50 │ INFO │    💾 Checkpoint saved at batch 2310
+09:39:54 │ INFO │    💾 Checkpoint saved at batch 2320
+09:39:57 │ INFO │    💾 Checkpoint saved at batch 2330
+09:40:01 │ INFO │    💾 Checkpoint saved at batch 2340
+09:40:04 │ INFO │    💾 Checkpoint saved at batch 2350
+09:40:08 │ INFO │    💾 Checkpoint saved at batch 2360
+09:40:11 │ INFO │    💾 Checkpoint saved at batch 2370
+09:40:14 │ INFO │    💾 Checkpoint saved at batch 2380
+09:40:18 │ INFO │    💾 Checkpoint saved at batch 2390
+09:40:21 │ INFO │    💾 Checkpoint saved at batch 2400
+09:40:25 │ INFO │    💾 Checkpoint saved at batch 2410
+09:40:28 │ INFO │    💾 Checkpoint saved at batch 2420
+09:40:32 │ INFO │    💾 Checkpoint saved at batch 2430
+09:40:35 │ INFO │    💾 Checkpoint saved at batch 2440
+09:40:38 │ INFO │    💾 Checkpoint saved at batch 2450
+09:40:42 │ INFO │    💾 Checkpoint saved at batch 2460
+09:40:45 │ INFO │    💾 Checkpoint saved at batch 2470
+09:40:49 │ INFO │    💾 Checkpoint saved at batch 2480
+09:40:52 │ INFO │    💾 Checkpoint saved at batch 2490
+09:40:56 │ INFO │    💾 Checkpoint saved at batch 2500
+09:40:59 │ INFO │    💾 Checkpoint saved at batch 2510
+09:41:03 │ INFO │    💾 Checkpoint saved at batch 2520
+09:41:06 │ INFO │    💾 Checkpoint saved at batch 2530
+09:41:09 │ INFO │    💾 Checkpoint saved at batch 2540
+09:41:13 │ INFO │    💾 Checkpoint saved at batch 2550
+09:41:16 │ INFO │    💾 Checkpoint saved at batch 2560
+09:41:20 │ INFO │    💾 Checkpoint saved at batch 2570
+09:41:23 │ INFO │    💾 Checkpoint saved at batch 2580
+09:41:27 │ INFO │    💾 Checkpoint saved at batch 2590
+09:41:30 │ INFO │    💾 Checkpoint saved at batch 2600
+09:41:34 │ INFO │    💾 Checkpoint saved at batch 2610
+09:41:37 │ INFO │    💾 Checkpoint saved at batch 2620
+09:41:40 │ INFO │    💾 Checkpoint saved at batch 2630
+09:41:44 │ INFO │    💾 Checkpoint saved at batch 2640
+09:41:47 │ INFO │    💾 Checkpoint saved at batch 2650
+09:41:51 │ INFO │    💾 Checkpoint saved at batch 2660
+09:41:54 │ INFO │    💾 Checkpoint saved at batch 2670
+09:41:58 │ INFO │    💾 Checkpoint saved at batch 2680
+09:42:01 │ INFO │    💾 Checkpoint saved at batch 2690
+09:42:05 │ INFO │    💾 Checkpoint saved at batch 2700
+09:42:08 │ INFO │    💾 Checkpoint saved at batch 2710
+09:42:11 │ INFO │    💾 Checkpoint saved at batch 2720
+09:42:15 │ INFO │    💾 Checkpoint saved at batch 2730
+09:42:18 │ INFO │    💾 Checkpoint saved at batch 2740
+09:42:22 │ INFO │    💾 Checkpoint saved at batch 2750
+09:42:25 │ INFO │    💾 Checkpoint saved at batch 2760
+09:42:29 │ INFO │    💾 Checkpoint saved at batch 2770
+09:42:32 │ INFO │    💾 Checkpoint saved at batch 2780
+09:42:35 │ INFO │    💾 Checkpoint saved at batch 2790
+09:42:39 │ INFO │    💾 Checkpoint saved at batch 2800
+09:42:42 │ INFO │    💾 Checkpoint saved at batch 2810
+09:42:46 │ INFO │    💾 Checkpoint saved at batch 2820
+09:42:49 │ INFO │    💾 Checkpoint saved at batch 2830
+09:42:53 │ INFO │    💾 Checkpoint saved at batch 2840
+09:42:56 │ INFO │    💾 Checkpoint saved at batch 2850
+09:43:00 │ INFO │    💾 Checkpoint saved at batch 2860
+09:43:03 │ INFO │    💾 Checkpoint saved at batch 2870
+09:43:07 │ INFO │    💾 Checkpoint saved at batch 2880
+09:43:10 │ INFO │    💾 Checkpoint saved at batch 2890
+09:43:14 │ INFO │    💾 Checkpoint saved at batch 2900
+09:43:17 │ INFO │    💾 Checkpoint saved at batch 2910
+09:43:20 │ INFO │    💾 Checkpoint saved at batch 2920
+09:43:24 │ INFO │    💾 Checkpoint saved at batch 2930
+09:43:27 │ INFO │    💾 Checkpoint saved at batch 2940
+09:43:31 │ INFO │    💾 Checkpoint saved at batch 2950
+09:43:34 │ INFO │    💾 Checkpoint saved at batch 2960
+09:43:38 │ INFO │    💾 Checkpoint saved at batch 2970
+09:43:41 │ INFO │    💾 Checkpoint saved at batch 2980
+09:43:45 │ INFO │    💾 Checkpoint saved at batch 2990
+09:43:48 │ INFO │    💾 Checkpoint saved at batch 3000
+09:43:52 │ INFO │    💾 Checkpoint saved at batch 3010
+09:43:55 │ INFO │    💾 Checkpoint saved at batch 3020
+09:43:59 │ INFO │    💾 Checkpoint saved at batch 3030
+09:44:02 │ INFO │    💾 Checkpoint saved at batch 3040
+09:44:06 │ INFO │    💾 Checkpoint saved at batch 3050
+09:44:09 │ INFO │    💾 Checkpoint saved at batch 3060
+09:44:13 │ INFO │    💾 Checkpoint saved at batch 3070
+09:44:16 │ INFO │    💾 Checkpoint saved at batch 3080
+09:44:19 │ INFO │    💾 Checkpoint saved at batch 3090
+09:44:23 │ INFO │    💾 Checkpoint saved at batch 3100
+09:44:26 │ INFO │    💾 Checkpoint saved at batch 3110
+09:44:30 │ INFO │    💾 Checkpoint saved at batch 3120
+09:44:33 │ INFO │    💾 Checkpoint saved at batch 3130
+09:44:37 │ INFO │    💾 Checkpoint saved at batch 3140
+09:44:40 │ INFO │    💾 Checkpoint saved at batch 3150
+09:44:44 │ INFO │    💾 Checkpoint saved at batch 3160
+09:44:47 │ INFO │    💾 Checkpoint saved at batch 3170
+09:44:50 │ INFO │    💾 Checkpoint saved at batch 3180
+09:44:54 │ INFO │    💾 Checkpoint saved at batch 3190
+09:44:58 │ INFO │    💾 Checkpoint saved at batch 3200
+09:45:01 │ INFO │    💾 Checkpoint saved at batch 3210
+09:45:04 │ INFO │    💾 Checkpoint saved at batch 3220
+09:45:08 │ INFO │    💾 Checkpoint saved at batch 3230
+09:45:11 │ INFO │    💾 Checkpoint saved at batch 3240
+09:45:15 │ INFO │    💾 Checkpoint saved at batch 3250
+09:45:18 │ INFO │    💾 Checkpoint saved at batch 3260
+09:45:22 │ INFO │    💾 Checkpoint saved at batch 3270
+09:45:25 │ INFO │    💾 Checkpoint saved at batch 3280
+09:45:29 │ INFO │    💾 Checkpoint saved at batch 3290
+09:45:32 │ INFO │    💾 Checkpoint saved at batch 3300
+09:45:36 │ INFO │    💾 Checkpoint saved at batch 3310
+09:45:39 │ INFO │    💾 Checkpoint saved at batch 3320
+09:45:43 │ INFO │    💾 Checkpoint saved at batch 3330
+09:45:46 │ INFO │    💾 Checkpoint saved at batch 3340
+09:45:49 │ INFO │    💾 Checkpoint saved at batch 3350
+09:45:53 │ INFO │    💾 Checkpoint saved at batch 3360
+09:45:56 │ INFO │    💾 Checkpoint saved at batch 3370
+09:46:00 │ INFO │    💾 Checkpoint saved at batch 3380
+09:46:03 │ INFO │    💾 Checkpoint saved at batch 3390
+09:46:07 │ INFO │    💾 Checkpoint saved at batch 3400
+09:46:10 │ INFO │    💾 Checkpoint saved at batch 3410
+09:46:14 │ INFO │    💾 Checkpoint saved at batch 3420
+09:46:17 │ INFO │    💾 Checkpoint saved at batch 3430
+09:46:21 │ INFO │    💾 Checkpoint saved at batch 3440
+09:46:24 │ INFO │    💾 Checkpoint saved at batch 3450
+09:46:28 │ INFO │    💾 Checkpoint saved at batch 3460
+09:46:31 │ INFO │    💾 Checkpoint saved at batch 3470
+09:46:35 │ INFO │    💾 Checkpoint saved at batch 3480
+09:46:38 │ INFO │    💾 Checkpoint saved at batch 3490
+09:46:41 │ INFO │    💾 Checkpoint saved at batch 3500
+09:46:45 │ INFO │    💾 Checkpoint saved at batch 3510
+09:46:48 │ INFO │    💾 Checkpoint saved at batch 3520
+09:46:52 │ INFO │    💾 Checkpoint saved at batch 3530
+09:46:55 │ INFO │    💾 Checkpoint saved at batch 3540
+09:46:59 │ INFO │    💾 Checkpoint saved at batch 3550
+09:47:02 │ INFO │    💾 Checkpoint saved at batch 3560
+09:47:06 │ INFO │    💾 Checkpoint saved at batch 3570
+09:47:09 │ INFO │    💾 Checkpoint saved at batch 3580
+09:47:12 │ INFO │    💾 Checkpoint saved at batch 3590
+09:47:16 │ INFO │    💾 Checkpoint saved at batch 3600
+09:47:19 │ INFO │    💾 Checkpoint saved at batch 3610
+09:47:23 │ INFO │    💾 Checkpoint saved at batch 3620
+09:47:26 │ INFO │    💾 Checkpoint saved at batch 3630
+09:47:30 │ INFO │    💾 Checkpoint saved at batch 3640
+09:47:33 │ INFO │    💾 Checkpoint saved at batch 3650
+09:47:37 │ INFO │    💾 Checkpoint saved at batch 3660
+09:47:40 │ INFO │    💾 Checkpoint saved at batch 3670
+09:47:44 │ INFO │    💾 Checkpoint saved at batch 3680
+09:47:47 │ INFO │    💾 Checkpoint saved at batch 3690
+09:47:51 │ INFO │    💾 Checkpoint saved at batch 3700
+09:47:54 │ INFO │    💾 Checkpoint saved at batch 3710
+09:47:58 │ INFO │    💾 Checkpoint saved at batch 3720
+09:48:01 │ INFO │    💾 Checkpoint saved at batch 3730
+09:48:05 │ INFO │    💾 Checkpoint saved at batch 3740
+09:48:08 │ INFO │    💾 Checkpoint saved at batch 3750
+09:48:11 │ INFO │    💾 Checkpoint saved at batch 3760
+09:48:15 │ INFO │    💾 Checkpoint saved at batch 3770
+09:48:19 │ INFO │    💾 Checkpoint saved at batch 3780
+09:48:22 │ INFO │    💾 Checkpoint saved at batch 3790
+09:48:25 │ INFO │    💾 Checkpoint saved at batch 3800
+09:48:29 │ INFO │    💾 Checkpoint saved at batch 3810
+09:48:32 │ INFO │    💾 Checkpoint saved at batch 3820
+09:48:36 │ INFO │    💾 Checkpoint saved at batch 3830
+09:48:39 │ INFO │    💾 Checkpoint saved at batch 3840
+09:48:43 │ INFO │    💾 Checkpoint saved at batch 3850
+09:48:46 │ INFO │    💾 Checkpoint saved at batch 3860
+09:48:50 │ INFO │    💾 Checkpoint saved at batch 3870
+09:48:53 │ INFO │    💾 Checkpoint saved at batch 3880
+09:48:57 │ INFO │    💾 Checkpoint saved at batch 3890
+09:49:00 │ INFO │    💾 Checkpoint saved at batch 3900
+09:49:03 │ INFO │    💾 Checkpoint saved at batch 3910
+09:49:07 │ INFO │    💾 Checkpoint saved at batch 3920
+09:49:10 │ INFO │    💾 Checkpoint saved at batch 3930
+09:49:14 │ INFO │    💾 Checkpoint saved at batch 3940
+09:49:17 │ INFO │    💾 Checkpoint saved at batch 3950
+09:49:21 │ INFO │    💾 Checkpoint saved at batch 3960
+09:49:24 │ INFO │    💾 Checkpoint saved at batch 3970
+09:49:28 │ INFO │    💾 Checkpoint saved at batch 3980
+09:49:31 │ INFO │    💾 Checkpoint saved at batch 3990
+09:49:35 │ INFO │    💾 Checkpoint saved at batch 4000
+09:49:38 │ INFO │    💾 Checkpoint saved at batch 4010
+09:49:41 │ INFO │    💾 Checkpoint saved at batch 4020
+09:49:45 │ INFO │    💾 Checkpoint saved at batch 4030
+09:49:48 │ INFO │    💾 Checkpoint saved at batch 4040
+09:49:52 │ INFO │    💾 Checkpoint saved at batch 4050
+09:49:55 │ INFO │    💾 Checkpoint saved at batch 4060
+09:49:59 │ INFO │    💾 Checkpoint saved at batch 4070
+09:50:02 │ INFO │    💾 Checkpoint saved at batch 4080
+09:50:06 │ INFO │    💾 Checkpoint saved at batch 4090
+09:50:09 │ INFO │    💾 Checkpoint saved at batch 4100
+09:50:13 │ INFO │    💾 Checkpoint saved at batch 4110
+09:50:16 │ INFO │    💾 Checkpoint saved at batch 4120
+09:50:20 │ INFO │    💾 Checkpoint saved at batch 4130
+09:50:23 │ INFO │    💾 Checkpoint saved at batch 4140
+09:50:26 │ INFO │    💾 Checkpoint saved at batch 4150
+09:50:30 │ INFO │    💾 Checkpoint saved at batch 4160
+09:50:33 │ INFO │    💾 Checkpoint saved at batch 4170
+09:50:37 │ INFO │    💾 Checkpoint saved at batch 4180
+09:50:40 │ INFO │    💾 Checkpoint saved at batch 4190
+09:50:44 │ INFO │    💾 Checkpoint saved at batch 4200
+09:50:47 │ INFO │    💾 Checkpoint saved at batch 4210
+09:50:51 │ INFO │    💾 Checkpoint saved at batch 4220
+09:50:54 │ INFO │    💾 Checkpoint saved at batch 4230
+09:50:58 │ INFO │    💾 Checkpoint saved at batch 4240
+09:51:01 │ INFO │    💾 Checkpoint saved at batch 4250
+09:51:05 │ INFO │    💾 Checkpoint saved at batch 4260
+09:51:08 │ INFO │    💾 Checkpoint saved at batch 4270
+09:51:12 │ INFO │    💾 Checkpoint saved at batch 4280
+09:51:15 │ INFO │    💾 Checkpoint saved at batch 4290
+09:51:19 │ INFO │    💾 Checkpoint saved at batch 4300
+09:51:22 │ INFO │    💾 Checkpoint saved at batch 4310
+09:51:25 │ INFO │    💾 Checkpoint saved at batch 4320
+09:51:29 │ INFO │    💾 Checkpoint saved at batch 4330
+09:51:32 │ INFO │    💾 Checkpoint saved at batch 4340
+09:51:36 │ INFO │    💾 Checkpoint saved at batch 4350
+09:51:39 │ INFO │    💾 Checkpoint saved at batch 4360
+09:51:43 │ INFO │    💾 Checkpoint saved at batch 4370
+09:51:46 │ INFO │    💾 Checkpoint saved at batch 4380
+09:51:50 │ INFO │    💾 Checkpoint saved at batch 4390
+09:51:53 │ INFO │    💾 Checkpoint saved at batch 4400
+09:51:57 │ INFO │    💾 Checkpoint saved at batch 4410
+09:52:00 │ INFO │    💾 Checkpoint saved at batch 4420
+09:52:04 │ INFO │    💾 Checkpoint saved at batch 4430
+09:52:07 │ INFO │    💾 Checkpoint saved at batch 4440
+09:52:10 │ INFO │    💾 Checkpoint saved at batch 4450
+09:52:14 │ INFO │    💾 Checkpoint saved at batch 4460
+09:52:17 │ INFO │    💾 Checkpoint saved at batch 4470
+09:52:21 │ INFO │    💾 Checkpoint saved at batch 4480
+09:52:24 │ INFO │    💾 Checkpoint saved at batch 4490
+09:52:28 │ INFO │    💾 Checkpoint saved at batch 4500
+09:52:31 │ INFO │    💾 Checkpoint saved at batch 4510
+09:52:35 │ INFO │    💾 Checkpoint saved at batch 4520
+09:52:37 │ INFO │ 
+   📊 Extraction Results:
+09:52:37 │ INFO │    ├─ Successfully processed: 72,419
+09:52:37 │ INFO │    ├─ Missing images: 0
+09:52:37 │ INFO │    ├─ Failed processing: 0
+09:52:37 │ INFO │    ├─ Memory cleanups: 0
+09:52:37 │ INFO │    └─ Total time: 1686.5s
+09:52:37 │ INFO │    Converting memory-mapped array to regular array...
+09:52:38 │ INFO │       ├─ Quality filtering: 57935/72419 images kept
+09:52:39 │ INFO │    🏁 Embedding extraction complete!
+09:52:39 │ INFO │       ├─ Aligning silver DataFrame: 72,419 → 57,935 rows
+09:52:40 │ INFO │       ├─ Silver embeddings: (57935, 2048)
+09:52:40 │ INFO │       ├─ Silver DataFrame: 57,935 rows
+09:52:40 │ INFO │ System/Container total memory: 31.3 GB
+09:52:40 │ INFO │ Safe memory limit (90%): 28.1 GB
+09:52:40 │ INFO │    💾 Memory-aware batch size: 16 (based on 28.1 GB available)
+09:52:40 │ INFO │ 
+🧠 IMAGE EMBEDDING EXTRACTION: gold
+09:52:40 │ INFO │    Target images: 66
+09:52:40 │ INFO │    Mode: gold
+09:52:40 │ INFO │    Force recomputation: False
+09:52:40 │ INFO │    🔧 Device Configuration:
+09:52:40 │ INFO │    ├─ Device: cpu
+09:52:40 │ INFO │    ├─ CUDA available: False
+09:52:40 │ INFO │ 
+   🤖 Model Setup:
+09:52:40 │ INFO │ 
+   ⚡ Feature Extraction:
+09:52:40 │ INFO │    📊 Processing Configuration:
+09:52:40 │ INFO │    ├─ Batch size: 16
+09:52:40 │ INFO │    ├─ Total batches: 5
+09:52:41 │ INFO │    ├─ Memory-mapped: False
+09:52:41 │ INFO │    └─ Starting from batch: 0
+09:52:42 │ INFO │ 
+   📊 Extraction Results:
+09:52:42 │ INFO │    ├─ Successfully processed: 66
+09:52:42 │ INFO │    ├─ Missing images: 0
+09:52:42 │ INFO │    ├─ Failed processing: 0
+09:52:42 │ INFO │    ├─ Memory cleanups: 0
+09:52:42 │ INFO │    └─ Total time: 2.3s
+09:52:42 │ INFO │       ├─ Quality filtering: 52/66 images kept
+09:52:42 │ INFO │    🏁 Embedding extraction complete!
+09:52:42 │ INFO │       ├─ Aligning gold DataFrame: 66 → 52 rows
+09:52:42 │ INFO │       ├─ Gold embeddings: (52, 2048)
+09:52:42 │ INFO │       ├─ Gold DataFrame: 52 rows
+09:52:42 │ INFO │       ├─ Saved gold embeddings to embeddings/img_gold.pkl
+09:52:43 │ INFO │       ├─ Saved silver embeddings to embeddings/img_silver.pkl
+09:52:43 │ INFO │    🔍 DIMENSION VERIFICATION:
+09:52:43 │ INFO │    ├─ Silver embeddings: (57935, 2048)
+09:52:43 │ INFO │    ├─ Silver DataFrame: 57,935 rows
+09:52:43 │ INFO │    ├─ Gold embeddings: (52, 2048)
+09:52:43 │ INFO │    └─ Gold DataFrame: 52 rows
+09:52:44 │ INFO │    📊 Image Processing Results:
+09:52:44 │ INFO │    ├─ Silver images available: 72,485
+09:52:44 │ INFO │    ├─ Silver images downloaded: 72,419
+09:52:44 │ INFO │    ├─ Silver valid embeddings: 57,935
+09:52:44 │ INFO │    ├─ Gold images available: 66
+09:52:44 │ INFO │    ├─ Gold images downloaded: 66
+09:52:44 │ INFO │    ├─ Gold valid embeddings: 52
+09:52:44 │ INFO │    ├─ Silver embedding size: 452 MB
+09:52:44 │ INFO │    └─ Gold embedding size: 0 MB
+09:52:44 │ INFO │    ✅ Image processing completed in 4309.4s
+09:52:44 │ INFO │    📊 Image Processing - Memory: 21.6% used (6291 MB / 32015 MB)
+09:52:44 │ INFO │ System/Container total memory: 31.3 GB
+09:52:44 │ INFO │ Safe memory limit (100%): 31.3 GB
+09:52:44 │ INFO │    🧹 Image Processing: Memory optimization
+09:52:44 │ INFO │       ├─ Container/System memory: 31.3 GB total
+09:52:44 │ INFO │       ├─ Currently used: 21.6% (6292 MB)
+09:52:45 │ INFO │       ✅ Memory usage normal: 21.6%
+09:52:45 │ INFO │ 
+🤖 STAGE 4: MODEL TRAINING
+09:52:45 │ INFO │    🖼️  Training image-based models...
+09:52:45 │ INFO │ 🚀 Starting MODE A Training Pipeline
+09:52:45 │ INFO │    Domain: image
+09:52:45 │ INFO │    SMOTE enabled: False
+09:52:45 │ INFO │    Silver set size: 57,935
+09:52:45 │ INFO │    Gold set size: 52
+09:52:45 │ INFO │    Feature dimensions: (57935, 2048)
+09:52:45 │ INFO │ 
+📊 Class Distribution Analysis:
+09:52:45 │ INFO │     Keto - Silver: 23,314/57,935 (40.2%) | Gold: 27/52 (51.9%)
+09:52:45 │ INFO │    Vegan - Silver: 9,786/57,935 (16.9%) | Gold: 28/52 (53.8%)
+09:52:45 │ INFO │ 
+🎯 Processing KETO classification:
+09:52:45 │ INFO │    Training labels - Positive: 23,314 (40.2%)
+09:52:45 │ INFO │    Test labels - Positive: 27 (51.9%)
+09:52:45 │ INFO │    ⏭️  SMOTE disabled, using original data
+09:52:45 │ INFO │    🤖 Training 3 models: ['MLP', 'RF', 'LGBM']
+09:54:29 │ INFO │       ✅    MLP_IMAGE: F1=0.526 | ACC=0.654 | PREC=0.909 | REC=0.370 | Time=103.7s
+09:54:29 │ INFO │       🏆 New best model for keto: MLP_IMAGE (F1=0.526)
+09:56:02 │ INFO │       ✅     RF_IMAGE: F1=0.945 | ACC=0.942 | PREC=0.929 | REC=0.963 | Time=93.2s
+09:56:02 │ INFO │       🏆 New best model for keto: RF_IMAGE (F1=0.945)
+09:56:38 │ INFO │       ✅   LGBM_IMAGE: F1=0.885 | ACC=0.885 | PREC=0.920 | REC=0.852 | Time=35.7s
+09:56:38 │ INFO │    🎯 KETO COMPLETE:
+09:56:38 │ INFO │    ├─ Best Model: RF_IMAGE (F1=0.945)
+09:56:38 │ INFO │    ├─ Final Metrics: ACC=0.942 | PREC=0.929 | REC=0.963
+09:56:38 │ INFO │    └─ Task Time: 232.7s
+09:56:38 │ INFO │ 
+🎯 Processing VEGAN classification:
+09:56:38 │ INFO │    Training labels - Positive: 9,786 (16.9%)
+09:56:38 │ INFO │    Test labels - Positive: 28 (53.8%)
+09:56:38 │ INFO │    ⏭️  SMOTE disabled, using original data
+09:56:38 │ INFO │    🤖 Training 3 models: ['MLP', 'RF', 'LGBM']
+09:58:02 │ INFO │       ✅    MLP_IMAGE: F1=0.444 | ACC=0.615 | PREC=1.000 | REC=0.286 | Time=84.3s
+09:58:02 │ INFO │       🏆 New best model for vegan: MLP_IMAGE (F1=0.444)
+09:59:14 │ INFO │       ✅     RF_IMAGE: F1=1.000 | ACC=1.000 | PREC=1.000 | REC=1.000 | Time=72.5s
+09:59:14 │ INFO │       🏆 New best model for vegan: RF_IMAGE (F1=1.000)
+09:59:52 │ INFO │       ✅   LGBM_IMAGE: F1=0.943 | ACC=0.942 | PREC=1.000 | REC=0.893 | Time=37.2s
+09:59:52 │ INFO │    🎯 VEGAN COMPLETE:
+09:59:52 │ INFO │    ├─ Best Model: RF_IMAGE (F1=1.000)
+09:59:52 │ INFO │    ├─ Final Metrics: ACC=1.000 | PREC=1.000 | REC=1.000
+09:59:52 │ INFO │    └─ Task Time: 194.1s
+09:59:52 │ INFO │ 
+🏁 MODE A PIPELINE COMPLETE:
+09:59:52 │ INFO │    ├─ Total Time: 427.1s
+09:59:52 │ INFO │    ├─ Tasks Completed: 2
+09:59:52 │ INFO │    └─ Domain: image
+09:59:52 │ INFO │ 
+📊 FINAL RESULTS SUMMARY:
+09:59:52 │ INFO │    1.  KETO |        RF_IMAGE | F1=0.945 | ACC=0.942 | Time=93.2s
+09:59:52 │ INFO │    2. VEGAN |        RF_IMAGE | F1=1.000 | ACC=1.000 | Time=72.5s
+09:59:52 │ INFO │ 
+╭─ MODE A (silver → gold) ───────────────────────────────────
+09:59:52 │ INFO │ │ model task     ACC    PREC     REC      F1     ROC      PR │
+09:59:52 │ INFO │ ├────────────────────────────────────────────────────────────┤
+09:59:52 │ INFO │ │ RF_IMAGE keto     0.94    0.93    0.96    0.95    0.96    0.95 │
+09:59:52 │ INFO │ │ RF_IMAGE vegan    1.00    1.00    1.00    1.00    1.00    1.00 │
+09:59:52 │ INFO │ ╰────────────────────────────────────────────────────────────╯
+09:59:52 │ INFO │       ✅ Image models: 2 results
+09:59:52 │ INFO │ System/Container total memory: 31.3 GB
+09:59:52 │ INFO │ Safe memory limit (100%): 31.3 GB
+09:59:52 │ INFO │    🧹 Image Models: Memory optimization
+09:59:52 │ INFO │       ├─ Container/System memory: 31.3 GB total
+09:59:52 │ INFO │       ├─ Currently used: 27.8% (8284 MB)
+09:59:52 │ INFO │       ├─ Freed: 0.0 MB RAM
+09:59:52 │ INFO │       ├─ Objects collected: 47
+09:59:52 │ INFO │       ✅ Memory usage normal: 27.8%
+09:59:52 │ INFO │    🔤 Training text-based models...
+09:59:52 │ INFO │ 🚀 Starting MODE A Training Pipeline
+09:59:52 │ INFO │    Domain: text
+09:59:52 │ INFO │    SMOTE enabled: True
+09:59:52 │ INFO │    Silver set size: 225,905
+09:59:52 │ INFO │    Gold set size: 100
+09:59:53 │ INFO │    Feature dimensions: (225905, 50000)
+09:59:53 │ INFO │ 
+📊 Class Distribution Analysis:
+09:59:53 │ INFO │     Keto - Silver: 36,885/225,905 (16.3%) | Gold: 40/100 (40.0%)
+09:59:53 │ INFO │    Vegan - Silver: 16,378.0/225,905 (7.2%) | Gold: 40/100 (40.0%)
+09:59:53 │ INFO │ 
+🎯 Processing KETO classification:
+09:59:53 │ INFO │    Training labels - Positive: 36,885 (16.3%)
+09:59:53 │ INFO │    Test labels - Positive: 40 (40.0%)
+09:59:53 │ INFO │    Minority class ratio: 16.3%
+09:59:53 │ INFO │    🔄 Applying SMOTE (minority < 30%)...
+09:59:53 │ INFO │    ✅ SMOTE completed in 0.1s
+09:59:53 │ INFO │    ├─ Size: 225,905 → 378,040 (1.7x)
+09:59:53 │ INFO │    └─ Minority ratio: 16.3% → 50.0%
+09:59:53 │ INFO │    🤖 Training 6 models: ['Rule', 'NB', 'Softmax', 'Ridge', 'PA', 'SGD']
+09:59:53 │ ERROR │       ❌ Rule: Prediction failed - sparse array length is ambiguous; use ge...
+09:59:53 │ INFO │       ✅      NB_TEXT: F1=0.963 | ACC=0.970 | PREC=0.951 | REC=0.975 | Time=0.1s
+09:59:53 │ INFO │       🏆 New best model for keto: NB_TEXT (F1=0.963)
+09:59:58 │ INFO │       ✅ Softmax_TEXT: F1=0.963 | ACC=0.970 | PREC=0.951 | REC=0.975 | Time=5.1s
+10:00:05 │ INFO │ Adding probability calibration to RidgeClassifier
+10:00:19 │ INFO │       ✅   Ridge_TEXT: F1=0.963 | ACC=0.970 | PREC=0.951 | REC=0.975 | Time=20.8s
+10:00:20 │ INFO │ Adding probability calibration to PassiveAggressiveClassifier
+10:00:25 │ INFO │       ✅      PA_TEXT: F1=0.963 | ACC=0.970 | PREC=0.951 | REC=0.975 | Time=6.3s
+10:00:26 │ INFO │       ✅     SGD_TEXT: F1=0.963 | ACC=0.970 | PREC=0.951 | REC=0.975 | Time=1.1s
+10:00:26 │ INFO │    🎯 KETO COMPLETE:
+10:00:26 │ INFO │    ├─ Best Model: NB_TEXT (F1=0.963)
+10:00:26 │ INFO │    ├─ Final Metrics: ACC=0.970 | PREC=0.951 | REC=0.975
+10:00:26 │ INFO │    └─ Task Time: 33.7s
+10:00:26 │ WARNING │ Found 303 NaN values in vegan labels, filling with defaults
+10:00:26 │ INFO │ 
+🎯 Processing VEGAN classification:
+10:00:26 │ INFO │    Training labels - Positive: 16,681 (7.4%)
+10:00:26 │ INFO │    Test labels - Positive: 40 (40.0%)
+10:00:26 │ INFO │    Minority class ratio: 7.4%
+10:00:26 │ INFO │    🔄 Applying SMOTE (minority < 30%)...
+10:00:27 │ INFO │    ✅ SMOTE completed in 0.1s
+10:00:27 │ INFO │    ├─ Size: 225,905 → 418,448 (1.9x)
+10:00:27 │ INFO │    └─ Minority ratio: 7.4% → 50.0%
+10:00:27 │ INFO │    🤖 Training 6 models: ['Rule', 'NB', 'Softmax', 'Ridge', 'PA', 'SGD']
+10:00:27 │ ERROR │       ❌ Rule: Prediction failed - sparse array length is ambiguous; use ge...
+10:00:27 │ INFO │       ✅      NB_TEXT: F1=0.975 | ACC=0.980 | PREC=0.975 | REC=0.975 | Time=0.1s
+10:00:27 │ INFO │       🏆 New best model for vegan: NB_TEXT (F1=0.975)
+10:00:30 │ INFO │       ✅ Softmax_TEXT: F1=0.975 | ACC=0.980 | PREC=0.975 | REC=0.975 | Time=3.5s
+10:00:38 │ INFO │ Adding probability calibration to RidgeClassifier
+10:00:53 │ INFO │       ✅   Ridge_TEXT: F1=0.975 | ACC=0.980 | PREC=0.975 | REC=0.975 | Time=22.7s
+10:00:54 │ INFO │ Adding probability calibration to PassiveAggressiveClassifier
+10:01:00 │ INFO │       ✅      PA_TEXT: F1=0.975 | ACC=0.980 | PREC=0.975 | REC=0.975 | Time=7.1s
+10:01:01 │ INFO │       ✅     SGD_TEXT: F1=0.962 | ACC=0.970 | PREC=0.974 | REC=0.950 | Time=1.2s
+10:01:01 │ INFO │    🎯 VEGAN COMPLETE:
+10:01:01 │ INFO │    ├─ Best Model: NB_TEXT (F1=0.975)
+10:01:01 │ INFO │    ├─ Final Metrics: ACC=0.980 | PREC=0.975 | REC=0.975
+10:01:01 │ INFO │    └─ Task Time: 35.0s
+10:01:01 │ INFO │ 
+🏁 MODE A PIPELINE COMPLETE:
+10:01:01 │ INFO │    ├─ Total Time: 68.9s
+10:01:01 │ INFO │    ├─ Tasks Completed: 2
+10:01:01 │ INFO │    └─ Domain: text
+10:01:01 │ INFO │ 
+📊 FINAL RESULTS SUMMARY:
+10:01:01 │ INFO │    1.  KETO |         NB_TEXT | F1=0.963 | ACC=0.970 | Time=0.1s
+10:01:01 │ INFO │    2. VEGAN |         NB_TEXT | F1=0.975 | ACC=0.980 | Time=0.1s
+10:01:01 │ INFO │ 
+╭─ MODE A (silver → gold) ───────────────────────────────────
+10:01:01 │ INFO │ │ model task     ACC    PREC     REC      F1     ROC      PR │
+10:01:01 │ INFO │ ├────────────────────────────────────────────────────────────┤
+10:01:01 │ INFO │ │ NB_TEXT keto     0.97    0.95    0.97    0.96    0.97    0.94 │
+10:01:01 │ INFO │ │ NB_TEXT vegan    0.98    0.97    0.97    0.97    0.97    0.93 │
+10:01:01 │ INFO │ ╰────────────────────────────────────────────────────────────╯
+10:01:01 │ INFO │       ✅ Text models: 2 results
+10:01:01 │ INFO │ System/Container total memory: 31.3 GB
+10:01:02 │ INFO │ Safe memory limit (100%): 31.3 GB
+10:01:02 │ INFO │    🧹 Text Models: Memory optimization
+10:01:02 │ INFO │       ├─ Container/System memory: 31.3 GB total
+10:01:02 │ INFO │       ├─ Currently used: 30.3% (9085 MB)
+10:01:02 │ INFO │       ├─ Freed: 0.0 MB RAM
+10:01:02 │ INFO │       ├─ Objects collected: 96
+10:01:02 │ INFO │       ✅ Memory usage normal: 30.3%
+10:01:02 │ INFO │    🤝 Creating text+image ensemble...
+10:01:02 │ INFO │       ├─ keto: Testing alpha values [0.25, 0.5, 0.75]
+10:01:02 │ INFO │ ▶️  BEST-TWO (keto) — text=NB_TEXT (F1=0.963), image=RF_IMAGE
+10:01:02 │ INFO │    ├─ Text predictions: 100 samples
+10:01:02 │ INFO │    ├─ Image predictions: 52 samples
+10:01:02 │ INFO │    └─ Blending with alpha=0.25
+10:01:02 │ INFO │          ├─ alpha=0.25: F1=0.963
+10:01:02 │ INFO │ ▶️  BEST-TWO (keto) — text=NB_TEXT (F1=0.963), image=RF_IMAGE
+10:01:02 │ INFO │    ├─ Text predictions: 100 samples
+10:01:02 │ INFO │    ├─ Image predictions: 52 samples
+10:01:02 │ INFO │    └─ Blending with alpha=0.5
+10:01:02 │ INFO │          ├─ alpha=0.5: F1=0.949
+10:01:02 │ INFO │ ▶️  BEST-TWO (keto) — text=NB_TEXT (F1=0.963), image=RF_IMAGE
+10:01:02 │ INFO │    ├─ Text predictions: 100 samples
+10:01:02 │ INFO │    ├─ Image predictions: 52 samples
+10:01:02 │ INFO │    └─ Blending with alpha=0.75
+10:01:02 │ INFO │          ├─ alpha=0.75: F1=0.949
+10:01:02 │ INFO │       ✅ keto best ensemble: alpha=0.25, F1=0.963
+10:01:02 │ INFO │       ├─ vegan: Testing alpha values [0.25, 0.5, 0.75]
+10:01:02 │ INFO │ ▶️  BEST-TWO (vegan) — text=NB_TEXT (F1=0.975), image=RF_IMAGE
+10:01:02 │ INFO │    ├─ Text predictions: 100 samples
+10:01:02 │ INFO │    ├─ Image predictions: 52 samples
+10:01:02 │ INFO │    └─ Blending with alpha=0.25
+10:01:02 │ INFO │          ├─ alpha=0.25: F1=0.975
+10:01:02 │ INFO │ ▶️  BEST-TWO (vegan) — text=NB_TEXT (F1=0.975), image=RF_IMAGE
+10:01:02 │ INFO │    ├─ Text predictions: 100 samples
+10:01:02 │ INFO │    ├─ Image predictions: 52 samples
+10:01:02 │ INFO │    └─ Blending with alpha=0.5
+10:01:02 │ INFO │          ├─ alpha=0.5: F1=0.889
+10:01:02 │ INFO │ ▶️  BEST-TWO (vegan) — text=NB_TEXT (F1=0.975), image=RF_IMAGE
+10:01:02 │ INFO │    ├─ Text predictions: 100 samples
+10:01:02 │ INFO │    ├─ Image predictions: 52 samples
+10:01:02 │ INFO │    └─ Blending with alpha=0.75
+10:01:02 │ INFO │          ├─ alpha=0.75: F1=0.889
+10:01:02 │ INFO │       ✅ vegan best ensemble: alpha=0.25, F1=0.975
+10:01:02 │ INFO │ 
+╭─ Text+Image Ensembles ─────────────────────────────────────
+10:01:02 │ INFO │ │ model task     ACC    PREC     REC      F1     ROC      PR │
+10:01:02 │ INFO │ ├────────────────────────────────────────────────────────────┤
+10:01:02 │ INFO │ │ BestTwo_alpha0.25 keto     0.97    0.95    0.97    0.96    0.99    0.97 │
+10:01:02 │ INFO │ │ BestTwo_alpha0.25 vegan    0.98    0.97    0.97    0.97    0.98    0.98 │
+10:01:02 │ INFO │ ╰────────────────────────────────────────────────────────────╯
+10:01:02 │ INFO │       ✅ Created 2 ensemble configurations
+10:01:03 │ INFO │    🔄 Training final combined models...
+10:01:06 │ INFO │       ├─ Combined silver features: (57935, 52048)
+10:01:06 │ INFO │       ├─ Combined gold features: (52, 52048)
+10:01:06 │ INFO │       ├─ Silver samples: 57,935
+10:01:06 │ INFO │       └─ Gold samples: 52
+10:01:06 │ INFO │ 🚀 Starting MODE A Training Pipeline
+10:01:06 │ INFO │    Domain: both
+10:01:06 │ INFO │    SMOTE enabled: True
+10:01:06 │ INFO │    Silver set size: 57,935
+10:01:06 │ INFO │    Gold set size: 52
+10:01:06 │ INFO │    Feature dimensions: (57935, 52048)
+10:01:06 │ INFO │ 
+📊 Class Distribution Analysis:
+10:01:06 │ INFO │     Keto - Silver: 9,357/57,935 (16.2%) | Gold: 27/52 (51.9%)
+10:01:06 │ INFO │    Vegan - Silver: 4,121.0/57,935 (7.1%) | Gold: 28/52 (53.8%)
+10:01:06 │ INFO │ 
+🎯 Processing KETO classification:
+10:01:06 │ INFO │    Training labels - Positive: 9,357 (16.2%)
+10:01:06 │ INFO │    Test labels - Positive: 27 (51.9%)
+10:01:06 │ INFO │    Minority class ratio: 16.2%
+10:01:06 │ INFO │    🔄 Applying SMOTE (minority < 30%)...
+10:01:06 │ INFO │    ✅ SMOTE completed in 0.3s
+10:01:06 │ INFO │    ├─ Size: 57,935 → 97,156 (1.7x)
+10:01:06 │ INFO │    └─ Minority ratio: 16.2% → 50.0%
+10:01:06 │ INFO │    🤖 Training 9 models: ['Rule', 'NB', 'Softmax', 'Ridge', 'PA', 'SGD', 'MLP', 'RF', 'LGBM']
+10:01:06 │ ERROR │       ❌ Rule: Prediction failed - sparse array length is ambiguous; use ge...
+10:01:07 │ INFO │       ✅      NB_BOTH: F1=0.945 | ACC=0.942 | PREC=0.929 | REC=0.963 | Time=0.3s
+10:01:07 │ INFO │       🏆 New best model for keto: NB_BOTH (F1=0.945)
+10:03:08 │ INFO │       ✅ Softmax_BOTH: F1=0.945 | ACC=0.942 | PREC=0.929 | REC=0.963 | Time=121.1s
+10:07:20 │ INFO │ Adding probability calibration to RidgeClassifier
+10:14:37 │ INFO │       ✅   Ridge_BOTH: F1=0.902 | ACC=0.904 | PREC=0.958 | REC=0.852 | Time=689.0s
+10:14:47 │ INFO │ Adding probability calibration to PassiveAggressiveClassifier
+10:15:12 │ INFO │       ✅      PA_BOTH: F1=0.945 | ACC=0.942 | PREC=0.929 | REC=0.963 | Time=35.3s
+10:15:17 │ INFO │       ✅     SGD_BOTH: F1=0.945 | ACC=0.942 | PREC=0.929 | REC=0.963 | Time=4.9s
