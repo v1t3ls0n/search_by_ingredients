@@ -6679,29 +6679,9 @@ def main():
     import sys
     import atexit
 
-    # Memory optimization for Docker environments
-    log.info(f"🚀 Starting main with args: {args}")
 
-    # Check and log memory configuration
-    available_memory = get_available_memory(safety_factor=0.9)
-    log.info(f"💾 Available memory for processing: {available_memory:.1f} GB")
-
-    # Set memory-related environment variables
-    if available_memory < 32:  # Less than 32GB available
-        log.warning(
-            f"⚠️  Limited memory detected. Enabling memory optimizations...")
-        os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'
-
-        # Reduce number of threads to save memory
-        if 'OMP_NUM_THREADS' not in os.environ:
-            os.environ['OMP_NUM_THREADS'] = '4'
-
-        # Enable Python memory optimizations
-        import sys
-        sys.setcheckinterval(1000)  # Reduce GC overhead
 
     # Register exit handler
-
     def prevent_restart():
         log.info("🛑 Process exiting - no restarts allowed")
 
@@ -6722,6 +6702,27 @@ def main():
                         default=None, help="Fraction of silver set to sample.")
 
     args = parser.parse_args()
+
+    # Memory optimization for Docker environments
+    log.info(f"🚀 Starting main with args: {args}")
+
+    # Check and log memory configuration
+    available_memory = get_available_memory(safety_factor=0.9)
+    log.info(f"💾 Available memory for processing: {available_memory:.1f} GB")
+
+    # Set memory-related environment variables
+    if available_memory < 32:  # Less than 32GB available
+        log.warning(
+            f"⚠️  Limited memory detected. Enabling memory optimizations...")
+        os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:128'
+
+        # Reduce number of threads to save memory
+        if 'OMP_NUM_THREADS' not in os.environ:
+            os.environ['OMP_NUM_THREADS'] = '4'
+
+        # Enable Python memory optimizations
+        import sys
+        sys.setcheckinterval(1000)  # Reduce GC overhead
 
     try:
         log.info(f"🚀 Starting main with args: {args}")
