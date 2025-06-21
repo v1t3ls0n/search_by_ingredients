@@ -11,7 +11,6 @@ __pycache__/
 *.py[cod]
 # artifacts/
 *$py.class
-*.csv
 allrecipes.parquet
 best_params.json
 # C extensions
