@@ -460,37 +460,14 @@ search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:33:57.882952459Z [2025-06-
 search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:34:07.883391015Z [2025-06-21T05:34:07,883][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
 search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:34:17.884091162Z [2025-06-21T05:34:17,883][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
 search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:34:27.884771392Z [2025-06-21T05:34:27,884][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-[A
-
-      ├─       ├─ Downloading: 107/6485 |▏         | [00:04<05:03] 21.00it/s[A[A
-
-      ├─       ├─ Downloading: 107/6485 |▏         | [00:04<05:03] 21.00it/s[A[A
-
-      ├─       ├─ Downloading: 107/6485 |▏         | [00:04<05:03] 21.00it/s[A[A
-
-      ├─       ├─ Downloading: 107/6485 |▏         | [00:04<05:03] 21.00it/s[A[A
-
-      ├─       ├─ Downloading: 113/6485 |▏         | [00:04<04:20] 24.44it/s[A[A
-
-      ├─       ├─ Downloading: 113/6485 |▏         | [00:04<04:20] 24.44it/s[A[A
-
-      ├─       ├─ Downloading: 113/6485 |▏         | [00:04<04:20] 24.44it/s[A[A
-
-      ├─       ├─ Downloading: 113/6485 |▏         | [00:04<04:20] 24.44it/s[A[A
-
-      ├─       ├─ Downloading: 116/6485 |▏         | [00:04<04:10] 25.39it/s[A[A
-
-      ├─       ├─ Downloading: 116/6485 |▏         | [00:04<04:10] 25.39it/s[A[A
-
-      ├─       ├─ Downloading: 116/6485 |▏         | [00:04<04:10] 25.39it/s[A[A
-
-      ├─       ├─ Downloading: 116/6485 |▏         | [00:04<04:10] 25.39it/s[A[A
-
-      ├─       ├─ Downloading: 116/6485 |▏         | [00:04<04:10] 25.39it/s[A[A
-
-      ├─       ├─ Downloading: 120/6485 |▏         | [00:04<03:45] 28.23it/s[A[A
-
-      ├─       ├─ Downloading: 120/6485 |▏         | [00:04<03:45] 28.23it/s[A[A
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:34:37.885017930Z [2025-06-21T05:34:37,884][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:34:47.884717885Z [2025-06-21T05:34:47,884][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:34:57.885519843Z [2025-06-21T05:34:57,884][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:35:07.886280153Z [2025-06-21T05:35:07,885][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:35:17.887247851Z [2025-06-21T05:35:17,886][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:35:27.887490925Z [2025-06-21T05:35:27,887][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
+search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:35:37.887724704Z [2025-06-21T05:35:37,887][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
+�� Downloading: 120/6485 |▏         | [00:04<03:45] 28.23it/s[A[A
 
       ├─       ├─ Downloading: 120/6485 |▏         | [00:04<03:45] 28.23it/s[A[A
 
@@ -20808,3 +20785,5 @@ drwxr-xr-x 1 Studio 197121        0 יונ 21 08:18 logs
 -rw-r--r-- 1 Studio 197121 10746628 יונ 21 08:20 silver_extended.csv
 -rw-r--r-- 1 Studio 197121  1876223 יונ 21 08:34 vectorizer.pkl
 [2025-06-21 08:34:35] ✅ Pipeline complete!
+[2025-06-21 08:34:35] 🧹 Cleaning up...
+[2025-06-21 08:34:35] Pipeline finished at: שבת 21 יונ 2025 08:34:35

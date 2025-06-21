@@ -1,466 +1,497 @@
-[2025-06-21 08:17:56] 🛠️  Building Docker images...
-#1 [internal] load build definition from Dockerfile
-#1 transferring dockerfile: 32B done
-#1 DONE 0.0s
+📦 Verifying Python dependencies...
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
 
-#2 [internal] load .dockerignore
-#2 transferring context: 2B done
-#2 DONE 0.0s
+[notice] A new release of pip is available: 24.0 -> 25.1.1
+[notice] To update, run: pip install --upgrade pip
+🧠 Training with sample_frac=0.3...
+📝 Note: Will use cached embeddings if available (add --force to recompute)
+05:18:43 │ INFO │ Logging system initialized successfully
+05:18:43 │ INFO │ 🚀 Starting main with args: Namespace(ground_truth=None, train=True, ingredients=None, mode='both', force=False, sample_frac=0.3)
+05:18:43 │ INFO │ 🧠 SINGLE training run - sample_frac=0.3
+05:18:43 │ INFO │ 🚀 STARTING FULL ML PIPELINE
+05:18:43 │ INFO │    Mode: both
+05:18:43 │ INFO │    Force recomputation: False
+05:18:43 │ INFO │    Sample fraction: 0.3
+05:18:43 │ INFO │    Start time: 2025-06-21 05:18:43
+05:18:43 │ INFO │    Available CPU cores: 24
+05:18:43 │ INFO │    Available memory: 31 GB
+🔬 ML Pipeline:   0%|          | 0/6 [00:00<?] 🔬 ML Pipeline🔬 ML Pipeline: Data Loading:   0%|          | 0/6 [00:00<?] 🔬 ML Pipeline: Data Loading: 05:18:43 │ INFO │ 
+📂 STAGE 1: DATA LOADING AND PREPARATION
 
-#3 [internal] load metadata for docker.io/library/python:3.11-slim
-#3 DONE 2.3s
+   ├─    ├─ Loading Data: 0/4 |          | [00:00][A
+   ├─    ├─ Loading datasets: : 0/4 |          | [00:00][A05:18:43 │ INFO │ 
+📂 DATASET LOADING PIPELINE
+05:18:43 │ INFO │    Configuration: 2 data sources
+05:18:43 │ INFO │    Data directory: /app/data
+05:18:43 │ INFO │    📊 Data Sources:
+05:18:43 │ INFO │    ├─ allrecipes.parquet: Local
+05:18:43 │ INFO │    │  └─ /app/data/allrecipes.parquet
+05:18:43 │ INFO │    ├─ ground_truth_sample.csv: Local
+05:18:43 │ INFO │    │  └─ /app/data/ground_truth_sample.csv
+   ├─    ├─ Loading Pipeline: 0/5 |          | [00:00<?]   ├─    ├─ Loading Recipes: : 0/5 |          | [00:00<?]05:18:43 │ INFO │ 
+   🍳 STAGE 1: LOADING RECIPES DATASET
+05:18:43 │ INFO │    ├─ Source: /app/data/allrecipes.parquet
 
-#4 [ 1/12] FROM docker.io/library/python:3.11-slim@sha256:9e1912aab0a30bbd9488eb79063f68f42a68ab0946cbe98fecf197fe5b085506
-#4 resolve docker.io/library/python:3.11-slim@sha256:9e1912aab0a30bbd9488eb79063f68f42a68ab0946cbe98fecf197fe5b085506 done
-#4 DONE 0.0s
+      ├─       ├─ Recipe Loading: 0/4 |          | [00:00][A
+      ├─       ├─ Validating source: : 0/4 |          | [00:00][A05:18:43 │ INFO │       ├─ Local file size: 49.2 MB
 
-#5 [internal] load build context
-#5 transferring context: 818B done
-#5 DONE 0.0s
+      ├─       ├─ Reading parquet: : 1/4 |██▌       | [00:00]  [A
+      ├─       ├─ Reading parquet: : 2/4 |█████     | [00:00][A
+      ├─       ├─ Validating schema: : 2/4 |█████     | [00:00][A05:18:44 │ INFO │       📊 Recipes Dataset:
+05:18:44 │ INFO │       ├─ Shape: (225602, 5)
+05:18:44 │ INFO │       ├─ Columns: ['title', 'description', 'instructions', 'ingredients', 'photo_url']
+05:18:44 │ INFO │       ├─ Memory usage: 145.4 MB
+05:18:44 │ INFO │       └─ Load time: 0.4s
 
-#6 [ 6/12] RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/ground_truth_sample.csv     -o /app/data/ground_truth_sample.csv
-#6 CACHED
+      ├─       ├─ Validating schema: : 3/4 |███████▌  | [00:00][A
+      ├─       ├─ Data quality check: : 3/4 |███████▌  | [00:00][A05:18:47 │ INFO │       📈 Data Quality:
+05:18:47 │ INFO │       ├─ Total recipes: 225,602
+05:18:47 │ INFO │       ├─ Null ingredients: 0
+05:18:47 │ INFO │       ├─ Empty ingredients: 0
+05:18:47 │ INFO │       └─ With photos: 225,602 (100.0%)
 
-#7 [ 5/12] RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/allrecipes.parquet     -o /app/data/allrecipes.parquet
-#7 CACHED
+      ├─       ├─ Data quality check: : 4/4 |██████████| [00:03][A
+                                                                [A05:18:47 │ INFO │    ✅ Recipes loaded successfully in 3.9s
+05:18:47 │ INFO │       💾 Recipes loaded: 13.6% memory used (3757 MB / 32015 MB)
+   ├─    ├─ Loading Recipes: : 1/5 |██        | [00:03<00:15]   ├─    ├─ Loading Ground Truth: : 1/5 |██        | [00:03<00:15]05:18:47 │ INFO │ 
+   🎯 STAGE 2: LOADING GROUND TRUTH DATASET
+05:18:47 │ INFO │    ├─ Source: /app/data/ground_truth_sample.csv
 
-#8 [ 2/12] WORKDIR /app
-#8 CACHED
+      ├─       ├─ Ground Truth Loading: 0/4 |          | [00:00][A
+      ├─       ├─ Path validation: : 0/4 |          | [00:00]   [A05:18:47 │ INFO │       ├─ File size: 79.1 KB
 
-#9 [ 4/12] RUN mkdir -p /app/data/usda
-#9 CACHED
+      ├─       ├─ Reading CSV: : 1/4 |██▌       | [00:00]    [A
+      ├─       ├─ Schema validation: : 2/4 |█████     | [00:00][A05:18:47 │ INFO │       📊 Ground Truth Dataset:
+05:18:47 │ INFO │       ├─ Shape: (100, 7)
+05:18:47 │ INFO │       ├─ Columns: ['title', 'description', 'instructions', 'ingredients', 'photo_url', 'vegan', 'keto']
+05:18:47 │ INFO │       ├─ Keto columns found: ['keto']
+05:18:47 │ INFO │       ├─ Vegan columns found: ['vegan']
+05:18:47 │ INFO │       └─ Load time: 0.00s
 
-#10 [10/12] RUN mkdir -p /app/pretrained_models
-#10 CACHED
+      ├─       ├─ Label processing: : 3/4 |███████▌  | [00:00] [A05:18:47 │ INFO │       ├─ Keto labels: 40/100 (40.0% positive)
+05:18:47 │ INFO │       ├─ Vegan labels: 40/100 (40.0% positive)
 
-#11 [ 7/12] RUN curl -L     https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_foundation_food_csv_2025-04-24.zip     -o /tmp/fdc.zip &&     unzip -q /tmp/fdc.zip -d /tmp &&     cp /tmp/FoodData_Central_foundation_food_csv_2025-04-24/food.csv        /tmp/FoodData_Central_foundation_food_csv_2025-04-24/food_nutrient.csv        /tmp/FoodData_Central_foundation_food_csv_2025-04-24/nutrient.csv        /app/data/usda/ &&     rm -rf /tmp/fdc.zip /tmp/FoodData_Central_foundation_food_csv_2025-04-24
-#11 CACHED
 
-#12 [ 3/12] RUN apt-get update &&     apt-get install -y --no-install-recommends         build-essential         curl         unzip         dos2unix &&     rm -rf /var/lib/apt/lists/*
-#12 CACHED
+         ├─          ├─ Normalizing text:   0%|          | [00:00][A[A
 
-#13 [ 8/12] COPY requirements.txt .
-#13 CACHED
+         ├─          ├─ Normalizing text: 100%|██████████| [00:01][A[A
 
-#14 [ 9/12] RUN pip install --no-cache-dir -r requirements.txt
-#14 CACHED
+                                                                  [A[A
+      ├─       ├─ Label processing: : 4/4 |██████████| [00:01][A
+                                                              [A05:18:49 │ INFO │    ✅ Ground truth loaded successfully in 1.8s
+05:18:49 │ INFO │       💾 Ground truth loaded: 14.0% memory used (3867 MB / 32015 MB)
+   ├─    ├─ Loading Ground Truth: : 2/5 |████      | [00:05<00:08]   ├─    ├─ Generating Silver Labels: : 2/5 |████      | [00:05<00:08]05:18:49 │ INFO │ 
+   🥈 STAGE 3: GENERATING SILVER LABELS
 
-#15 [11/12] COPY --chmod=755 . /app/
-#15 CACHED
+      ├─       ├─ Silver Generation: 0/3 |          | [00:00][A
+      ├─       ├─ Building silver labels: : 0/3 |          | [00:00][A05:19:05 │ INFO │ USDA carb table loaded: 303 distinct food descriptions
+05:19:05 │ INFO │ Carb map initialised (303 keys)
 
-#16 [12/12] RUN if [ -f "/app/pretrained_models/models.zip" ]; then         echo "🔓 Extracting pretrained models..." &&         unzip -o /app/pretrained_models/models.zip -d /app/pretrained_models &&         rm /app/pretrained_models/models.zip;     else         echo "✅ No pretrained models found, skipping extraction.";     fi
-#16 CACHED
+      ├─       ├─ Building silver labels: : 1/3 |███▎      | [01:40][A
+      ├─       ├─ Adding photo URLs: : 1/3 |███▎      | [01:40]     [A
+      ├─       ├─ Quality assessment: : 2/3 |██████▋   | [01:40][A05:20:30 │ INFO │       📊 Silver Labels Generated:
+05:20:30 │ INFO │       ├─ Total recipes: 225,602
+05:20:30 │ INFO │       ├─ Keto positive: 36,722 (16.3%)
+05:20:30 │ INFO │       ├─ Vegan positive: 16,378 (7.3%)
+05:20:30 │ INFO │       ├─ With photos: 225,602 (100.0%)
+05:20:30 │ INFO │       └─ Generation time: 100.9s
 
-#17 exporting to image
-#17 exporting layers done
-#17 writing image sha256:069e17656a447f360ed99a3082f35a3e86fba03f5dc7ae149a2879ac14485023 done
-#17 naming to docker.io/library/search_by_ingredients_v1t3ls0n-web done
-#17 DONE 0.0s
-[2025-06-21 08:17:59] 🚀 Starting services...
-Network search_by_ingredients_v1t3ls0n_argmax  Creating
-Network search_by_ingredients_v1t3ls0n_argmax  Created
-Container search_by_ingredients_v1t3ls0n-os-1  Creating
-Container search_by_ingredients_v1t3ls0n-os-1  Created
-Container search_by_ingredients_v1t3ls0n-web-1  Creating
-Container search_by_ingredients_v1t3ls0n-web-1  Created
-Container search_by_ingredients_v1t3ls0n-os-1  Starting
-Container search_by_ingredients_v1t3ls0n-os-1  Started
-Container search_by_ingredients_v1t3ls0n-os-1  Waiting
-Container search_by_ingredients_v1t3ls0n-os-1  Healthy
-Container search_by_ingredients_v1t3ls0n-web-1  Starting
-Container search_by_ingredients_v1t3ls0n-web-1  Started
-[2025-06-21 08:18:10] 📋 Starting container log collection...
-[2025-06-21 08:18:10] ⏳ Waiting for services to initialize...
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:17:59.899952139Z Disabling OpenSearch Security Plugin
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:10.712043551Z dos2unix: converting file web/init.sh to Unix format...
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:17:59.900007879Z Enabling execution of OPENSEARCH_HOME/bin/opensearch-performance-analyzer/performance-analyzer-agent-cli for OpenSearch Performance Analyzer Plugin
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:10.718409004Z 📊 Running initial indexing...
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:00.950628962Z WARNING: Using incubator modules: jdk.incubator.vector
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:00.952926165Z WARNING: Unknown module: org.apache.arrow.memory.core specified to --add-opens
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:01.944751228Z [2025-06-21T05:18:01,943][WARN ][stderr                   ] [660958269f64] Jun 21, 2025 5:18:01 AM org.opensearch.javaagent.bootstrap.AgentPolicy setPolicy
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:01.944800957Z [2025-06-21T05:18:01,944][WARN ][stderr                   ] [660958269f64] INFO: Policy attached successfully: org.opensearch.bootstrap.OpenSearchPolicy@2caa5d7c
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:01.951047120Z [2025-06-21T05:18:01,950][INFO ][o.o.n.Node               ] [660958269f64] version[3.0.0], pid[1], build[tar/dc4efa821904cc2d7ea7ef61c0f577d3fc0d8be9/2025-05-03T06:25:26.379676844Z], OS[Linux/5.15.167.4-microsoft-standard-WSL2/amd64], JVM[Eclipse Adoptium/OpenJDK 64-Bit Server VM/21.0.7/21.0.7+6-LTS]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:01.951063093Z [2025-06-21T05:18:01,950][INFO ][o.o.n.Node               ] [660958269f64] JVM home [/usr/share/opensearch/jdk], using bundled JDK/JRE [true]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:01.951170396Z [2025-06-21T05:18:01,951][INFO ][o.o.n.Node               ] [660958269f64] JVM arguments [-Xshare:auto, -Dopensearch.networkaddress.cache.ttl=60, -Dopensearch.networkaddress.cache.negative.ttl=10, -XX:+AlwaysPreTouch, -Xss1m, -Djava.awt.headless=true, -Dfile.encoding=UTF-8, -Djna.nosys=true, -XX:-OmitStackTraceInFastThrow, -XX:+ShowCodeDetailsInExceptionMessages, -Dio.netty.noUnsafe=true, -Dio.netty.noKeySetOptimization=true, -Dio.netty.recycler.maxCapacityPerThread=0, -Dio.netty.allocator.numDirectArenas=0, -Dlog4j.shutdownHookEnabled=false, -Dlog4j2.disable.jmx=true, -Djava.locale.providers=SPI,CLDR, -Xms1g, -Xmx1g, -XX:+UseG1GC, -XX:G1ReservePercent=25, -XX:InitiatingHeapOccupancyPercent=30, -Djava.io.tmpdir=/tmp/opensearch-8469431881485398854, -XX:+HeapDumpOnOutOfMemoryError, -XX:HeapDumpPath=data, -XX:ErrorFile=logs/hs_err_pid%p.log, -Xlog:gc*,gc+age=trace,safepoint:file=logs/gc.log:utctime,pid,tags:filecount=32,filesize=64m, --add-modules=jdk.incubator.vector, -javaagent:agent/opensearch-agent.jar, --add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED, -Dclk.tck=100, -Djdk.attach.allowAttachSelf=true, -Djava.security.policy=/usr/share/opensearch/config/opensearch-performance-analyzer/opensearch_security.policy, --add-opens=jdk.attach/sun.tools.attach=ALL-UNNAMED, -Dopensearch.cgroups.hierarchy.override=/, -Xms512m, -Xmx512m, -XX:MaxDirectMemorySize=268435456, -Dopensearch.path.home=/usr/share/opensearch, -Dopensearch.path.conf=/usr/share/opensearch/config, -Dopensearch.distribution.type=tar, -Dopensearch.bundled_jdk=true]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:02.039755640Z [2025-06-21T05:18:02,039][WARN ][stderr                   ] [660958269f64] Jun 21, 2025 5:18:02 AM org.apache.lucene.internal.vectorization.PanamaVectorizationProvider <init>
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:02.039775241Z [2025-06-21T05:18:02,039][WARN ][stderr                   ] [660958269f64] INFO: Java vector incubator API enabled; uses preferredBitSize=256; FMA enabled
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:02.480125567Z [2025-06-21T05:18:02,479][INFO ][o.o.s.s.t.SSLConfig      ] [660958269f64] SSL dual mode is disabled
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:02.480432517Z [2025-06-21T05:18:02,480][WARN ][o.o.s.OpenSearchSecurityPlugin] [660958269f64] OpenSearch Security plugin installed but disabled. This can expose your configuration (including passwords) to the public.
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:02.930040228Z [2025-06-21T05:18:02,929][ERROR][o.o.p.c.c.PluginSettings ] [660958269f64] Loading config file /usr/share/opensearch/config/opensearch-performance-analyzer/performance-analyzer.properties failed with error: org.opensearch.performanceanalyzer.commons.config.ConfigFileException: java.io.FileNotFoundException: /usr/share/opensearch/config/opensearch-performance-analyzer/performance-analyzer.properties (No such file or directory). Disabling plugin.
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:02.930147545Z [2025-06-21T05:18:02,930][INFO ][o.o.p.c.c.PluginSettings ] [660958269f64] Config: metricsLocation: /dev/shm/performanceanalyzer/, metricsDeletionInterval: 1, httpsEnabled: false, cleanup-metrics-db-files: false, batch-metrics-retention-period-minutes: 7, rpc-port: 9650, webservice-port 9600
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042834595Z [2025-06-21T05:18:03,040][ERROR][o.o.p.c.c.StatsCollector ] [660958269f64] Error in loading metadata for folderLocation: /usr/share/opensearch/config/opensearch-performance-analyzer/, fileLocation: plugin-stats-metadata
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042855416Z java.io.FileNotFoundException: /usr/share/opensearch/config/opensearch-performance-analyzer/plugin-stats-metadata (No such file or directory)
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042856823Z 	at java.base/java.io.FileInputStream.open0(Native Method) ~[?:?]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042858076Z 	at java.base/java.io.FileInputStream.open(FileInputStream.java:213) ~[?:?]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042859013Z 	at java.base/java.io.FileInputStream.<init>(FileInputStream.java:152) ~[?:?]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042860095Z 	at java.base/java.io.FileInputStream.<init>(FileInputStream.java:106) ~[?:?]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042861082Z 	at org.opensearch.performanceanalyzer.commons.collectors.StatsCollector.loadMetadata(StatsCollector.java:158) ~[performance-analyzer-commons-2.0.0.jar:?]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042862047Z 	at org.opensearch.performanceanalyzer.commons.collectors.StatsCollector.instance(StatsCollector.java:73) ~[performance-analyzer-commons-2.0.0.jar:?]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042863032Z 	at org.opensearch.performanceanalyzer.PerformanceAnalyzerPlugin.scheduleRcaCollectors(PerformanceAnalyzerPlugin.java:264) ~[opensearch-performance-analyzer-3.0.0.0.jar:3.0.0.0]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042864004Z 	at org.opensearch.performanceanalyzer.PerformanceAnalyzerPlugin.<init>(PerformanceAnalyzerPlugin.java:213) ~[opensearch-performance-analyzer-3.0.0.0.jar:3.0.0.0]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042865018Z 	at java.base/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62) [?:?]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042865950Z 	at java.base/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502) [?:?]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042866926Z 	at java.base/java.lang.reflect.Constructor.newInstance(Constructor.java:486) [?:?]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042867866Z 	at org.opensearch.plugins.PluginsService.loadPlugin(PluginsService.java:840) [opensearch-3.0.0.jar:3.0.0]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042868774Z 	at org.opensearch.plugins.PluginsService.loadBundle(PluginsService.java:788) [opensearch-3.0.0.jar:3.0.0]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042869697Z 	at org.opensearch.plugins.PluginsService.loadBundles(PluginsService.java:582) [opensearch-3.0.0.jar:3.0.0]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042877970Z 	at org.opensearch.plugins.PluginsService.<init>(PluginsService.java:197) [opensearch-3.0.0.jar:3.0.0]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042879398Z 	at org.opensearch.node.Node.<init>(Node.java:533) [opensearch-3.0.0.jar:3.0.0]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042880369Z 	at org.opensearch.node.Node.<init>(Node.java:460) [opensearch-3.0.0.jar:3.0.0]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042881332Z 	at org.opensearch.bootstrap.Bootstrap$5.<init>(Bootstrap.java:243) [opensearch-3.0.0.jar:3.0.0]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042882283Z 	at org.opensearch.bootstrap.Bootstrap.setup(Bootstrap.java:243) [opensearch-3.0.0.jar:3.0.0]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042883226Z 	at org.opensearch.bootstrap.Bootstrap.init(Bootstrap.java:405) [opensearch-3.0.0.jar:3.0.0]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042884117Z 	at org.opensearch.bootstrap.OpenSearch.init(OpenSearch.java:168) [opensearch-3.0.0.jar:3.0.0]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042885030Z 	at org.opensearch.bootstrap.OpenSearch.execute(OpenSearch.java:159) [opensearch-3.0.0.jar:3.0.0]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042885942Z 	at org.opensearch.common.cli.EnvironmentAwareCommand.execute(EnvironmentAwareCommand.java:110) [opensearch-3.0.0.jar:3.0.0]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042886856Z 	at org.opensearch.cli.Command.mainWithoutErrorHandling(Command.java:138) [opensearch-cli-3.0.0.jar:3.0.0]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042887761Z 	at org.opensearch.cli.Command.main(Command.java:101) [opensearch-cli-3.0.0.jar:3.0.0]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042896843Z 	at org.opensearch.bootstrap.OpenSearch.main(OpenSearch.java:125) [opensearch-3.0.0.jar:3.0.0]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.042897796Z 	at org.opensearch.bootstrap.OpenSearch.main(OpenSearch.java:91) [opensearch-3.0.0.jar:3.0.0]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.044282855Z [2025-06-21T05:18:03,044][INFO ][o.o.p.c.SearchBackPressureStatsCollector] [660958269f64] SearchBackPressureStatsCollector started
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.248105828Z [2025-06-21T05:18:03,247][INFO ][o.o.i.r.ReindexModulePlugin] [660958269f64] ReindexPlugin reloadSPI called
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.248589135Z [2025-06-21T05:18:03,248][INFO ][o.o.i.r.ReindexModulePlugin] [660958269f64] Unable to find any implementation for RemoteReindexExtension
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.274132712Z [2025-06-21T05:18:03,273][INFO ][o.o.j.JobSchedulerPlugin ] [660958269f64] Loaded scheduler extension: opensearch_time_series_analytics, index: .opendistro-anomaly-detector-jobs
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.289477824Z [2025-06-21T05:18:03,289][INFO ][o.o.j.JobSchedulerPlugin ] [660958269f64] Loaded scheduler extension: reports-scheduler, index: .opendistro-reports-definitions
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.289972566Z [2025-06-21T05:18:03,289][INFO ][o.o.j.JobSchedulerPlugin ] [660958269f64] Loaded scheduler extension: opendistro-index-management, index: .opendistro-ism-config
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.291239523Z [2025-06-21T05:18:03,291][INFO ][o.o.j.JobSchedulerPlugin ] [660958269f64] Loaded scheduler extension: checkBatchJobTaskStatus, index: .ml_commons_task_polling_job
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.291789543Z [2025-06-21T05:18:03,291][INFO ][o.o.j.JobSchedulerPlugin ] [660958269f64] Loaded scheduler extension: scheduler_geospatial_ip2geo_datasource, index: .scheduler-geospatial-ip2geo-datasource
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.292163115Z [2025-06-21T05:18:03,292][INFO ][o.o.j.JobSchedulerPlugin ] [660958269f64] Loaded scheduler extension: opensearch_sap_job, index: .opensearch-sap--job
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.292834735Z [2025-06-21T05:18:03,292][INFO ][o.o.j.JobSchedulerPlugin ] [660958269f64] Loaded scheduler extension: async-query-scheduler, index: .async-query-scheduler
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.306636071Z [2025-06-21T05:18:03,306][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [aggs-matrix-stats]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.306652993Z [2025-06-21T05:18:03,306][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [analysis-common]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.306654328Z [2025-06-21T05:18:03,306][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [cache-common]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.306692968Z [2025-06-21T05:18:03,306][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [geo]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.306716946Z [2025-06-21T05:18:03,306][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [ingest-common]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.306765719Z [2025-06-21T05:18:03,306][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [ingest-geoip]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.306808516Z [2025-06-21T05:18:03,306][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [ingest-user-agent]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.306837653Z [2025-06-21T05:18:03,306][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [lang-expression]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.306896200Z [2025-06-21T05:18:03,306][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [lang-mustache]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.306921409Z [2025-06-21T05:18:03,306][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [lang-painless]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.306973798Z [2025-06-21T05:18:03,306][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [mapper-extras]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.307003379Z [2025-06-21T05:18:03,306][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [opensearch-dashboards]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.307052751Z [2025-06-21T05:18:03,306][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [parent-join]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.307107714Z [2025-06-21T05:18:03,307][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [percolator]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.307116401Z [2025-06-21T05:18:03,307][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [rank-eval]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.307186562Z [2025-06-21T05:18:03,307][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [reindex]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.307503933Z [2025-06-21T05:18:03,307][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [repository-url]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.307513706Z [2025-06-21T05:18:03,307][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [search-pipeline-common]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.307516260Z [2025-06-21T05:18:03,307][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [systemd]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.307518157Z [2025-06-21T05:18:03,307][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded module [transport-netty4]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.307714039Z [2025-06-21T05:18:03,307][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-alerting]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.307725856Z [2025-06-21T05:18:03,307][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-anomaly-detection]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.307771205Z [2025-06-21T05:18:03,307][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-asynchronous-search]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.307819005Z [2025-06-21T05:18:03,307][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-cross-cluster-replication]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.307848366Z [2025-06-21T05:18:03,307][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-custom-codecs]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.307899036Z [2025-06-21T05:18:03,307][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-flow-framework]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.307940008Z [2025-06-21T05:18:03,307][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-geospatial]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.307967545Z [2025-06-21T05:18:03,307][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-index-management]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.308100023Z [2025-06-21T05:18:03,307][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-job-scheduler]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.308145705Z [2025-06-21T05:18:03,308][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-knn]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.308190490Z [2025-06-21T05:18:03,308][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-ltr]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.308321572Z [2025-06-21T05:18:03,308][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-ml]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.308337251Z [2025-06-21T05:18:03,308][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-neural-search]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.308396906Z [2025-06-21T05:18:03,308][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-notifications]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.308436058Z [2025-06-21T05:18:03,308][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-notifications-core]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.308448615Z [2025-06-21T05:18:03,308][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-observability]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.308520150Z [2025-06-21T05:18:03,308][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-performance-analyzer]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.308526057Z [2025-06-21T05:18:03,308][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-reports-scheduler]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.308576068Z [2025-06-21T05:18:03,308][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-security]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.308618828Z [2025-06-21T05:18:03,308][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-security-analytics]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.308751398Z [2025-06-21T05:18:03,308][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-skills]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.308878810Z [2025-06-21T05:18:03,308][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-sql]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.309052285Z [2025-06-21T05:18:03,308][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [opensearch-system-templates]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.309062276Z [2025-06-21T05:18:03,308][INFO ][o.o.p.PluginsService     ] [660958269f64] loaded plugin [query-insights]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.330950308Z [2025-06-21T05:18:03,330][WARN ][stderr                   ] [660958269f64] WARNING: A restricted method in java.lang.foreign.Linker has been called
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.330973107Z [2025-06-21T05:18:03,330][WARN ][stderr                   ] [660958269f64] WARNING: java.lang.foreign.Linker::downcallHandle has been called by the unnamed module
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.331034772Z [2025-06-21T05:18:03,330][WARN ][stderr                   ] [660958269f64] WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for this module
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.376617025Z [2025-06-21T05:18:03,376][INFO ][o.o.e.NodeEnvironment    ] [660958269f64] using [1] data paths, mounts [[/usr/share/opensearch/data (/dev/sdd)]], net usable_space [214.1gb], net total_space [250.9gb], types [ext4]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.376664559Z [2025-06-21T05:18:03,376][INFO ][o.o.e.NodeEnvironment    ] [660958269f64] heap size [512mb], compressed ordinary object pointers [true]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.438952266Z [2025-06-21T05:18:03,438][INFO ][o.o.n.Node               ] [660958269f64] node name [660958269f64], node ID [EyntKRspRLmKpIHnyi4NoA], cluster name [docker-cluster], roles [ingest, remote_cluster_client, data, cluster_manager]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:03.480387933Z [2025-06-21T05:18:03,480][INFO ][o.o.e.ExtensionsManager  ] [660958269f64] ExtensionsManager initialized
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:05.223210131Z [2025-06-21T05:18:05,223][WARN ][stderr                   ] [660958269f64] SLF4J: Failed to load class "org.slf4j.impl.StaticLoggerBinder".
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:05.223228554Z [2025-06-21T05:18:05,223][WARN ][stderr                   ] [660958269f64] SLF4J: Defaulting to no-operation (NOP) logger implementation
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:05.223337689Z [2025-06-21T05:18:05,223][WARN ][stderr                   ] [660958269f64] SLF4J: See http://www.slf4j.org/codes.html#StaticLoggerBinder for further details.
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:05.238254301Z [2025-06-21T05:18:05,238][INFO ][o.o.l.b.LTRCircuitBreakerService] [660958269f64] Registered memory breaker.
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:05.355829681Z [2025-06-21T05:18:05,355][INFO ][o.o.t.b.CircuitBreakerService] [660958269f64] Registered memory breaker.
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:05.534433313Z [2025-06-21T05:18:05,534][INFO ][o.o.r.m.c.i.SdkClientFactory] [660958269f64] Using local opensearch cluster as metadata store.
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:05.767557051Z [2025-06-21T05:18:05,767][INFO ][o.o.r.m.c.i.SdkClientFactory] [660958269f64] Using local opensearch cluster as metadata store.
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:05.779853532Z [2025-06-21T05:18:05,779][INFO ][o.o.m.b.MLCircuitBreakerService] [660958269f64] Registered ML memory breaker.
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:05.780255412Z [2025-06-21T05:18:05,780][INFO ][o.o.m.b.MLCircuitBreakerService] [660958269f64] Registered ML disk breaker.
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:05.780258140Z [2025-06-21T05:18:05,780][INFO ][o.o.m.b.MLCircuitBreakerService] [660958269f64] Registered ML native memory breaker.
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:05.837141183Z [2025-06-21T05:18:05,836][INFO ][o.r.Reflections          ] [660958269f64] Reflections took 31 ms to scan 1 urls, producing 31 keys and 81 values 
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:05.851289932Z [2025-06-21T05:18:05,851][INFO ][o.r.Reflections          ] [660958269f64] Reflections took 1 ms to scan 1 urls, producing 3 keys and 5 values 
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:05.964239948Z [2025-06-21T05:18:05,963][WARN ][o.o.s.p.SQLPlugin        ] [660958269f64] Master key is a required config for using create and update datasource APIs. Please set plugins.query.datasources.encryption.masterkey config in opensearch.yml in all the cluster nodes. More details can be found here: https://github.com/opensearch-project/sql/blob/main/docs/user/ppl/admin/datasources.rst#master-key-config-for-encrypting-credential-information
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:06.161276420Z [2025-06-21T05:18:06,161][INFO ][o.o.p.i.c.s.QueryInsightsService] [660958269f64] Setting query insights index template priority to [1847]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:06.604902693Z [2025-06-21T05:18:06,604][INFO ][o.o.t.NettyAllocator     ] [660958269f64] creating NettyAllocator with the following configs: [name=unpooled, suggested_max_allocation_size=256kb, factors={opensearch.unsafe.use_unpooled_allocator=null, g1gc_enabled=true, g1gc_region_size=1mb, heap_size=512mb}]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:06.687429493Z [2025-06-21T05:18:06,686][INFO ][o.o.d.DiscoveryModule    ] [660958269f64] using discovery type [single-node] and seed hosts providers [settings]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.036798947Z [2025-06-21T05:18:07,036][WARN ][o.o.g.DanglingIndicesState] [660958269f64] gateway.auto_import_dangling_indices is disabled, dangling indices will not be automatically detected or imported and must be managed manually
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.438743108Z [2025-06-21T05:18:07,438][INFO ][o.o.p.h.c.PerformanceAnalyzerConfigAction] [660958269f64] PerformanceAnalyzer Enabled: false
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.471743191Z [2025-06-21T05:18:07,471][INFO ][o.o.n.Node               ] [660958269f64] initialized
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.471761849Z [2025-06-21T05:18:07,471][INFO ][o.o.n.Node               ] [660958269f64] starting ...
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.499661987Z [2025-06-21T05:18:07,499][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [windows_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.499814778Z [2025-06-21T05:18:07,499][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [waf_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.500078168Z [2025-06-21T05:18:07,499][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [vpcflow_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.500204000Z [2025-06-21T05:18:07,500][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [test_windows_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.500462555Z [2025-06-21T05:18:07,500][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [s3_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.500475190Z [2025-06-21T05:18:07,500][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [others_web_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.500661168Z [2025-06-21T05:18:07,500][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [others_proxy_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.500842870Z [2025-06-21T05:18:07,500][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [others_macos_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.500850320Z [2025-06-21T05:18:07,500][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [others_compliance_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.501206183Z [2025-06-21T05:18:07,500][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [others_cloud_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.501226054Z [2025-06-21T05:18:07,501][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [others_apt_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.501228650Z [2025-06-21T05:18:07,501][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [others_application_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.501369675Z [2025-06-21T05:18:07,501][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [okta_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.501432760Z [2025-06-21T05:18:07,501][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [network_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.501611650Z [2025-06-21T05:18:07,501][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [netflow_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.502076184Z [2025-06-21T05:18:07,501][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [m365_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.502260699Z [2025-06-21T05:18:07,502][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [linux_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.502384375Z [2025-06-21T05:18:07,502][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [gworkspace_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.502518377Z [2025-06-21T05:18:07,502][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [github_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.502600739Z [2025-06-21T05:18:07,502][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [dns_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.502832980Z [2025-06-21T05:18:07,502][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [cloudtrail_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.502920071Z [2025-06-21T05:18:07,502][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [azure_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.503039691Z [2025-06-21T05:18:07,502][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [apache_access_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.503232692Z [2025-06-21T05:18:07,503][INFO ][o.o.s.l.BuiltinLogTypeLoader] [660958269f64] Loaded [ad_ldap_logtype.json] log type
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.583659273Z [2025-06-21T05:18:07,583][INFO ][o.o.t.TransportService   ] [660958269f64] publish_address {172.23.0.2:9300}, bound_addresses {0.0.0.0:9300}
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.584442418Z [2025-06-21T05:18:07,584][INFO ][o.o.t.TransportService   ] [660958269f64] Remote clusters initialized successfully.
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.732979727Z [2025-06-21T05:18:07,732][WARN ][o.o.b.BootstrapChecks    ] [660958269f64] max virtual memory areas vm.max_map_count [65530] is too low, increase to at least [262144]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.733632615Z [2025-06-21T05:18:07,733][INFO ][o.o.c.c.Coordinator      ] [660958269f64] cluster UUID [T9eekrQxSg6vsmIBFQpQhA]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.775219848Z [2025-06-21T05:18:07,774][INFO ][o.o.c.s.ClusterManagerService] [660958269f64] Tasks batched with key: org.opensearch.cluster.coordination.JoinHelper, count:3 and sample tasks: elected-as-cluster-manager ([1] nodes joined)[{660958269f64}{EyntKRspRLmKpIHnyi4NoA}{3x3gr4pPQ7yeEHzrhbDVEQ}{172.23.0.2}{172.23.0.2:9300}{dimr}{shard_indexing_pressure_enabled=true} elect leader, _BECOME_CLUSTER_MANAGER_TASK_, _FINISH_ELECTION_], term: 59, version: 619, delta: cluster-manager node changed {previous [], current [{660958269f64}{EyntKRspRLmKpIHnyi4NoA}{3x3gr4pPQ7yeEHzrhbDVEQ}{172.23.0.2}{172.23.0.2:9300}{dimr}{shard_indexing_pressure_enabled=true}]}
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.804613822Z [2025-06-21T05:18:07,804][INFO ][o.o.c.s.ClusterApplierService] [660958269f64] cluster-manager node changed {previous [], current [{660958269f64}{EyntKRspRLmKpIHnyi4NoA}{3x3gr4pPQ7yeEHzrhbDVEQ}{172.23.0.2}{172.23.0.2:9300}{dimr}{shard_indexing_pressure_enabled=true}]}, term: 59, version: 619, reason: Publication{term=59, version=619}
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.809114438Z [2025-06-21T05:18:07,808][INFO ][o.o.t.i.IndexManagement  ] [660958269f64] Candidate custom result indices are empty.
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.809382147Z [2025-06-21T05:18:07,809][INFO ][o.o.t.i.IndexManagement  ] [660958269f64] Candidate custom result indices are empty.
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.809527877Z [2025-06-21T05:18:07,809][INFO ][o.o.t.c.ClusterEventListener] [660958269f64] Cluster is not recovered yet.
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.831189351Z [2025-06-21T05:18:07,830][INFO ][o.o.i.i.ManagedIndexCoordinator] [660958269f64] Cache cluster manager node onClusterManager time: 1750483087830
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.834504456Z [2025-06-21T05:18:07,834][WARN ][o.o.p.c.s.h.ConfigOverridesClusterSettingHandler] [660958269f64] Config override setting update called with empty string. Ignoring.
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.838121430Z [2025-06-21T05:18:07,837][INFO ][o.o.d.PeerFinder         ] [660958269f64] setting findPeersInterval to [1s] as node commission status = [true] for local node [{660958269f64}{EyntKRspRLmKpIHnyi4NoA}{3x3gr4pPQ7yeEHzrhbDVEQ}{172.23.0.2}{172.23.0.2:9300}{dimr}{shard_indexing_pressure_enabled=true}]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.839438273Z [2025-06-21T05:18:07,839][WARN ][o.o.c.r.a.AllocationService] [660958269f64] Falling back to single shard assignment since batch mode disable or multiple custom allocators set
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.841766115Z [2025-06-21T05:18:07,841][INFO ][o.o.h.AbstractHttpServerTransport] [660958269f64] publish_address {172.23.0.2:9200}, bound_addresses {0.0.0.0:9200}
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.841786394Z [2025-06-21T05:18:07,841][INFO ][o.o.n.Node               ] [660958269f64] started
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.842344260Z [2025-06-21T05:18:07,842][INFO ][o.o.s.OpenSearchSecurityPlugin] [660958269f64] 0 OpenSearch Security modules loaded so far: []
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.847693129Z [2025-06-21T05:18:07,847][WARN ][o.o.c.r.a.AllocationService] [660958269f64] Falling back to single shard assignment since batch mode disable or multiple custom allocators set
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.878423154Z [2025-06-21T05:18:07,878][INFO ][o.o.t.c.HashRing         ] [660958269f64] Node added: [EyntKRspRLmKpIHnyi4NoA]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.880396476Z [2025-06-21T05:18:07,880][INFO ][o.o.t.c.HashRing         ] [660958269f64] Add data node to version hash ring: EyntKRspRLmKpIHnyi4NoA
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.881395788Z [2025-06-21T05:18:07,881][INFO ][o.o.t.c.HashRing         ] [660958269f64] All nodes with known version: {EyntKRspRLmKpIHnyi4NoA=ADNodeInfo{version=3.0.0, isEligibleDataNode=true}}
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.881409773Z [2025-06-21T05:18:07,881][INFO ][o.o.t.c.HashRing         ] [660958269f64] Rebuild hash ring for realtime with cooldown, nodeChangeEvents size 0
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.881412595Z [2025-06-21T05:18:07,881][INFO ][o.o.t.c.HashRing         ] [660958269f64] Build version hash ring successfully
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.881934991Z [2025-06-21T05:18:07,881][INFO ][o.o.t.c.ADDataMigrator   ] [660958269f64] Start migrating AD data
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.881959097Z [2025-06-21T05:18:07,881][INFO ][o.o.t.c.ADDataMigrator   ] [660958269f64] AD job index doesn't exist, no need to migrate
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.881961683Z [2025-06-21T05:18:07,881][INFO ][o.o.t.c.ClusterEventListener] [660958269f64] Init version hash ring successfully
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.892983926Z [2025-06-21T05:18:07,892][INFO ][o.o.c.s.ClusterManagerTaskThrottler] [660958269f64] Starting cluster manager throttling as all nodes are higher than or equal to 2.5.0
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.893570077Z [2025-06-21T05:18:07,893][INFO ][o.o.g.GatewayService     ] [660958269f64] recovered [7] indices into cluster_state
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.894611600Z [2025-06-21T05:18:07,894][INFO ][o.o.s.l.LogTypeService   ] [660958269f64] Loading builtin types!
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.896194926Z [2025-06-21T05:18:07,896][INFO ][o.o.s.l.LogTypeService   ] [660958269f64] Indexing [432] fieldMappingDocs from logTypes: 24
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.910928443Z [2025-06-21T05:18:07,910][WARN ][o.o.c.r.a.AllocationService] [660958269f64] Falling back to single shard assignment since batch mode disable or multiple custom allocators set
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.915883474Z [2025-06-21T05:18:07,915][WARN ][o.o.s.SecurityAnalyticsPlugin] [660958269f64] Failed to initialize LogType config index and builtin log types
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:07.991296663Z [2025-06-21T05:18:07,991][INFO ][o.o.p.PluginsService     ] [660958269f64] PluginService:onIndexModule index:[top_queries-2025.06.14-11038/44-ttSaXQs68W4meuWkunA]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.058365259Z [2025-06-21T05:18:08,058][INFO ][o.o.p.PluginsService     ] [660958269f64] PluginService:onIndexModule index:[top_queries-2025.06.20-11065/91OY2F5EQTma_9SlZeRn1g]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.066998102Z [2025-06-21T05:18:08,066][INFO ][o.o.p.PluginsService     ] [660958269f64] PluginService:onIndexModule index:[.plugins-ml-config/u5LjUPifRwy-d1SFFP0YHg]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.072152401Z [2025-06-21T05:18:08,071][INFO ][o.o.p.PluginsService     ] [660958269f64] PluginService:onIndexModule index:[top_queries-2025.06.21-11066/C1hvp6HBRdiJme7mHjb8cQ]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.224555436Z [2025-06-21T05:18:08,224][WARN ][o.o.c.r.a.AllocationService] [660958269f64] Falling back to single shard assignment since batch mode disable or multiple custom allocators set
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.252352266Z [2025-06-21T05:18:08,252][INFO ][o.o.p.PluginsService     ] [660958269f64] PluginService:onIndexModule index:[.opensearch-sap-log-types-config/kISrNAR0S4W7fab9CCGGxg]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.258337703Z [2025-06-21T05:18:08,258][INFO ][o.o.p.PluginsService     ] [660958269f64] PluginService:onIndexModule index:[recipes/hGEVpajpQMCvlpK5sNw6ug]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.262249846Z [2025-06-21T05:18:08,262][INFO ][o.o.p.PluginsService     ] [660958269f64] PluginService:onIndexModule index:[ingredients/Lz1bvnphRUOAQkVVDeF7sA]
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.305126070Z [2025-06-21T05:18:08,304][INFO ][o.o.c.r.a.AllocationService] [660958269f64] Cluster health status changed from [RED] to [YELLOW] (reason: [shards started [[recipes][0], [ingredients][0]]]).
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.327083758Z [2025-06-21T05:18:08,326][WARN ][o.o.c.r.a.AllocationService] [660958269f64] Falling back to single shard assignment since batch mode disable or multiple custom allocators set
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.838483054Z [2025-06-21T05:18:08,837][INFO ][o.o.s.l.LogTypeService   ] [660958269f64] Loading builtin types!
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.840519276Z [2025-06-21T05:18:08,839][INFO ][o.o.s.l.LogTypeService   ] [660958269f64] Indexing [432] fieldMappingDocs from logTypes: 24
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.849078331Z [2025-06-21T05:18:08,848][INFO ][o.o.s.l.LogTypeService   ] [660958269f64] Loading builtin types!
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.849089635Z [2025-06-21T05:18:08,848][INFO ][o.o.s.l.LogTypeService   ] [660958269f64] Indexing [432] fieldMappingDocs from logTypes: 24
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.850079316Z [2025-06-21T05:18:08,849][INFO ][o.o.s.i.DetectorIndexManagementService] [660958269f64] info deleteOldIndices
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.852104454Z [2025-06-21T05:18:08,851][INFO ][o.o.s.i.DetectorIndexManagementService] [660958269f64] No Old Correlation Indices to delete
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.852444846Z [2025-06-21T05:18:08,852][INFO ][o.o.s.i.DetectorIndexManagementService] [660958269f64] info deleteOldIndices
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.852580915Z [2025-06-21T05:18:08,852][INFO ][o.o.s.i.DetectorIndexManagementService] [660958269f64] No Old IOC Findings Indices to delete
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.940412004Z [2025-06-21T05:18:08,940][INFO ][o.o.s.l.LogTypeService   ] [660958269f64] Indexing [432] fieldMappingDocs
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:08.940879577Z [2025-06-21T05:18:08,940][INFO ][o.o.s.l.LogTypeService   ] [660958269f64] Indexing [432] fieldMappingDocs
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:09.216127337Z [2025-06-21T05:18:09,215][INFO ][o.o.s.l.LogTypeService   ] [660958269f64] Loaded [432] field mapping docs successfully!
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:09.217779093Z [2025-06-21T05:18:09,217][INFO ][o.o.s.l.LogTypeService   ] [660958269f64] Loaded [432] field mapping docs successfully!
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:09.223714970Z [2025-06-21T05:18:09,223][INFO ][o.o.s.l.LogTypeService   ] [660958269f64] Indexing [23] customLogTypes
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:09.230556975Z [2025-06-21T05:18:09,230][INFO ][o.o.s.l.LogTypeService   ] [660958269f64] Indexing [23] customLogTypes
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:09.250205688Z [2025-06-21T05:18:09,249][INFO ][o.o.s.l.LogTypeService   ] [660958269f64] Loaded [23] customLogType docs successfully!
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:09.255123215Z [2025-06-21T05:18:09,254][INFO ][o.o.s.l.LogTypeService   ] [660958269f64] Loaded [23] customLogType docs successfully!
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:09.306389708Z [2025-06-21T05:18:09,306][INFO ][o.o.s.i.DetectorIndexManagementService] [660958269f64] info deleteOldIndices
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:09.306641968Z [2025-06-21T05:18:09,306][INFO ][o.o.s.i.DetectorIndexManagementService] [660958269f64] No Old Finding Indices to delete
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:11.082346594Z INFO:__main__:Found existing data: 225602 recipes and 246351 ingredients
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:11.082374614Z INFO:__main__:Data already exists in OpenSearch, skipping indexing
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:11.128086345Z ✅ Indexing completed
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:11.128334213Z 🚀 Launching Flask app...
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:17.831963915Z [2025-06-21T05:18:17,831][INFO ][o.o.m.a.MLModelAutoReDeployer] [660958269f64] Index not found, not performing auto reloading!
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:17.831991149Z [2025-06-21T05:18:17,831][INFO ][o.o.m.c.MLCommonsClusterManagerEventListener] [660958269f64] Starting ML sync up job...
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:27.839549409Z [2025-06-21T05:18:27,839][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:27.840587766Z [2025-06-21T05:18:27,840][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] ML configuration already initialized, no action needed
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:37.840313676Z [2025-06-21T05:18:37,839][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:47.840576698Z [2025-06-21T05:18:47,840][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:51.104535805Z 05:18:51 │ INFO │ Logging system initialized successfully
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:51.121741999Z INFO: Starting application initialization...
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:51.191842913Z INFO: Application initialization completed successfully
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:51.192826560Z Waiting for OpenSearch to be ready...
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:51.192847253Z Successfully connected to OpenSearch!
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:51.192849139Z Successfully loaded 10000 ingredients
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:51.192850201Z  * Serving Flask app 'app'
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:51.192851276Z  * Debug mode: on
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:51.197102354Z INFO: [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:51.197115944Z  * Running on all addresses (0.0.0.0)
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:51.197117425Z  * Running on http://127.0.0.1:8080
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:51.197118427Z  * Running on http://172.23.0.3:8080
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:51.197119418Z INFO: [33mPress CTRL+C to quit[0m
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:51.197538534Z INFO:  * Restarting with stat
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:54.349062016Z 05:18:54 │ INFO │ Logging system initialized successfully
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:54.366690580Z INFO: Starting application initialization...
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:54.405165248Z INFO: Application initialization completed successfully
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:54.408079447Z WARNING:  * Debugger is active!
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:18:54.408719248Z INFO:  * Debugger PIN: 119-086-027
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:18:57.841485316Z [2025-06-21T05:18:57,841][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:19:07.842118891Z [2025-06-21T05:19:07,841][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:19:17.842739119Z [2025-06-21T05:19:17,842][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:19:27.843413806Z [2025-06-21T05:19:27,843][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:19:37.844178877Z [2025-06-21T05:19:37,843][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:19:47.844825852Z [2025-06-21T05:19:47,844][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:19:57.845648941Z [2025-06-21T05:19:57,845][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:20:07.846301498Z [2025-06-21T05:20:07,845][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:20:17.847031626Z [2025-06-21T05:20:17,846][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:20:27.847966280Z [2025-06-21T05:20:27,847][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:20:37.848803972Z [2025-06-21T05:20:37,848][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:20:47.849472200Z [2025-06-21T05:20:47,849][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:20:57.850172113Z [2025-06-21T05:20:57,849][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:21:07.852358007Z [2025-06-21T05:21:07,851][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:21:17.855195948Z [2025-06-21T05:21:17,853][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:21:27.855558106Z [2025-06-21T05:21:27,855][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:21:37.858544759Z [2025-06-21T05:21:37,856][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:21:47.858648251Z [2025-06-21T05:21:47,858][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:21:57.859410283Z [2025-06-21T05:21:57,859][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:22:07.860027570Z [2025-06-21T05:22:07,859][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:22:17.860038548Z [2025-06-21T05:22:17,859][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:22:27.860394851Z [2025-06-21T05:22:27,860][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:22:37.860847616Z [2025-06-21T05:22:37,860][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:22:47.861699396Z [2025-06-21T05:22:47,861][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:22:57.861878572Z [2025-06-21T05:22:57,861][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:23:07.740678629Z [2025-06-21T05:23:07,733][INFO ][o.o.j.s.JobSweeper       ] [660958269f64] Running full sweep
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:23:07.831094782Z [2025-06-21T05:23:07,830][INFO ][o.o.i.i.PluginVersionSweepCoordinator] [660958269f64] Canceling sweep ism plugin version job
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:23:07.862213179Z [2025-06-21T05:23:07,861][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:23:17.862478817Z [2025-06-21T05:23:17,862][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:23:27.862780168Z [2025-06-21T05:23:27,862][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:23:37.863123830Z [2025-06-21T05:23:37,862][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:23:47.863200799Z [2025-06-21T05:23:47,863][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:23:57.864245489Z [2025-06-21T05:23:57,863][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:24:07.864446411Z [2025-06-21T05:24:07,864][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:24:17.864682095Z [2025-06-21T05:24:17,864][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:24:27.864987169Z [2025-06-21T05:24:27,864][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:24:37.865500742Z [2025-06-21T05:24:37,865][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:24:47.865598143Z [2025-06-21T05:24:47,865][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:24:57.865901283Z [2025-06-21T05:24:57,865][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:25:07.866361977Z [2025-06-21T05:25:07,866][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:25:17.866323474Z [2025-06-21T05:25:17,866][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:25:27.866721871Z [2025-06-21T05:25:27,866][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:25:37.867032697Z [2025-06-21T05:25:37,866][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:25:47.867240029Z [2025-06-21T05:25:47,866][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:25:57.867573366Z [2025-06-21T05:25:57,867][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:26:07.867875500Z [2025-06-21T05:26:07,867][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:26:17.867791802Z [2025-06-21T05:26:17,867][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:26:27.868202266Z [2025-06-21T05:26:27,868][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:26:37.868448401Z [2025-06-21T05:26:37,868][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:26:47.868272937Z [2025-06-21T05:26:47,868][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:26:57.868823459Z [2025-06-21T05:26:57,868][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:27:07.869015440Z [2025-06-21T05:27:07,868][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:27:17.869182991Z [2025-06-21T05:27:17,868][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:27:27.869592109Z [2025-06-21T05:27:27,869][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:27:37.869998521Z [2025-06-21T05:27:37,869][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:27:47.869452922Z [2025-06-21T05:27:47,869][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:27:57.870135039Z [2025-06-21T05:27:57,869][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:28:07.738694194Z [2025-06-21T05:28:07,738][INFO ][o.o.j.s.JobSweeper       ] [660958269f64] Running full sweep
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:28:07.870484254Z [2025-06-21T05:28:07,870][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:28:17.870200395Z [2025-06-21T05:28:17,869][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:28:27.870621328Z [2025-06-21T05:28:27,870][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:28:37.870989161Z [2025-06-21T05:28:37,870][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:28:47.870738208Z [2025-06-21T05:28:47,870][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:28:57.871134333Z [2025-06-21T05:28:57,870][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:29:07.871827807Z [2025-06-21T05:29:07,871][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:29:17.871446504Z [2025-06-21T05:29:17,871][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:29:27.872113707Z [2025-06-21T05:29:27,871][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:29:37.872539265Z [2025-06-21T05:29:37,872][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:29:47.871496152Z [2025-06-21T05:29:47,871][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:29:57.872054808Z [2025-06-21T05:29:57,871][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:30:07.872305990Z [2025-06-21T05:30:07,872][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:30:17.872429571Z [2025-06-21T05:30:17,872][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:30:27.872893045Z [2025-06-21T05:30:27,872][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:30:37.876444178Z [2025-06-21T05:30:37,876][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:30:47.876132978Z [2025-06-21T05:30:47,875][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:30:51.447536540Z INFO:  * Detected change in '/app/web/diet_classifiers.py', reloading
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:30:51.447629376Z Waiting for OpenSearch to be ready...
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:30:51.447683529Z Successfully connected to OpenSearch!
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:30:51.447690252Z Successfully loaded 10000 ingredients
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:30:52.334532937Z INFO:  * Restarting with stat
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:30:57.876439073Z [2025-06-21T05:30:57,876][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:30:58.055871261Z 05:30:58 │ INFO │ Logging system initialized successfully
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:30:58.075168400Z INFO: Starting application initialization...
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:30:58.149319225Z INFO: Application initialization completed successfully
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:30:58.153520843Z WARNING:  * Debugger is active!
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:30:58.154088664Z INFO:  * Debugger PIN: 119-086-027
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:31:07.876809580Z [2025-06-21T05:31:07,876][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:31:17.876641965Z [2025-06-21T05:31:17,876][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:31:27.876811612Z [2025-06-21T05:31:27,876][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:31:28.455036001Z INFO:  * Detected change in '/app/web/diet_classifiers.py', reloading
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:31:28.455112054Z Waiting for OpenSearch to be ready...
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:31:28.455137765Z Successfully connected to OpenSearch!
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:31:28.455140146Z Successfully loaded 10000 ingredients
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:31:29.460547632Z INFO:  * Restarting with stat
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:31:35.021301777Z 05:31:35 │ INFO │ Logging system initialized successfully
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:31:35.050415713Z INFO: Starting application initialization...
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:31:35.078567296Z INFO: Application initialization completed successfully
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:31:35.081856772Z WARNING:  * Debugger is active!
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:31:35.082161605Z INFO:  * Debugger PIN: 119-086-027
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:31:37.877190255Z [2025-06-21T05:31:37,876][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:31:47.877179875Z [2025-06-21T05:31:47,876][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:31:57.877501373Z [2025-06-21T05:31:57,877][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:32:07.877782507Z [2025-06-21T05:32:07,877][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:32:17.878146782Z [2025-06-21T05:32:17,877][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:32:27.878603525Z [2025-06-21T05:32:27,878][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:32:37.878739074Z [2025-06-21T05:32:37,878][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:32:47.879277577Z [2025-06-21T05:32:47,878][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:32:57.879634395Z [2025-06-21T05:32:57,879][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:07.007536022Z INFO:  * Detected change in '/app/web/diet_classifiers.py', reloading
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:07.007571152Z Waiting for OpenSearch to be ready...
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:07.007586458Z Successfully connected to OpenSearch!
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:07.007588965Z Successfully loaded 10000 ingredients
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:07.554974140Z INFO:  * Restarting with stat
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:33:07.733014898Z [2025-06-21T05:33:07,732][INFO ][o.o.j.s.JobSweeper       ] [660958269f64] Running full sweep
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:33:07.819667959Z [2025-06-21T05:33:07,819][INFO ][o.o.s.s.c.FlintStreamingJobHouseKeeperTask] [660958269f64] Starting housekeeping task for auto refresh streaming jobs.
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:33:07.822967516Z [2025-06-21T05:33:07,822][INFO ][o.o.s.s.c.FlintStreamingJobHouseKeeperTask] [660958269f64] Finished housekeeping task for auto refresh streaming jobs.
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:33:07.879915497Z [2025-06-21T05:33:07,879][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:10.727205181Z 05:33:10 │ INFO │ Logging system initialized successfully
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:10.744679938Z INFO: Starting application initialization...
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:10.772481424Z INFO: Application initialization completed successfully
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:10.775616197Z WARNING:  * Debugger is active!
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:10.776029847Z INFO:  * Debugger PIN: 119-086-027
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:16.841337013Z Waiting for OpenSearch to be ready...
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:16.841364404Z Successfully connected to OpenSearch!
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:16.841367155Z Successfully loaded 10000 ingredients
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:16.841361383Z INFO:  * Detected change in '/app/web/diet_classifiers.py', reloading
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:17.444209106Z INFO:  * Restarting with stat
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:33:17.880161702Z [2025-06-21T05:33:17,879][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:21.630245254Z 05:33:21 │ INFO │ Logging system initialized successfully
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:21.648222071Z INFO: Starting application initialization...
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:21.674971973Z INFO: Application initialization completed successfully
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:21.678223223Z WARNING:  * Debugger is active!
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:21.678643354Z INFO:  * Debugger PIN: 119-086-027
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:33:27.880511047Z [2025-06-21T05:33:27,880][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:33:37.880816892Z [2025-06-21T05:33:37,880][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:33:47.882689057Z [2025-06-21T05:33:47,882][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:49.963028705Z INFO:  * Detected change in '/app/web/diet_classifiers.py', reloading
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:49.963061819Z Waiting for OpenSearch to be ready...
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:49.963080048Z Successfully connected to OpenSearch!
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:49.963081266Z Successfully loaded 10000 ingredients
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:50.669508591Z INFO:  * Restarting with stat
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:54.889873143Z 05:33:54 │ INFO │ Logging system initialized successfully
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:54.909946025Z INFO: Starting application initialization...
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:54.960937787Z INFO: Application initialization completed successfully
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:54.963925656Z WARNING:  * Debugger is active!
-search_by_ingredients_v1t3ls0n-web-1  | 2025-06-21T05:33:54.964250906Z INFO:  * Debugger PIN: 119-086-027
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:33:57.882952459Z [2025-06-21T05:33:57,882][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:34:07.883391015Z [2025-06-21T05:34:07,883][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:34:17.884091162Z [2025-06-21T05:34:17,883][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:34:27.884771392Z [2025-06-21T05:34:27,884][INFO ][o.o.m.c.MLSyncUpCron     ] [660958269f64] Skipping sync up job - ML model index not found
-[A
+                                                                [A05:20:30 │ INFO │    ✅ Silver labels generated successfully in 101.0s
+05:20:30 │ INFO │       💾 Silver labels generated: 16.8% memory used (4780 MB / 32015 MB)
+   ├─    ├─ Generating Silver Labels: : 3/5 |██████    | [01:46<01:35]   ├─    ├─ Data Validation: : 3/5 |██████    | [01:46<01:35]         05:20:30 │ INFO │ 
+   ✅ STAGE 4: DATA VALIDATION AND CROSS-CHECKS
+
+      ├─       ├─ Validation Checks: 0/5 |          | [00:00][A
+      ├─       ├─ Index alignment: : 0/5 |          | [00:00][A
+      ├─       ├─ Data consistency: : 1/5 |██        | [00:00][A
+      ├─       ├─ Memory optimization: : 2/5 |████      | [00:00][A05:20:30 │ INFO │       💾 Memory Usage by Dataset:
+05:20:30 │ INFO │       ├─ Recipes: 145.4 MB
+05:20:30 │ INFO │       ├─ Silver: 106.4 MB
+05:20:30 │ INFO │       ├─ Ground_truth: 0.1 MB
+05:20:30 │ INFO │       └─ Total: 251.9 MB
+
+      ├─       ├─ Memory optimization: : 3/5 |██████    | [00:00][A
+      ├─       ├─ Label distribution: : 3/5 |██████    | [00:00] [A05:20:30 │ INFO │       📊 Label Distribution Comparison:
+05:20:30 │ INFO │       ├─ Keto: Gold=40.0%, Silver=16.3%
+05:20:30 │ INFO │       └─ Vegan: Gold=40.0%, Silver=7.3%
+05:20:30 │ WARNING │       ⚠️  Large keto distribution difference: 23.7%
+05:20:30 │ WARNING │       ⚠️  Large vegan distribution difference: 32.7%
+
+      ├─       ├─ Final validation: : 4/5 |████████  | [00:00]  [A05:20:30 │ INFO │       ✅ Validation Summary:
+05:20:30 │ INFO │       ├─ Recipes Loaded: ✅
+05:20:30 │ INFO │       ├─ Ground Truth Loaded: ✅
+05:20:31 │ INFO │       ├─ Silver Generated: ✅
+05:20:31 │ INFO │       ├─ Required Columns Present: ✅
+05:20:31 │ INFO │       ├─ Labels Processed: ✅
+05:20:31 │ INFO │       ├─ Consistency Issues: 0
+
+      ├─       ├─ Final validation: : 5/5 |██████████| [00:00][A
+                                                              [A05:20:31 │ INFO │    ✅ Data validation completed in 0.4s
+05:20:31 │ INFO │       💾 Validation complete: 16.8% memory used (4788 MB / 32015 MB)
+   ├─    ├─ Data Validation: : 4/5 |████████  | [01:47<00:28]   ├─    ├─ Loading USDA carbs: : 4/5 |████████  | [01:47<00:28]05:20:31 │ INFO │ USDA carb table loaded: 303 distinct food descriptions
+05:20:31 │ INFO │    ✅ USDA table loaded in 0.1s – 303 rows
+   ├─    ├─ Loading USDA carbs: : 5/5 |██████████| [01:47<00:00]05:20:31 │ INFO │ 
+🏁 DATASET LOADING COMPLETE
+05:20:31 │ INFO │    ├─ Total loading time: 107.5s
+05:20:31 │ INFO │    ├─ Datasets loaded: 4 (recipes, ground_truth, silver, usda)
+05:20:31 │ INFO │    ├─ Total memory usage: 251.9 MB
+05:20:31 │ INFO │    └─ All validations passed: ✅
+05:20:31 │ INFO │ 
+   📋 Final Dataset Summary:
+05:20:31 │ INFO │    ├─ Recipes: 225,602 rows × 5 columns
+05:20:31 │ INFO │    ├─ Ground Truth: 100 rows × 10 columns
+05:20:31 │ INFO │    ├─ Silver Labels: 225,602 rows × 5 columns
+05:20:31 │ INFO │    ├─ USDA Carb Tbl:  303 rows × 2 columns (0.0 MB)
+05:20:31 │ INFO │    ├─ Total memory usage: 251.9 MB
+05:20:31 │ INFO │    └─ Ready for ML pipeline: ✅
+                                                                
+   ├─    ├─ Loading datasets: : 1/4 |██▌       | [01:47][A
+   ├─    ├─ Creating index keys: : 1/4 |██▌       | [01:47][A
+   ├─    ├─ Preparing text data: : 2/4 |█████     | [01:47][A
+   ├─    ├─ Filtering image data: : 3/4 |███████▌  | [01:47][A
+                                                            [A05:20:31 │ INFO │    📉 Consistent sampling: Using 6,485 common indices
+05:20:31 │ INFO │    📉 Applied sampling before processing:
+05:20:31 │ INFO │    ├─ Text: 67,681 → 20,304 rows (30.0%)
+05:20:31 │ INFO │    └─ Images: 21,734 → 6,485 rows (30.0%)
+05:20:31 │ INFO │ 
+   📊 Dataset Statistics:
+05:20:31 │ INFO │    ├─ Silver (All): 67,681 recipes
+05:20:31 │ INFO │    ├─ Silver (Text): 20,304 recipes
+05:20:31 │ INFO │    ├─ Silver (Images): 6,485 recipes
+05:20:31 │ INFO │    ├─ Gold (All): 100 recipes
+05:20:31 │ INFO │    └─ Gold (Images): 66 recipes
+05:20:31 │ INFO │ 
+   ⚖️  Class Balance Analysis:
+05:20:31 │ INFO │ 
+── Gold set set class counts ─────────────
+05:20:31 │ INFO │  keto:     40/100 (40.0%)
+05:20:31 │ INFO │ vegan:     40/100 (40.0%)
+05:20:31 │ INFO │ 
+── Silver (Text) set set class counts ─────────────
+05:20:31 │ INFO │  keto:   3314/20304 (16.3%)
+05:20:31 │ INFO │ vegan:   1444/20304 ( 7.1%)
+05:20:31 │ INFO │ 
+── Silver (Image) set set class counts ─────────────
+05:20:31 │ INFO │  keto:   2574/6485 (39.7%)
+05:20:31 │ INFO │ vegan:   1116/6485 (17.2%)
+05:20:31 │ INFO │    ✅ Data loading completed in 108.1s
+05:20:31 │ INFO │    📊 Data Loading - Memory: 16.9% used (4804 MB / 32015 MB)
+🔬 ML Pipeline: Data Loading:  17%|█▋        | 1/6 [01:48<09:00] 🔬 ML Pipeline: Data Loading: 05:20:31 │ INFO │    🧹 Data Loading: Memory cleanup
+05:20:31 │ INFO │       ├─ RAM: 16.9% used (4804 MB)
+05:20:31 │ INFO │       ✅ Memory usage normal: 16.9%
+🔬 ML Pipeline: Text Processing:  17%|█▋        | 1/6 [01:48<09:00] 🔬 ML Pipeline: Text Processing: 05:20:31 │ INFO │ 
+🔤 STAGE 2: TEXT FEATURE PROCESSING
+
+   ├─    ├─ Text Features: 0/4 |          | [00:00][A
+   ├─    ├─ Initializing vectorizer: : 0/4 |          | [00:00][A05:20:31 │ INFO │    ├─ Vectorizer config: {'min_df': 2, 'ngram_range': (1, 3), 'max_features': 50000, 'sublinear_tf': True}
+
+   ├─    ├─ Fitting on silver data: : 1/4 |██▌       | [00:00] [A05:20:32 │ INFO │ USDA carb table loaded: 303 distinct food descriptions
+05:20:32 │ INFO │    ├─ USDA examples added: 303
+
+   ├─    ├─ Fitting on silver data: : 2/4 |█████     | [00:01][A
+   ├─    ├─ Transforming gold data: : 2/4 |█████     | [00:01][A
+   ├─    ├─ Saving embeddings: : 3/4 |███████▌  | [00:01]     [A
+                                                         [A05:20:33 │ INFO │    📊 Text Processing Results:
+05:20:33 │ INFO │    ├─ Vocabulary size: 40,682
+05:20:33 │ INFO │    ├─ Silver features: (20607, 40682)
+05:20:33 │ INFO │    ├─ Gold features: (100, 40682)
+05:20:33 │ INFO │    ├─ Sparsity: 0.0%
+05:20:33 │ INFO │    └─ Memory usage: ~9 MB
+05:20:33 │ INFO │    ✅ Text processing completed in 1.4s
+05:20:33 │ INFO │    📊 Text Processing - Memory: 16.9% used (4814 MB / 32015 MB)
+05:20:33 │ INFO │    🧹 Text Processing: Memory cleanup
+05:20:33 │ INFO │       ├─ RAM: 16.9% used (4814 MB)
+05:20:33 │ INFO │       ✅ Memory usage normal: 16.9%
+🔬 ML Pipeline: Text Processing:  33%|███▎      | 2/6 [01:49<03:02] 🔬 ML Pipeline: Text Processing: 🔬 ML Pipeline: Image Processing:  33%|███▎      | 2/6 [01:49<03:02] 🔬 ML Pipeline: Image Processing: 05:20:33 │ INFO │ 
+🖼️  STAGE 3: IMAGE FEATURE PROCESSING
+05:20:33 │ INFO │    ├─ Processing 6,485 sampled silver images
+05:20:33 │ INFO │    └─ Processing 66 gold images
+
+   ├─    ├─ Image Pipeline: 0/6 |          | [00:00][A
+   ├─    ├─ Downloading silver images: : 0/6 |          | [00:00][A05:20:33 │ INFO │ 
+🧠 EMBEDDINGS-FIRST IMAGE PIPELINE: silver
+05:20:33 │ INFO │    Target directory: dataset/arg_max/images/silver
+05:20:33 │ INFO │    Total samples: 6,485
+05:20:33 │ INFO │    Force recompute: False
+05:20:33 │ INFO │    🔍 Searching for existing embeddings...
+05:20:33 │ INFO │    ❌ No suitable embeddings found - proceeding with downloads
+05:20:33 │ INFO │ 
+   📋 DOWNLOAD PLANNING:
+05:20:33 │ INFO │       📊 Analysis Results:
+05:20:33 │ INFO │       ├─ Total samples: 6,485
+05:20:33 │ INFO │       ├─ Existing valid files: 0
+05:20:33 │ INFO │       ├─ Corrupted files cleaned: 0
+05:20:33 │ INFO │       ├─ Valid URLs to download: 6,485
+05:20:33 │ INFO │       ├─ Missing URLs: 0
+05:20:33 │ INFO │       └─ Invalid URLs: 0
+05:20:33 │ WARNING │    ⚠️  Large download required: 6,485 files
+05:20:33 │ INFO │       └─ This may take a while...
+05:20:33 │ INFO │    🎯 Download Queue: 6,485 files
+05:20:33 │ INFO │ 
+   🚀 EXECUTING ROBUST DOWNLOADS:
+
+
+      ├─       ├─ Downloading: 0/6485 |          | [00:00<?] ?it/s[A[A
+
+      ├─       ├─ Downloading: 0/6485 |          | [00:00<?] ?it/s[A[A
+
+      ├─       ├─ Downloading: 1/6485 |          | [00:00<55:36]  1.94it/s[A[A
+
+      ├─       ├─ Downloading: 1/6485 |          | [00:00<55:36]  1.94it/s[A[A
+
+      ├─       ├─ Downloading: 1/6485 |          | [00:00<55:36]  1.94it/s[A[A
+
+      ├─       ├─ Downloading: 1/6485 |          | [00:00<55:36]  1.94it/s[A[A
+
+      ├─       ├─ Downloading: 1/6485 |          | [00:00<55:36]  1.94it/s[A[A
+
+      ├─       ├─ Downloading: 1/6485 |          | [00:00<55:36]  1.94it/s[A[A
+
+      ├─       ├─ Downloading: 1/6485 |          | [00:00<55:36]  1.94it/s[A[A
+
+      ├─       ├─ Downloading: 7/6485 |          | [00:00<07:52] 13.70it/s[A[A
+
+      ├─       ├─ Downloading: 7/6485 |          | [00:00<07:52] 13.70it/s[A[A
+
+      ├─       ├─ Downloading: 7/6485 |          | [00:00<07:52] 13.70it/s[A[A
+
+      ├─       ├─ Downloading: 7/6485 |          | [00:00<07:52] 13.70it/s[A[A
+
+      ├─       ├─ Downloading: 7/6485 |          | [00:00<07:52] 13.70it/s[A[A
+
+      ├─       ├─ Downloading: 7/6485 |          | [00:00<07:52] 13.70it/s[A[A
+
+      ├─       ├─ Downloading: 7/6485 |          | [00:00<07:52] 13.70it/s[A[A
+
+      ├─       ├─ Downloading: 7/6485 |          | [00:00<07:52] 13.70it/s[A[A
+
+      ├─       ├─ Downloading: 7/6485 |          | [00:00<07:52] 13.70it/s[A[A
+
+      ├─       ├─ Downloading: 7/6485 |          | [00:00<07:52] 13.70it/s[A[A
+
+      ├─       ├─ Downloading: 16/6485 |          | [00:00<03:30] 30.69it/s[A[A
+
+      ├─       ├─ Downloading: 16/6485 |          | [00:00<03:30] 30.69it/s[A[A
+
+      ├─       ├─ Downloading: 16/6485 |          | [00:00<03:30] 30.69it/s[A[A
+
+      ├─       ├─ Downloading: 16/6485 |          | [00:00<03:30] 30.69it/s[A[A
+
+      ├─       ├─ Downloading: 16/6485 |          | [00:00<03:30] 30.69it/s[A[A
+
+      ├─       ├─ Downloading: 16/6485 |          | [00:00<03:30] 30.69it/s[A[A
+
+      ├─       ├─ Downloading: 16/6485 |          | [00:00<03:30] 30.69it/s[A[A
+
+      ├─       ├─ Downloading: 22/6485 |          | [00:00<03:47] 28.40it/s[A[A
+
+      ├─       ├─ Downloading: 22/6485 |          | [00:01<03:47] 28.40it/s[A[A
+
+      ├─       ├─ Downloading: 22/6485 |          | [00:01<03:47] 28.40it/s[A[A
+
+      ├─       ├─ Downloading: 22/6485 |          | [00:01<03:47] 28.40it/s[A[A
+
+      ├─       ├─ Downloading: 22/6485 |          | [00:01<03:47] 28.40it/s[A[A
+
+      ├─       ├─ Downloading: 22/6485 |          | [00:01<03:47] 28.40it/s[A[A
+
+      ├─       ├─ Downloading: 27/6485 |          | [00:01<03:55] 27.38it/s[A[A
+
+      ├─       ├─ Downloading: 27/6485 |          | [00:01<03:55] 27.38it/s[A[A
+
+      ├─       ├─ Downloading: 27/6485 |          | [00:01<03:55] 27.38it/s[A[A
+
+      ├─       ├─ Downloading: 27/6485 |          | [00:01<03:55] 27.38it/s[A[A
+
+      ├─       ├─ Downloading: 27/6485 |          | [00:01<03:55] 27.38it/s[A[A
+
+      ├─       ├─ Downloading: 27/6485 |          | [00:01<03:55] 27.38it/s[A[A
+
+      ├─       ├─ Downloading: 27/6485 |          | [00:01<03:55] 27.38it/s[A[A
+
+      ├─       ├─ Downloading: 27/6485 |          | [00:01<03:55] 27.38it/s[A[A
+
+      ├─       ├─ Downloading: 27/6485 |          | [00:01<03:55] 27.38it/s[A[A
+
+      ├─       ├─ Downloading: 35/6485 |          | [00:01<03:08] 34.15it/s[A[A
+
+      ├─       ├─ Downloading: 35/6485 |          | [00:01<03:08] 34.15it/s[A[A
+
+      ├─       ├─ Downloading: 35/6485 |          | [00:01<03:08] 34.15it/s[A[A
+
+      ├─       ├─ Downloading: 35/6485 |          | [00:01<03:08] 34.15it/s[A[A
+
+      ├─       ├─ Downloading: 35/6485 |          | [00:01<03:08] 34.15it/s[A[A
+
+      ├─       ├─ Downloading: 35/6485 |          | [00:01<03:08] 34.15it/s[A[A
+
+      ├─       ├─ Downloading: 35/6485 |          | [00:01<03:08] 34.15it/s[A[A
+
+      ├─       ├─ Downloading: 41/6485 |          | [00:01<02:44] 39.25it/s[A[A
+
+      ├─       ├─ Downloading: 41/6485 |          | [00:01<02:44] 39.25it/s[A[A
+
+      ├─       ├─ Downloading: 41/6485 |          | [00:01<02:44] 39.25it/s[A[A
+
+      ├─       ├─ Downloading: 41/6485 |          | [00:01<02:44] 39.25it/s[A[A
+
+      ├─       ├─ Downloading: 41/6485 |          | [00:01<02:44] 39.25it/s[A[A
+
+      ├─       ├─ Downloading: 41/6485 |          | [00:01<02:44] 39.25it/s[A[A
+
+      ├─       ├─ Downloading: 41/6485 |          | [00:01<02:44] 39.25it/s[A[A
+
+      ├─       ├─ Downloading: 41/6485 |          | [00:01<02:44] 39.25it/s[A[A
+
+      ├─       ├─ Downloading: 41/6485 |          | [00:01<02:44] 39.25it/s[A[A
+
+      ├─       ├─ Downloading: 49/6485 |          | [00:01<02:14] 47.88it/s[A[A
+
+      ├─       ├─ Downloading: 49/6485 |          | [00:01<02:14] 47.88it/s[A[A
+
+      ├─       ├─ Downloading: 49/6485 |          | [00:01<02:14] 47.88it/s[A[A
+
+      ├─       ├─ Downloading: 49/6485 |          | [00:01<02:14] 47.88it/s[A[A
+
+      ├─       ├─ Downloading: 49/6485 |          | [00:01<02:14] 47.88it/s[A[A
+
+      ├─       ├─ Downloading: 49/6485 |          | [00:01<02:14] 47.88it/s[A[A
+
+      ├─       ├─ Downloading: 49/6485 |          | [00:01<02:14] 47.88it/s[A[A
+
+      ├─       ├─ Downloading: 55/6485 |          | [00:01<02:39] 40.39it/s[A[A
+
+      ├─       ├─ Downloading: 55/6485 |          | [00:01<02:39] 40.39it/s[A[A
+
+      ├─       ├─ Downloading: 55/6485 |          | [00:01<02:39] 40.39it/s[A[A
+
+      ├─       ├─ Downloading: 55/6485 |          | [00:01<02:39] 40.39it/s[A[A
+
+      ├─       ├─ Downloading: 55/6485 |          | [00:01<02:39] 40.39it/s[A[A
+
+      ├─       ├─ Downloading: 55/6485 |          | [00:01<02:39] 40.39it/s[A[A
+
+      ├─       ├─ Downloading: 60/6485 |          | [00:01<02:36] 41.06it/s[A[A
+
+      ├─       ├─ Downloading: 60/6485 |          | [00:01<02:36] 41.06it/s[A[A
+
+      ├─       ├─ Downloading: 60/6485 |          | [00:01<02:36] 41.06it/s[A[A
+
+      ├─       ├─ Downloading: 60/6485 |          | [00:01<02:36] 41.06it/s[A[A
+
+      ├─       ├─ Downloading: 60/6485 |          | [00:01<02:36] 41.06it/s[A[A
+
+      ├─       ├─ Downloading: 60/6485 |          | [00:01<02:36] 41.06it/s[A[A
+
+      ├─       ├─ Downloading: 60/6485 |          | [00:01<02:36] 41.06it/s[A[A
+
+      ├─       ├─ Downloading: 60/6485 |          | [00:02<02:36] 41.06it/s[A[A
+
+      ├─       ├─ Downloading: 67/6485 |          | [00:02<02:51] 37.38it/s[A[A
+
+      ├─       ├─ Downloading: 67/6485 |          | [00:02<02:51] 37.38it/s[A[A
+
+      ├─       ├─ Downloading: 67/6485 |          | [00:02<02:51] 37.38it/s[A[A
+
+      ├─       ├─ Downloading: 67/6485 |          | [00:02<02:51] 37.38it/s[A[A
+
+      ├─       ├─ Downloading: 67/6485 |          | [00:02<02:51] 37.38it/s[A[A
+
+      ├─       ├─ Downloading: 67/6485 |          | [00:02<02:51] 37.38it/s[A[A
+
+      ├─       ├─ Downloading: 72/6485 |          | [00:02<06:40] 16.02it/s[A[A
+
+      ├─       ├─ Downloading: 72/6485 |          | [00:02<06:40] 16.02it/s[A[A
+
+      ├─       ├─ Downloading: 72/6485 |          | [00:02<06:40] 16.02it/s[A[A
+
+      ├─       ├─ Downloading: 72/6485 |          | [00:02<06:40] 16.02it/s[A[A
+
+      ├─       ├─ Downloading: 72/6485 |          | [00:03<06:40] 16.02it/s[A[A
+
+      ├─       ├─ Downloading: 76/6485 |          | [00:03<05:51] 18.23it/s[A[A
+
+      ├─       ├─ Downloading: 76/6485 |          | [00:03<05:51] 18.23it/s[A[A
+
+      ├─       ├─ Downloading: 76/6485 |          | [00:03<05:51] 18.23it/s[A[A
+
+      ├─       ├─ Downloading: 76/6485 |          | [00:03<05:51] 18.23it/s[A[A
+
+      ├─       ├─ Downloading: 76/6485 |          | [00:03<05:51] 18.23it/s[A[A
+
+      ├─       ├─ Downloading: 76/6485 |          | [00:03<05:51] 18.23it/s[A[A
+
+      ├─       ├─ Downloading: 76/6485 |          | [00:03<05:51] 18.23it/s[A[A
+
+      ├─       ├─ Downloading: 82/6485 |▏         | [00:03<04:35] 23.28it/s[A[A
+
+      ├─       ├─ Downloading: 82/6485 |▏         | [00:03<04:35] 23.28it/s[A[A
+
+      ├─       ├─ Downloading: 82/6485 |▏         | [00:03<04:35] 23.28it/s[A[A
+
+      ├─       ├─ Downloading: 82/6485 |▏         | [00:03<04:35] 23.28it/s[A[A
+
+      ├─       ├─ Downloading: 82/6485 |▏         | [00:03<04:35] 23.28it/s[A[A
+
+      ├─       ├─ Downloading: 86/6485 |▏         | [00:03<04:26] 23.99it/s[A[A
+
+      ├─       ├─ Downloading: 86/6485 |▏         | [00:03<04:26] 23.99it/s[A[A
+
+      ├─       ├─ Downloading: 86/6485 |▏         | [00:03<04:26] 23.99it/s[A[A
+
+      ├─       ├─ Downloading: 86/6485 |▏         | [00:03<04:26] 23.99it/s[A[A
+
+      ├─       ├─ Downloading: 86/6485 |▏         | [00:03<04:26] 23.99it/s[A[A
+
+      ├─       ├─ Downloading: 90/6485 |▏         | [00:03<04:43] 22.59it/s[A[A
+
+      ├─       ├─ Downloading: 90/6485 |▏         | [00:03<04:43] 22.59it/s[A[A
+
+      ├─       ├─ Downloading: 90/6485 |▏         | [00:03<04:43] 22.59it/s[A[A
+
+      ├─       ├─ Downloading: 90/6485 |▏         | [00:03<04:43] 22.59it/s[A[A
+
+      ├─       ├─ Downloading: 90/6485 |▏         | [00:03<04:43] 22.59it/s[A[A
+
+      ├─       ├─ Downloading: 94/6485 |▏         | [00:03<04:51] 21.96it/s[A[A
+
+      ├─       ├─ Downloading: 94/6485 |▏         | [00:03<04:51] 21.96it/s[A[A
+
+      ├─       ├─ Downloading: 94/6485 |▏         | [00:03<04:51] 21.96it/s[A[A
+
+      ├─       ├─ Downloading: 94/6485 |▏         | [00:03<04:51] 21.96it/s[A[A
+
+      ├─       ├─ Downloading: 97/6485 |▏         | [00:03<05:17] 20.13it/s[A[A
+
+      ├─       ├─ Downloading: 97/6485 |▏         | [00:04<05:17] 20.13it/s[A[A
+
+      ├─       ├─ Downloading: 97/6485 |▏         | [00:04<05:17] 20.13it/s[A[A
+
+      ├─       ├─ Downloading: 97/6485 |▏         | [00:04<05:17] 20.13it/s[A[A
+
+      ├─       ├─ Downloading: 100/6485 |▏         | [00:04<06:15] 17.02it/s[A[A
+
+      ├─       ├─ Downloading: 100/6485 |▏         | [00:04<06:15] 17.02it/s[A[A
+
+      ├─       ├─ Downloading: 100/6485 |▏         | [00:04<06:15] 17.02it/s[A[A
+
+      ├─       ├─ Downloading: 100/6485 |▏         | [00:04<06:15] 17.02it/s[A[A
+
+      ├─       ├─ Downloading: 103/6485 |▏         | [00:04<05:43] 18.56it/s[A[A
+
+      ├─       ├─ Downloading: 103/6485 |▏         | [00:04<05:43] 18.56it/s[A[A
+
+      ├─       ├─ Downloading: 103/6485 |▏         | [00:04<05:43] 18.56it/s[A[A
+
+      ├─       ├─ Downloading: 103/6485 |▏         | [00:04<05:43] 18.56it/s[A[A
+
+      ├─       ├─ Downloading: 103/6485 |▏         | [00:04<05:43] 18.56it/s[A[A
+
+      ├─       ├─ Downloading: 107/6485 |▏         | [00:04<05:03] 21.00it/s[A[A
+
+      ├─       ├─ Downloading: 107/6485 |▏         | [00:04<05:03] 21.00it/s[A[A
+
+      ├─       ├─ Downloading: 107/6485 |▏         | [00:04<05:03] 21.00it/s[A[A
 
       ├─       ├─ Downloading: 107/6485 |▏         | [00:04<05:03] 21.00it/s[A[A
 
@@ -20787,24 +20818,3 @@ search_by_ingredients_v1t3ls0n-os-1   | 2025-06-21T05:34:27.884771392Z [2025-06-
 05:34:34 │ INFO │ {"keto": false, "vegan": false}
 05:34:34 │ INFO │ 🛑 Process exiting - no restarts allowed
 ✅ Container pipeline complete!
-[2025-06-21 08:34:35] 📊 Capturing final container status...
-NAME                                   IMAGE                                 COMMAND                  SERVICE             CREATED             STATUS                    PORTS
-search_by_ingredients_v1t3ls0n-os-1    opensearchproject/opensearch:latest   "./opensearch-docker…"   os                  16 minutes ago      Up 16 minutes (healthy)   0.0.0.0:9200->9200/tcp, 9300/tcp, 0.0.0.0:9600->9600/tcp, 9650/tcp
-search_by_ingredients_v1t3ls0n-web-1   search_by_ingredients_v1t3ls0n-web    "sh -c 'dos2unix web…"   web                 16 minutes ago      Up 16 minutes             0.0.0.0:8080->8080/tcp
-[2025-06-21 08:34:35] 📦 Artifacts generated:
-total 65025
-drwxr-xr-x 1 Studio 197121        0 יונ 21 08:34 .
-drwxr-xr-x 1 Studio 197121        0 יונ 21 08:17 ..
--rw-r--r-- 1 Studio 197121    43953 יונ 21 08:34 confusion_matrix_keto_NB_TEXT.png
--rw-r--r-- 1 Studio 197121    44730 יונ 21 08:34 confusion_matrix_vegan_NB_TEXT.png
--rw-r--r-- 1 Studio 197121   540800 יונ 21 08:34 embeddings_eval_temp_backup.npy
--rw-r--r-- 1 Studio 197121   540800 יונ 21 08:30 embeddings_gold_backup.npy
--rw-r--r-- 1 Studio 197121 51241088 יונ 21 08:30 embeddings_silver_backup.npy
--rw-r--r-- 1 Studio 197121      137 יונ 21 08:34 eval_metrics.csv
--rw-r--r-- 1 Studio 197121    21821 יונ 21 08:34 ground_truth_predictions.csv
-drwxr-xr-x 1 Studio 197121        0 יונ 21 08:18 logs
--rw-r--r-- 1 Studio 197121   124680 יונ 21 08:34 model_performance_comparison.png
--rw-r--r-- 1 Studio 197121  1367998 יונ 21 08:34 models.pkl
--rw-r--r-- 1 Studio 197121 10746628 יונ 21 08:20 silver_extended.csv
--rw-r--r-- 1 Studio 197121  1876223 יונ 21 08:34 vectorizer.pkl
-[2025-06-21 08:34:35] ✅ Pipeline complete!

@@ -4914,19 +4914,8 @@ def best_two_domains(
 ):
     """
     Blend predictions from best text and image models.
-
-    This simple ensemble method combines the best performing model
-    from each domain using a weighted average.
-
-    Args:
-        task: 'keto' or 'vegan'
-        text_results: Results from text-based models
-        image_results: Results from image-based models
-        gold_df: Gold standard DataFrame
-        alpha: Weight for image predictions (0=text only, 1=image only)
-
-    Returns:
-        Dictionary with ensemble results
+    
+    FIXED: Handles different sample sizes between text and image models.
     """
     # Find best models from each domain
     best_text = max(
@@ -4934,8 +4923,7 @@ def best_two_domains(
         key=lambda r: r["F1"]
     )
     best_img = max(
-        (r for r in image_results if r["task"]
-         == task and len(r.get("prob", [])) > 0),
+        (r for r in image_results if r["task"] == task and len(r.get("prob", [])) > 0),
         key=lambda r: r["F1"],
         default=None
     )
@@ -4946,35 +4934,40 @@ def best_two_domains(
         f"image={best_img['model'] if best_img else 'N/A'}"
     )
 
-    # Align probability vectors
-    txt_prob = pd.Series(best_text["prob"], index=gold_df.index)
+    # Get text predictions for ALL rows
+    txt_prob = best_text["prob"]
+    y_true = gold_df[f"label_{task}"].values
 
     if best_img is None:  # No image model available
-        final_prob = txt_prob.values
-        rows_with_img = []
+        log.warning(f"   ⚠️  No image model available for {task}, using text-only")
+        final_prob = txt_prob
     else:
-        img_idx = gold_df.index[:len(best_img["prob"])]
-        img_prob = pd.Series(best_img["prob"], index=img_idx)
+        # Image predictions are only available for a subset of rows
+        img_prob = best_img["prob"]
+        img_indices = gold_df.index[:len(img_prob)]  # Indices with image predictions
+        
+        log.info(f"   ├─ Text predictions: {len(txt_prob)} samples")
+        log.info(f"   ├─ Image predictions: {len(img_prob)} samples")
+        log.info(f"   └─ Blending with alpha={alpha}")
 
-        rows_with_img = img_idx
-        final_prob = txt_prob.copy()
-        # Weighted average for rows with images
-        final_prob.loc[rows_with_img] = (
-            alpha * img_prob.loc[rows_with_img]
-            + (1 - alpha) * txt_prob.loc[rows_with_img]
-        )
-        final_prob = final_prob.values
+        # Initialize final predictions with text predictions
+        final_prob = np.array(txt_prob).copy()
+        
+        # For rows with images, blend text and image predictions
+        for i, idx in enumerate(img_indices):
+            if i < len(img_prob):
+                # Blend: alpha * image + (1-alpha) * text
+                final_prob[idx] = alpha * img_prob[i] + (1 - alpha) * txt_prob[idx]
 
     # Apply verification and calculate metrics
     final_prob = verify_with_rules(task, gold_df.clean, final_prob)
     final_pred = (final_prob >= 0.5).astype(int)
-    y_true = gold_df[f"label_{task}"].values
 
-    # Create ensemble wrapper that can handle missing images
+    # Create ensemble wrapper
     ensemble_model = EnsembleWrapper(
         ensemble_type='best_two',
         models={
-            'text': BEST[best_text['model'].split('_')[0]],  # Get actual model
+            'text': BEST[best_text['model'].split('_')[0]],
             'image': BEST[best_img['model'].split('_')[0]] if best_img else None
         },
         alpha=alpha,
@@ -4990,10 +4983,9 @@ def best_two_domains(
         "text_model": best_text["model"],
         "image_model": best_img["model"] if best_img else None,
         "alpha": alpha,
-        "rows_image": len(rows_with_img),
-        "rows_text_only": len(gold_df) - len(rows_with_img),
+        "rows_with_images": len(img_prob) if best_img else 0,
+        "rows_text_only": len(gold_df) - (len(img_prob) if best_img else 0),
     }
-
 
 def dynamic_ensemble(estimators, X_gold, gold, task: str):
     """
@@ -6443,8 +6435,6 @@ def run_full_pipeline(mode: str = "both",
             log.info(f"   🤝 Creating text+image ensemble...")
 
             ensemble_results = []
-
-            # Test different alpha values for optimal blending
             alpha_values = [0.25, 0.5, 0.75]
 
             for task in ("keto", "vegan"):
@@ -6453,60 +6443,68 @@ def run_full_pipeline(mode: str = "both",
                     text_models = [r for r in res_text if r["task"] == task]
                     image_models = [r for r in res_img if r["task"] == task]
 
-                    if not text_models or not image_models:
-                        log.warning(
-                            f"      ⚠️  No models available for {task} ensemble")
+                    if not text_models:
+                        log.warning(f"      ⚠️  No text models available for {task}")
+                        continue
+                        
+                    if not image_models:
+                        log.warning(f"      ⚠️  No image models available for {task}")
+                        # Still create ensemble with text-only
+                        best_text_result = max(text_models, key=lambda x: x['F1'])
+                        ensemble_results.append(best_text_result)
                         continue
 
-                    # Use best_two_domains with alpha optimization
-                    log.info(
-                        f"      ├─ {task}: Testing alpha values {alpha_values}")
+                    log.info(f"      ├─ {task}: Testing alpha values {alpha_values}")
 
                     best_ensemble_result = None
                     best_f1 = -1
                     best_alpha = None
 
                     for alpha in alpha_values:
-                        result = best_two_domains(
-                            task=task,
-                            text_results=res_text,
-                            image_results=res_img,
-                            gold_df=img_gold_df,  # Use image gold df as it has the common indices
-                            alpha=alpha
-                        )
+                        try:
+                            result = best_two_domains(
+                                task=task,
+                                text_results=res_text,
+                                image_results=res_img,
+                                gold_df=gold,  # Use full gold df (100 samples)
+                                alpha=alpha
+                            )
 
-                        if result and result['F1'] > best_f1:
-                            best_f1 = result['F1']
-                            best_alpha = alpha
-                            best_ensemble_result = result
+                            if result and result['F1'] > best_f1:
+                                best_f1 = result['F1']
+                                best_alpha = alpha
+                                best_ensemble_result = result
 
-                        log.info(f"         ├─ alpha_param={alpha}: F1={result['F1']:.3f}, "
-                                 f"Text={result['text_model']}, Image={result['image_model']}")
+                            log.info(f"         ├─ alpha={alpha}: F1={result['F1']:.3f}")
+
+                        except Exception as e:
+                            log.error(f"         ❌ alpha={alpha} failed: {str(e)[:50]}...")
+                            continue
 
                     if best_ensemble_result:
-                        # Update model name to reflect optimal alpha
-                        best_ensemble_result['model'] = f"BestTwo_alpha_param{best_alpha}"
+                        best_ensemble_result['model'] = f"BestTwo_alpha{best_alpha}"
                         ensemble_results.append(best_ensemble_result)
-                        log.info(
-                            f"      ✅ {task} best ensemble: alpha_param={best_alpha}, F1={best_f1:.3f}")
+                        log.info(f"      ✅ {task} best ensemble: alpha={best_alpha}, F1={best_f1:.3f}")
+                    else:
+                        # Fallback to best text model
+                        log.warning(f"      ⚠️  Ensemble failed for {task}, using best text model")
+                        best_text = max(text_models, key=lambda x: x['F1'])
+                        ensemble_results.append(best_text)
 
                 except Exception as e:
-                    log.error(
-                        f"      ❌ {task} ensemble creation failed: {str(e)[:50]}...")
-                    if log.level <= logging.DEBUG:
-                        import traceback
-                        log.debug(f"Full traceback:\n{traceback.format_exc()}")
+                    log.error(f"      ❌ {task} ensemble creation failed: {str(e)[:50]}...")
+                    continue
 
             if ensemble_results:
                 table("Text+Image Ensembles", ensemble_results)
                 results.extend(ensemble_results)
-                log.info(
-                    f"      ✅ Created {len(ensemble_results)} ensemble configurations")
-
+                log.info(f"      ✅ Created {len(ensemble_results)} ensemble configurations")
             else:
                 log.warning(f"      ⚠️  No successful ensembles created")
 
             train_pbar.update(1)
+        
+        
         # FINAL COMBINED MODEL TRAINING
         if mode == "both":
             # Check if we have valid image data

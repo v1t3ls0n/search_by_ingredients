@@ -1,0 +1,25 @@
+Pipeline Run Summary
+===================
+Start Time: #1 transferring dockerfile: 32B done
+End Time: שבת 21 יונ 2025 08:34:35
+Configuration:
+  - Sample Fraction: 0.3
+  - Force Recompute: No
+
+Log Files:
+  - Main log: artifacts/logs/pipeline_run_20250621_081744.log
+  - Container log: artifacts/logs/container_pipeline_20250621_081744.log
+  - Python Source Code Logger:  artifacts/logs/diet_classifiers.py.log (if exists)
+
+Artifacts Generated:
+-rw-r--r-- 1 Studio 197121      137 יונ 21 08:34 artifacts/eval_metrics.csv
+-rw-r--r-- 1 Studio 197121    21821 יונ 21 08:34 artifacts/ground_truth_predictions.csv
+-rw-r--r-- 1 Studio 197121  1367998 יונ 21 08:34 artifacts/models.pkl
+-rw-r--r-- 1 Studio 197121 10746628 יונ 21 08:20 artifacts/silver_extended.csv
+-rw-r--r-- 1 Studio 197121  1876223 יונ 21 08:34 artifacts/vectorizer.pkl
+No model artifacts yet
+
+Container Final Status:
+NAME                                   IMAGE                                 COMMAND                  SERVICE             CREATED             STATUS                    PORTS
+search_by_ingredients_v1t3ls0n-os-1    opensearchproject/opensearch:latest   "./opensearch-docker…"   os                  16 minutes ago      Up 16 minutes (healthy)   0.0.0.0:9200->9200/tcp, 9300/tcp, 0.0.0.0:9600->9600/tcp, 9650/tcp
+search_by_ingredients_v1t3ls0n-web-1   search_by_ingredients_v1t3ls0n-web    "sh -c 'dos2unix web…"   web                 16 minutes ago      Up 16 minutes             0.0.0.0:8080->8080/tcp
