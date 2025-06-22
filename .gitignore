@@ -5,8 +5,9 @@ dataset/
 
 
 # Byte-compiled / optimized / DLL files
-
-
+silver_extended.csv
+*.pkl
+*.npy
 __pycache__/
 *.py[cod]
 # artifacts/
