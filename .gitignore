@@ -1,6 +1,6 @@
-# *.npy
-# embeddings/
-# embeddings_backup/
+*.npy
+embeddings/
+embeddings_backup/
 dataset/
 embeddings_gold_backup.npy
 
@@ -10,7 +10,7 @@ silver_extended.csv
 *.npy
 __pycache__/
 *.py[cod]
-# artifacts/
+artifacts/
 *$py.class
 allrecipes.parquet
 best_params.json
@@ -191,6 +191,8 @@ web/data/*.ipynb
 tmp.py
 internal/*
 .indexedartifacts/embeddings_silver_backup.npy
+pretrained_models/models.zip
+artifacts/embeddings_silver_backup.npy
 pretrained_models/models.zip
 artifacts/embeddings_silver_backup.npy
 pretrained_models/models.zip
