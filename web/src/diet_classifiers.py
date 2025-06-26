@@ -2724,76 +2724,7 @@ def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarr
     return adjusted
 
 
-class EnsembleWrapper(BaseEstimator, ClassifierMixin):
-    """Comprehensive wrapper for all ensemble types with dynamic weighting."""
 
-    def __init__(self, ensemble_type, models, weights=None, alpha=None, task=None):
-        self.ensemble_type = ensemble_type
-        self.models = models
-        self.weights = weights
-        self.alpha = alpha
-        self.task = task
-
-    def fit(self, X, y):
-        # Already fitted
-        return self
-
-    def predict_proba(self, X):
-        if self.ensemble_type == 'voting':
-            # Delegate to sklearn VotingClassifier
-            return self.models.predict_proba(X)
-
-        elif self.ensemble_type == 'averaging':
-            # Manual averaging
-            probs = []
-            for name, model in self.models.items():
-                if hasattr(model, 'predict_proba'):
-                    probs.append(model.predict_proba(X)[:, 1])
-                else:
-                    # Handle models without predict_proba
-                    scores = model.decision_function(X) if hasattr(
-                        model, 'decision_function') else model.predict(X)
-                    probs.append(1 / (1 + np.exp(-scores)))
-
-            mean_prob = np.mean(probs, axis=0)
-            return np.c_[1 - mean_prob, mean_prob]
-
-        elif self.ensemble_type == 'best_two':
-            # Alpha blending
-            text_model = self.models.get('text')
-            image_model = self.models.get('image')
-
-            text_prob = text_model.predict_proba(
-                X)[:, 1] if text_model else 0.5
-            image_prob = image_model.predict_proba(
-                X)[:, 1] if image_model else text_prob
-
-            blended = self.alpha * image_prob + (1 - self.alpha) * text_prob
-            return np.c_[1 - blended, blended]
-
-        elif self.ensemble_type == 'smart_ensemble':
-            # Recursive ensemble blending
-            text_ens = self.models.get('text_ensemble')
-            image_ens = self.models.get('image_ensemble')
-
-            if text_ens and image_ens:
-                text_prob = text_ens.predict_proba(X)[:, 1]
-                image_prob = image_ens.predict_proba(X)[:, 1]
-                blended = self.alpha * image_prob + \
-                    (1 - self.alpha) * text_prob
-            elif text_ens:
-                blended = text_ens.predict_proba(X)[:, 1]
-            else:
-                # Fallback
-                blended = np.full(X.shape[0], 0.5)
-
-            return np.c_[1 - blended, blended]
-
-    def predict(self, X):
-        return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
-
-    def __repr__(self):
-        return f"EnsembleWrapper(type={self.ensemble_type}, n_models={len(self.models)}, alpha={self.alpha})"
 # # =============================================================================
 # # SANITY CHECKS
 # # =============================================================================
@@ -4611,19 +4542,16 @@ These methods improve performance by leveraging the strengths of different
 models and feature types.
 """
 
-# Add after the RuleModel class (around line 1250)
-
 
 class EnsembleWrapper(BaseEstimator, ClassifierMixin):
-    """Wrapper to make ensemble models serializable."""
+    """Comprehensive wrapper for all ensemble types with dynamic weighting."""
 
     def __init__(self, ensemble_type, models, weights=None, alpha=None, task=None):
-        self.ensemble_type = ensemble_type  # 'voting', 'best_two', etc.
-        self.models = models  # Dict of model_name: model OR VotingClassifier for 'voting' type
+        self.ensemble_type = ensemble_type
+        self.models = models
         self.weights = weights
         self.alpha = alpha
         self.task = task
-        self.vectorizer = None  # Will be set during save
 
     def fit(self, X, y):
         # Already fitted
@@ -4631,56 +4559,36 @@ class EnsembleWrapper(BaseEstimator, ClassifierMixin):
 
     def predict_proba(self, X):
         if self.ensemble_type == 'voting':
-            # For VotingClassifier, models should be the actual VotingClassifier object
-            if hasattr(self.models, 'predict_proba'):
-                # It's a VotingClassifier
-                return self.models.predict_proba(X)
-            else:
-                # It's a dict, do manual voting
-                probs = []
-                for name, model in self.models.items():
-                    prob = model.predict_proba(X)[:, 1]
-                    probs.append(prob)
-
-                probs = np.array(probs)
-                if self.weights is not None:
-                    weighted_probs = (probs.T * self.weights).T
-                    return np.c_[1 - weighted_probs.mean(axis=0), weighted_probs.mean(axis=0)]
-                else:
-                    mean_prob = probs.mean(axis=0)
-                    return np.c_[1 - mean_prob, mean_prob]
+            # Delegate to sklearn VotingClassifier
+            return self.models.predict_proba(X)
 
         elif self.ensemble_type == 'averaging':
-            # Manual averaging (same as voting with dict)
+            # Manual averaging
             probs = []
             for name, model in self.models.items():
                 if hasattr(model, 'predict_proba'):
-                    prob = model.predict_proba(X)[:, 1]
+                    probs.append(model.predict_proba(X)[:, 1])
                 else:
                     # Handle models without predict_proba
                     scores = model.decision_function(X) if hasattr(
                         model, 'decision_function') else model.predict(X)
-                    prob = 1 / (1 + np.exp(-scores))
-                probs.append(prob)
+                    probs.append(1 / (1 + np.exp(-scores)))
 
             mean_prob = np.mean(probs, axis=0)
             return np.c_[1 - mean_prob, mean_prob]
 
         elif self.ensemble_type == 'best_two':
-            # Alpha blending of text and image models
+            # Alpha blending
             text_model = self.models.get('text')
             image_model = self.models.get('image')
 
-            if text_model and image_model:
-                text_prob = text_model.predict_proba(X)[:, 1]
-                image_prob = image_model.predict_proba(X)[:, 1]
-                blended = self.alpha * image_prob + \
-                    (1 - self.alpha) * text_prob
-                return np.c_[1 - blended, blended]
-            elif text_model:
-                return text_model.predict_proba(X)
-            else:
-                raise ValueError("No valid models in ensemble")
+            text_prob = text_model.predict_proba(
+                X)[:, 1] if text_model else 0.5
+            image_prob = image_model.predict_proba(
+                X)[:, 1] if image_model else text_prob
+
+            blended = self.alpha * image_prob + (1 - self.alpha) * text_prob
+            return np.c_[1 - blended, blended]
 
         elif self.ensemble_type == 'smart_ensemble':
             # Recursive ensemble blending
@@ -4702,6 +4610,10 @@ class EnsembleWrapper(BaseEstimator, ClassifierMixin):
 
     def predict(self, X):
         return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
+
+    def __repr__(self):
+        return f"EnsembleWrapper(type={self.ensemble_type}, n_models={len(self.models)}, alpha={self.alpha})"
+
 
 
 def tune_threshold(y_true, probs):

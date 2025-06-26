@@ -7946,3 +7946,12 @@ Traceback (most recent call last):
 RecursionError: maximum recursion depth exceeded
 
 18:16:40 │ INFO │ 🛑 Process exiting - no restarts allowed
+
+================================================================================
+NEW RUN STARTED AT 2025-06-23 00:09:18
+Process ID: 661
+================================================================================
+00:09:18 │ INFO │ Logging system initialized successfully
+00:09:20 │ INFO │ USDA carb table loaded: 303 distinct food descriptions
+00:09:20 │ INFO │ Carb map initialised (303 keys)
+00:09:20 │ INFO │ ✅ All sanity checks passed
