@@ -190,4 +190,7 @@ web/data/*.ipynb
 .DS_Store
 tmp.py
 internal/*
-.indexed
+.indexedartifacts/embeddings_silver_backup.npy
+pretrained_models/models.zip
+artifacts/embeddings_silver_backup.npy
+pretrained_models/models.zip
