@@ -1,8 +1,5 @@
 *.npy
-embeddings/
-embeddings_backup/
 dataset/
-embeddings_gold_backup.npy
 
 # Byte-compiled / optimized / DLL files
 silver_extended.csv
