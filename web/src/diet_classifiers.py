@@ -3096,13 +3096,9 @@ def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
             random_state=42)
     )
 
-    # Rule-based model (text only)
-    if domain in ("text", "both"):
-        models["Rule"] = (
-            RuleModel("keto", RX_KETO, RX_WL_KETO)
-            if task == "keto"
-            else RuleModel("vegan", RX_VEGAN, RX_WL_VEGAN)
-        )
+    # Rule-based model (text only) - REMOVED from here
+    # The RuleModel expects raw text strings, not vectorized features
+    # It should be handled separately in the pipeline
 
     # Text-oriented models (work well with sparse features)
     text_family: Dict[str, BaseEstimator] = {
@@ -3126,22 +3122,23 @@ def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
             n_jobs=-1,
             random_state=42,
         ),
+        "SVM": svm_pipe,  # ADD SVM TO TEXT MODELS
     }
 
     # Image/mixed-feature models (handle dense features better)
     image_family: Dict[str, BaseEstimator] = {
-        "MLP": MLPClassifier(
-            hidden_layer_sizes=(512, 128),
-            activation="relu",
-            solver="adam",
-            alpha=0.001,
-            learning_rate="adaptive",
-            max_iter=400,
-            early_stopping=True,
-            validation_fraction=0.1,
-            n_iter_no_change=10,
-            random_state=42,
-        ),
+        # "MLP": MLPClassifier(
+        #     hidden_layer_sizes=(512, 128),
+        #     activation="relu",
+        #     solver="adam",
+        #     alpha=0.001,
+        #     learning_rate="adaptive",
+        #     max_iter=400,
+        #     early_stopping=True,
+        #     validation_fraction=0.1,
+        #     n_iter_no_change=10,
+        #     random_state=42,
+        # ),
         "RF": RandomForestClassifier(
             n_estimators=300,
             max_depth=None,
@@ -3179,7 +3176,6 @@ def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
         models.update(image_family)
 
     return models
-
 
 # =============================================================================
 # HYPERPARAMETER CONFIGURATION
@@ -3800,30 +3796,54 @@ def run_mode_A(
                               position=1, leave=False,
                               bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}]")
 
-        for name, base in model_progress:
-            model_start = time.time()
-            model_progress.set_description(f"   ├─ Training {name}")
+    # In run_mode_A, modify the model training loop to handle RuleModel separately:
 
-            try:
-                # Check for single-class case
-                unique_labels = np.unique(y_train)
-                if len(unique_labels) < 2:
-                    log.warning(
-                        f"      ⚠️  {name}: Only one class in training data, skipping")
-                    continue
+    for name, base in model_progress:
+        model_start = time.time()
+        model_progress.set_description(f"   ├─ Training {name}")
 
-                # Model training phases
-                with tqdm(total=4, desc=f"      ├─ {name}", position=2, leave=False,
-                          bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as model_pbar:
+        try:
+            # Check for single-class case
+            unique_labels = np.unique(y_train)
+            if len(unique_labels) < 2:
+                log.warning(f"      ⚠️  {name}: Only one class in training data, skipping")
+                continue
 
-                    # Step 1: Model fitting
-                    model_pbar.set_description(f"      ├─ {name}: Fitting")
-                    model = clone(base)
+            # Model training phases
+            with tqdm(total=4, desc=f"      ├─ {name}", position=2, leave=False,
+                    bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as model_pbar:
 
+                # Step 1: Model fitting
+                model_pbar.set_description(f"      ├─ {name}: Fitting")
+                model = clone(base)
+
+                # Special handling for RuleModel
+                if name == "Rule":
+                    # RuleModel doesn't need training, it uses rules
+                    # It also expects text strings, not vectorized features
+                    log.info(f"      ├─ {name}: Rule-based model (no training needed)")
+                    model = RuleModel(task, RX_KETO if task == "keto" else RX_VEGAN,
+                                    RX_WL_KETO if task == "keto" else RX_WL_VEGAN)
+                    model_pbar.update(1)
+                    
+                    # Step 2: Skip probability calibration for RuleModel
+                    model_pbar.update(1)
+                    
+                    # Step 3: Generate predictions using raw text
+                    model_pbar.set_description(f"      ├─ {name}: Predicting")
+                    # RuleModel expects text strings, not vectorized features
+                    prob = model.predict_proba(gold_clean)[:, 1]
+                    model_pbar.update(1)
+                    
+                    # Step 4: Apply rule verification (already done internally by RuleModel)
+                    model_pbar.set_description(f"      ├─ {name}: Verifying")
+                    pred = (prob >= 0.5).astype(int)
+                    model_pbar.update(1)
+                else:
+                    # Normal ML model training flow
                     # Memory efficiency check
                     if hasattr(X_train, "toarray") and X_train.shape[1] > 10000:
-                        log.debug(
-                            f"         ├─ {name}: Processing large sparse matrix")
+                        log.debug(f"         ├─ {name}: Processing large sparse matrix")
 
                     model.fit(X_train, y_train)
                     model_pbar.update(1)
@@ -3845,11 +3865,9 @@ def run_mode_A(
                             # Fallback to binary predictions
                             pred_binary = model.predict(X_gold)
                             prob = pred_binary.astype(float)
-                            log.warning(
-                                f"      ⚠️  {name}: Using binary predictions (suboptimal)")
+                            log.warning(f"      ⚠️  {name}: Using binary predictions (suboptimal)")
                     except Exception as pred_error:
-                        log.error(
-                            f"      ❌ {name}: Prediction failed - {str(pred_error)[:40]}...")
+                        log.error(f"      ❌ {name}: Prediction failed - {str(pred_error)[:40]}...")
                         continue
                     model_pbar.update(1)
 
@@ -3859,49 +3877,45 @@ def run_mode_A(
                     pred = (prob >= 0.5).astype(int)
                     model_pbar.update(1)
 
-                # Calculate metrics
-                model_time = time.time() - model_start
-                model_name_with_domain = f"{name}_{domain.upper()}"
+            # Calculate metrics
+            model_time = time.time() - model_start
+            model_name_with_domain = f"{name}_{domain.upper()}"
 
-                res = dict(
-                    task=task,
-                    model=model_name_with_domain,
-                    ACC=accuracy_score(y_true, pred),
-                    PREC=precision_score(y_true, pred, zero_division=0),
-                    REC=recall_score(y_true, pred, zero_division=0),
-                    F1=f1_score(y_true, pred, zero_division=0),
-                    ROC=roc_auc_score(y_true, prob),
-                    PR=average_precision_score(y_true, prob),
-                    prob=prob,
-                    pred=pred,
-                    training_time=model_time,
-                    domain=domain
-                )
+            res = dict(
+                task=task,
+                model=model_name_with_domain,
+                ACC=accuracy_score(y_true, pred),
+                PREC=precision_score(y_true, pred, zero_division=0),
+                REC=recall_score(y_true, pred, zero_division=0),
+                F1=f1_score(y_true, pred, zero_division=0),
+                ROC=roc_auc_score(y_true, prob),
+                PR=average_precision_score(y_true, prob),
+                prob=prob,
+                pred=pred,
+                training_time=model_time,
+                domain=domain
+            )
 
-                model_results.append(res)
+            model_results.append(res)
 
-                # Log performance
-                log.info(f"      ✅ {model_name_with_domain:>12}: F1={res['F1']:.3f} | "
-                         f"ACC={res['ACC']:.3f} | PREC={res['PREC']:.3f} | "
-                         f"REC={res['REC']:.3f} | Time={model_time:.1f}s")
+            # Log performance
+            log.info(f"      ✅ {model_name_with_domain:>12}: F1={res['F1']:.3f} | "
+                    f"ACC={res['ACC']:.3f} | PREC={res['PREC']:.3f} | "
+                    f"REC={res['REC']:.3f} | Time={model_time:.1f}s")
 
-                # Track best model
-                if res["F1"] > best_f1:
-                    best_f1, best_res = res["F1"], res
-                    BEST[name] = model  # Store without domain suffix
-                    log.info(
-                        f"      🏆 New best model for {task}: {model_name_with_domain} (F1={best_f1:.3f})")
+            # Track best model
+            if res["F1"] > best_f1:
+                best_f1, best_res = res["F1"], res
+                BEST[name] = model  # Store without domain suffix
+                log.info(f"      🏆 New best model for {task}: {model_name_with_domain} (F1={best_f1:.3f})")
 
-            except Exception as e:
-                model_time = time.time() - model_start
-                log.error(
-                    f"      ❌ {name:>8}: FAILED after {model_time:.1f}s - {str(e)[:50]}...")
+        except Exception as e:
+            model_time = time.time() - model_start
+            log.error(f"      ❌ {name:>8}: FAILED after {model_time:.1f}s - {str(e)[:50]}...")
 
-                if log.level <= logging.DEBUG:
-                    import traceback
-                    log.debug(
-                        f"Full traceback for {name}:\n{traceback.format_exc()}")
-
+            if log.level <= logging.DEBUG:
+                import traceback
+                log.debug(f"Full traceback for {name}:\n{traceback.format_exc()}")
         # Fallback handling
         if best_res is None:
             log.warning(
