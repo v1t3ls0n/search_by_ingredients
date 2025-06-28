@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================
-# run_full_pipeline.sh - Enhanced with logging
+# run_full_pipeline.sh - Enhanced with logging and backup restoration
 # ============================================
 
 set -euo pipefail
@@ -117,6 +117,85 @@ fi
 # Ensure the directory structure exists (in case it was removed)
 mkdir -p artifacts/logs
 
+# ============================================
+# NEW: Copy files from backups directory
+# ============================================
+if [ -d "backups" ]; then
+    log "📂 Found backups directory - copying files to artifacts..."
+    
+    # Count files to copy
+    FILE_COUNT=$(find backups -type f 2>/dev/null | wc -l)
+    
+    if [ "$FILE_COUNT" -gt 0 ]; then
+        log "   Found $FILE_COUNT files to restore"
+        
+        # Copy embedding files
+        if ls backups/embeddings_*.npy 2>/dev/null; then
+            log "   📊 Copying embedding files..."
+            cp -v backups/embeddings_*.npy artifacts/ 2>&1 | tee -a "$LOG_FILE" || true
+        fi
+        
+        # Copy model files
+        if ls backups/*.pkl 2>/dev/null; then
+            log "   🤖 Copying model files..."
+            cp -v backups/*.pkl artifacts/ 2>&1 | tee -a "$LOG_FILE" || true
+        fi
+        
+        # Copy CSV files
+        if ls backups/*.csv 2>/dev/null; then
+            log "   📄 Copying CSV files..."
+            cp -v backups/*.csv artifacts/ 2>&1 | tee -a "$LOG_FILE" || true
+        fi
+        
+        # Copy JSON files
+        if ls backups/*.json 2>/dev/null; then
+            log "   📋 Copying JSON files..."
+            cp -v backups/*.json artifacts/ 2>&1 | tee -a "$LOG_FILE" || true
+        fi
+        
+        # Copy any other numpy files
+        if ls backups/*.npz 2>/dev/null; then
+            log "   💾 Copying compressed numpy files..."
+            cp -v backups/*.npz artifacts/ 2>&1 | tee -a "$LOG_FILE" || true
+        fi
+        
+        # List what was copied
+        log "   ✅ Backup restoration complete. Files copied:"
+        ls -la artifacts/*.{npy,pkl,csv,json,npz} 2>/dev/null | tee -a "$LOG_FILE" || echo "   No files found after copy"
+        
+    else
+        log "   ⚠️  Backups directory is empty - nothing to copy"
+    fi
+else
+    log "📂 No backups directory found - skipping backup restoration"
+fi
+
+# Also check for backups in pretrained_models directory
+if [ -d "pretrained_models" ]; then
+    log "📂 Found pretrained_models directory - checking for additional files..."
+    
+    # Copy any embedding backups from pretrained_models
+    if ls pretrained_models/embeddings_*.npy 2>/dev/null; then
+        log "   📊 Copying embeddings from pretrained_models..."
+        cp -nv pretrained_models/embeddings_*.npy artifacts/ 2>&1 | tee -a "$LOG_FILE" || true
+    fi
+    
+    # Copy models and vectorizers if they don't exist in artifacts yet
+    if [ ! -f "artifacts/models.pkl" ] && [ -f "pretrained_models/models.pkl" ]; then
+        log "   🤖 Copying pretrained models..."
+        cp -v pretrained_models/models.pkl artifacts/ 2>&1 | tee -a "$LOG_FILE" || true
+    fi
+    
+    if [ ! -f "artifacts/vectorizer.pkl" ] && [ -f "pretrained_models/vectorizer.pkl" ]; then
+        log "   📐 Copying pretrained vectorizer..."
+        cp -v pretrained_models/vectorizer.pkl artifacts/ 2>&1 | tee -a "$LOG_FILE" || true
+    fi
+fi
+
+# ============================================
+# End of backup restoration
+# ============================================
+
 # Re-create the log file if it was removed
 if [ ! -f "$LOG_FILE" ]; then
     {
@@ -226,6 +305,9 @@ SUMMARY_FILE="artifacts/logs/summary_${TIMESTAMP}.txt"
     echo ""
     echo "Artifacts Generated:"
     ls -la artifacts/*.pkl artifacts/*.csv artifacts/*.json 2>/dev/null || echo "No model artifacts yet"
+    echo ""
+    echo "Embeddings Available:"
+    ls -la artifacts/embeddings_*.npy 2>/dev/null || echo "No embeddings found"
     echo ""
     echo "Container Final Status:"
     docker-compose ps

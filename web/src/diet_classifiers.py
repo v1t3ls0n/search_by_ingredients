@@ -6092,29 +6092,51 @@ def run_full_pipeline(mode: str = "both",
 
         # IMAGE MODELS
         if mode in {"image", "both"}:
-            # Safely check if we have image data
-            has_silver_images = False
-            has_gold_images = False
+            train_pbar.set_description("   ├─ Training Image Models")
+            log.info(f"   🖼️  Training image-based models...")
 
-            if img_silver is not None:
-                try:
-                    if hasattr(img_silver, 'size') and img_silver.size > 0:
-                        has_silver_images = True
-                except:
-                    pass
-
-            if img_gold is not None:
-                try:
-                    if hasattr(img_gold, 'size') and img_gold.size > 0:
-                        has_gold_images = True
-                except:
-                    pass
-
-            if has_silver_images and has_gold_images and X_img_silver is not None and X_img_gold is not None:
-                train_pbar.set_description("   ├─ Training Image Models")
-                log.info(f"   🖼️  Training image-based models...")
-
-                try:
+            try:
+                if mode == "both":
+                    # For "both" mode, we should use COMBINED features for image models too!
+                    log.info("   📊 Mode='both' detected - using combined text+image features")
+                    
+                    # Find common indices between text and image data
+                    common_silver_idx = silver_txt.index.intersection(img_silver_df.index)
+                    common_gold_idx = gold.index.intersection(img_gold_df.index)
+                    
+                    if len(common_silver_idx) > 0 and len(common_gold_idx) > 0:
+                        # Create combined features for silver
+                        X_text_silver_common = vec.transform(silver_txt.loc[common_silver_idx].clean)
+                        img_silver_common = img_silver[img_silver_df.index.get_indexer(common_silver_idx)]
+                        X_combined_silver = combine_features(X_text_silver_common, img_silver_common)
+                        
+                        # Create combined features for gold
+                        X_text_gold_common = vec.transform(gold.loc[common_gold_idx].clean)
+                        img_gold_common = img_gold[img_gold_df.index.get_indexer(common_gold_idx)]
+                        X_combined_gold = combine_features(X_text_gold_common, img_gold_common)
+                        
+                        # Use aligned DataFrames
+                        silver_eval = silver_txt.loc[common_silver_idx]
+                        gold_eval = gold.loc[common_gold_idx]
+                        
+                        log.info(f"      ├─ Combined features for image models: {X_combined_silver.shape}")
+                        log.info(f"      ├─ Samples: {len(common_silver_idx)} silver, {len(common_gold_idx)} gold")
+                        
+                        res_img = run_mode_A(
+                            X_combined_silver,  # Combined features!
+                            gold_eval.clean,
+                            X_combined_gold,    # Combined features!
+                            silver_eval,
+                            gold_eval,
+                            domain="image",  # Still marked as "image" domain for model selection
+                            apply_smote_flag=False
+                        )
+                    else:
+                        log.warning("   ⚠️  No common indices between text and image data")
+                        res_img = []
+                else:
+                    # For pure "image" mode, use only image features
+                    log.info("   📊 Mode='image' - using image-only features")
                     res_img = run_mode_A(
                         X_img_silver,
                         img_gold_df.clean,
@@ -6125,27 +6147,16 @@ def run_full_pipeline(mode: str = "both",
                         apply_smote_flag=False
                     )
 
-                    results.extend(res_img)
-                    log.info(f"      ✅ Image models: {len(res_img)} results")
+                results.extend(res_img)
+                log.info(f"      ✅ Image models: {len(res_img)} results")
 
-                except Exception as e:
-                    log.error(f"      ❌ Image model training failed: {str(e)}")
-                    import traceback
-                    log.error(f"Full traceback:\n{traceback.format_exc()}")
+            except Exception as e:
+                log.error(f"      ❌ Image model training failed: {str(e)}")
+                import traceback
+                log.error(f"Full traceback:\n{traceback.format_exc()}")
 
-                optimize_memory_usage("Image Models")
-                train_pbar.update(1)
-            else:
-                log.warning(f"   ⚠️  Skipping image models")
-                if not has_silver_images:
-                    log.warning(f"      ├─ No silver images")
-                if not has_gold_images:
-                    log.warning(f"      ├─ No gold images")
-                if X_img_silver is None:
-                    log.warning(f"      ├─ Silver features is None")
-                if X_img_gold is None:
-                    log.warning(f"      └─ Gold features is None")
-
+            optimize_memory_usage("Image Models")
+            train_pbar.update(1)
         # TEXT MODELS
         if mode in {"text", "both"}:
             train_pbar.set_description("   ├─ Training Text Models")

@@ -35,7 +35,7 @@ fi
 
 echo "🧠 Running evaluation on gold set..."
 docker-compose exec web python3 web/diet_classifiers.py \
-    --ground_truth data/ground_truth_sample.csv
+    --ground_truth data/ground_truth_sample.csv --mode text
 
 echo "✅ Evaluation complete!"
 echo "📊 Check logs above for results"
