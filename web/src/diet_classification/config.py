@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
+from __future__ import annotations
+from pathlib import Path
+from typing import Any, Dict, Mapping
+import logging
+from dataclasses import dataclass, field
 @dataclass(frozen=True)
 class Config:
     """
@@ -52,7 +56,7 @@ class Config:
     def __post_init__(self):
         """Validate configuration on initialization."""
         # Create missing directories
-        for field_name, value in self.__dict__.items():
+        for field_name, value in self.__dictz__.items():
             if isinstance(value, Path) and field_name != 'url_map':
                 if not value.exists() and not str(value).startswith('http'):
                     try:
