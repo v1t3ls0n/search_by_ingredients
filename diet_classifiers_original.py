@@ -3294,7 +3294,7 @@ def _ensure_pipeline():
             # No saved models - run training pipeline
             log.info("No saved artifacts found - running full pipeline once")
             # Import here to avoid circular dependency
-            from ..... import run_full_pipeline, BEST
+            from .. import run_full_pipeline, BEST
 
             vec, _, _, res = run_full_pipeline(mode="both", sample_frac=0.1)
 
