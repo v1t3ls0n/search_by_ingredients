@@ -43,6 +43,8 @@ services:
     volumes:
       - ./web/src:/app/web
       - ./artifacts:/app/artifacts
+      - ./backups:/app/backups
+      - ./pipeline_state:/app/pipeline_state
       - ./pretrained_models:/app/pretrained_models
     networks:
       - argmax

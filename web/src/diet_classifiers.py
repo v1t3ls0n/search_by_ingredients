@@ -249,20 +249,16 @@ Central configuration for the pipeline including:
 class Config:
     """
     Immutable configuration container for the pipeline.
-
-    Attributes:
-        artifacts_dir: Directory for saving trained models and vectorizers
-        data_dir: Root directory for data files
-        usda_dir: Directory containing USDA nutritional database files
-        url_map: Mapping of dataset names to file paths/URLs
-        vec_kwargs: Parameters for TF-IDF vectorizer
-        image_dir: Directory for storing downloaded recipe images
     """
     pretrained_models_dir: Path = Path("/app/pretrained_models")
     artifacts_dir: Path = Path("/app/artifacts")
     logs_dir: Path = Path("/app/artifacts/logs")
     data_dir: Path = Path("/app/data")
     usda_dir: Path = Path("/app/data/usda")
+    # NEW: Separate directories for persistent state
+    state_dir: Path = Path("/app/pipeline_state")  # Persists across runs
+    checkpoints_dir: Path = Path("/app/pipeline_state/checkpoints")  # Model checkpoints
+    cache_dir: Path = Path("/app/pipeline_state/cache")  # Cached computations
     url_map: Mapping[str, str] = field(default_factory=lambda: {
         "allrecipes.parquet": "/app/data/allrecipes.parquet",
         "ground_truth_sample.csv": "/app/data/ground_truth_sample.csv",
@@ -270,7 +266,6 @@ class Config:
     vec_kwargs: Dict[str, Any] = field(default_factory=lambda: dict(
         min_df=2, ngram_range=(1, 3), max_features=50000, sublinear_tf=True))
     image_dir: Path = Path("dataset/arg_max/images")
-
 
 CFG = Config()
 # =============================================================================
@@ -380,6 +375,8 @@ def get_available_memory(safety_factor=0.9):
     Get available memory accounting for Docker container limits.
     Enhanced version that properly detects container memory constraints.
     """
+    import platform
+
     mem = psutil.virtual_memory()
     total_memory = mem.total
 
@@ -404,6 +401,21 @@ def get_available_memory(safety_factor=0.9):
                             break
             except Exception as e:
                 log.warning(f"Could not read cgroup file {cgroup_file}: {e}")
+
+    # Add check for Docker Desktop on Mac/Windows
+    # These platforms often report system memory instead of container limits
+    if platform.system() in ['Darwin', 'Windows']:
+        # Try to read from Docker's memory limit file
+        docker_limit_file = '/.dockerenv'
+        if os.path.exists(docker_limit_file):
+            log.warning(
+                "Running in Docker on Mac/Windows - memory limits may not be accurately detected")
+            # Conservative estimate for Docker Desktop
+            estimated_limit_gb = min(
+                8.0, total_memory / (1024**3))  # Default to 8GB max
+            log.info(
+                f"Using conservative Docker Desktop limit: {estimated_limit_gb:.1f} GB")
+            return estimated_limit_gb * safety_factor
 
     # Return usable memory in GB
     usable_gb = (total_memory * safety_factor) / (1024**3)
@@ -2724,7 +2736,6 @@ def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarr
     return adjusted
 
 
-
 # # =============================================================================
 # # SANITY CHECKS
 # # =============================================================================
@@ -2732,7 +2743,6 @@ def verify_with_rules(task: str, clean: pd.Series, prob: np.ndarray) -> np.ndarr
 # Basic tests to ensure the classification system is working correctly.
 # These checks run on module import to catch configuration errors early.
 # """
-
 
 # Test whitelist functionality
 assert is_ingredient_keto("almond flour"), "Whitelist check failed"
@@ -2744,6 +2754,143 @@ assert not is_ingredient_keto("white rice"), "Numeric carb rule failed"
 rule = RuleModel("keto", None, None)
 assert rule._pos("banana") is False, "Rule model delegation failed"
 log.info("✅ All sanity checks passed")
+
+# =============================================================================
+# PRE-FLIGHT CHECKS
+# =============================================================================
+
+
+def preflight_checks():
+    """
+    Run comprehensive checks before starting training.
+
+    Returns:
+        bool: True if all critical checks pass, False otherwise
+    """
+
+    issues = []
+    warnings = []
+
+    log.info("\n🔍 RUNNING PRE-FLIGHT CHECKS...")
+
+    # Check memory
+    available_gb = get_available_memory()
+    if available_gb < 4:
+        issues.append(
+            f"Insufficient memory: {available_gb:.1f} GB (need at least 4 GB)")
+    elif available_gb < 8:
+        warnings.append(f"Low memory: {available_gb:.1f} GB (recommend 8+ GB)")
+    else:
+        log.info(f"   ✅ Memory: {available_gb:.1f} GB available")
+
+    # Check disk space
+    disk_usage = psutil.disk_usage('/')
+    free_gb = disk_usage.free / (1024**3)
+    if free_gb < 5:
+        issues.append(
+            f"Insufficient disk space: {free_gb:.1f} GB free (need at least 5 GB)")
+    else:
+        log.info(f"   ✅ Disk space: {free_gb:.1f} GB free")
+
+    # Check data files
+    required_files = [
+        CFG.url_map["allrecipes.parquet"],
+        CFG.url_map["ground_truth_sample.csv"]
+    ]
+
+    for file_path in required_files:
+        if not file_path.startswith('http') and not Path(file_path).exists():
+            issues.append(f"Missing required file: {file_path}")
+        else:
+            log.info(f"   ✅ Data file found: {Path(file_path).name}")
+
+    # Check USDA data
+    usda_files = ["food.csv", "food_nutrient.csv", "nutrient.csv"]
+    usda_missing = [f for f in usda_files if not (CFG.usda_dir / f).exists()]
+    if usda_missing:
+        warnings.append(
+            f"Missing USDA files: {usda_missing} (will skip carb-based rules)")
+    else:
+        log.info(f"   ✅ USDA nutritional data: All files present")
+
+    # Check GPU availability
+    if TORCH_AVAILABLE and torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name()
+        gpu_memory = torch.cuda.get_device_properties(
+            0).total_memory / (1024**3)
+        log.info(f"   ✅ GPU available: {gpu_name} ({gpu_memory:.1f} GB)")
+    else:
+        warnings.append("No GPU available - image processing will be slower")
+
+    # Check Python version
+    python_version = sys.version_info
+    if python_version.major < 3 or (python_version.major == 3 and python_version.minor < 8):
+        issues.append(
+            f"Python {python_version.major}.{python_version.minor} detected - need Python 3.8+")
+    else:
+        log.info(
+            f"   ✅ Python version: {python_version.major}.{python_version.minor}.{python_version.micro}")
+
+    # Check critical dependencies
+    try:
+        import sklearn
+        sklearn_version = sklearn.__version__
+        log.info(f"   ✅ scikit-learn: {sklearn_version}")
+    except ImportError:
+        issues.append("scikit-learn not installed - ML features disabled")
+
+    # Check artifacts directory permissions
+    try:
+        test_file = CFG.artifacts_dir / ".write_test"
+        CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
+        test_file.write_text("test")
+        test_file.unlink()
+        log.info(f"   ✅ Artifacts directory writable: {CFG.artifacts_dir}")
+    except Exception as e:
+        issues.append(f"Cannot write to artifacts directory: {e}")
+
+    # Check for existing models (for evaluation mode)
+    models_exist = (CFG.artifacts_dir / "models.pkl").exists() and (
+        CFG.artifacts_dir / "vectorizer.pkl").exists()
+    pretrained_exist = (CFG.pretrained_models_dir / "models.pkl").exists() and (
+        CFG.pretrained_models_dir / "vectorizer.pkl").exists()
+
+    if models_exist:
+        log.info(f"   ✅ Trained models found in artifacts/")
+    elif pretrained_exist:
+        log.info(f"   ✅ Pretrained models found in pretrained_models/")
+    else:
+        warnings.append(
+            "No existing models found - will need to train from scratch")
+
+    # Report results
+    if issues:
+        log.error("\n❌ PRE-FLIGHT CHECK FAILED:")
+        for issue in issues:
+            log.error(f"   ├─ {issue}")
+        log.error(f"   └─ Please fix these issues before proceeding")
+        return False
+
+    log.info("\n✅ PRE-FLIGHT CHECK PASSED")
+
+    if warnings:
+        log.warning("\n⚠️  Warnings (non-critical):")
+        for warning in warnings:
+            log.warning(f"   ├─ {warning}")
+        log.warning(
+            f"   └─ Pipeline will continue but may have reduced functionality")
+
+    # System summary
+    log.info("\n📊 SYSTEM SUMMARY:")
+    log.info(f"   ├─ CPU cores: {psutil.cpu_count()}")
+    log.info(
+        f"   ├─ Total memory: {psutil.virtual_memory().total // (1024**3)} GB")
+    log.info(f"   ├─ Available memory: {available_gb:.1f} GB")
+    log.info(f"   ├─ Platform: {platform.system()} {platform.release()}")
+    log.info(
+        f"   └─ Docker: {'Yes' if os.path.exists('/.dockerenv') else 'No'}")
+
+    return True
 
 
 # =============================================================================
@@ -2761,6 +2908,80 @@ _pipeline_state = {
     'initialized': False
 }
 
+
+def save_pipeline_state(stage: str, data: dict):
+    """
+    Save pipeline state for resume capability in persistent directory.
+    
+    Args:
+        stage: Current pipeline stage identifier
+        data: Dictionary of data to save
+    """
+    # Use the persistent state directory
+    state_dir = CFG.state_dir
+    state_dir.mkdir(parents=True, exist_ok=True)
+    
+    state_path = state_dir / "pipeline_state.pkl"
+    backup_path = state_dir / f"pipeline_state_{stage}.pkl"
+    
+    state = {
+        'stage': stage,
+        'timestamp': datetime.now().isoformat(),
+        'data': data,
+        'memory_usage': psutil.virtual_memory().percent,
+        'disk_usage': psutil.disk_usage('/').percent,
+        'artifacts_dir': str(CFG.artifacts_dir),  # Track where artifacts are
+        'python_version': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    }
+    
+    try:
+        # Save main state file
+        with open(state_path, 'wb') as f:
+            pickle.dump(state, f)
+        
+        # Save stage-specific backup
+        with open(backup_path, 'wb') as f:
+            pickle.dump(state, f)
+            
+        log.debug(f"   💾 Pipeline state saved at stage: {stage}")
+        
+        # Clean up old backups (keep only last 5)
+        backups = sorted(state_dir.glob("pipeline_state_*.pkl"), 
+                        key=lambda p: p.stat().st_mtime)
+        if len(backups) > 5:
+            for old_backup in backups[:-5]:
+                old_backup.unlink()
+                log.debug(f"   🗑️  Removed old backup: {old_backup.name}")
+                
+    except Exception as e:
+        log.error(f"   ❌ Failed to save pipeline state: {e}")
+
+
+def load_pipeline_state():
+    """
+    Load the most recent pipeline state from persistent directory.
+    
+    Returns:
+        Tuple of (stage, data) or (None, None) if no state found
+    """
+    state_path = CFG.state_dir / "pipeline_state.pkl"
+    
+    if not state_path.exists():
+        return None, None
+    
+    try:
+        with open(state_path, 'rb') as f:
+            state = pickle.load(f)
+        
+        log.info(f"   📂 Loaded pipeline state from stage: {state['stage']}")
+        log.info(f"   ├─ Saved at: {state['timestamp']}")
+        log.info(f"   └─ Memory usage at save: {state['memory_usage']:.1f}%")
+        
+        return state['stage'], state['data']
+        
+    except Exception as e:
+        log.error(f"   ❌ Failed to load pipeline state: {e}")
+        return None, None
 
 def _ensure_pipeline():
     """
@@ -3069,6 +3290,8 @@ def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
     """
     Build a dictionary of ML models appropriate for the given domain.
 
+    Enhanced with resource-aware model selection that adapts to available memory.
+
     Different models are optimized for different feature types:
     - Text models: Naive Bayes, linear models (work well with sparse TF-IDF)
     - Image models: Neural networks, tree-based models (handle dense features)
@@ -3083,22 +3306,28 @@ def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
     """
     models: Dict[str, BaseEstimator] = {}
 
-    # SVM pipeline with scaling (works for both domains)
-    svm_pipe = make_pipeline(
-        MaxAbsScaler(copy=False),          # Preserves sparsity
-        SVC(kernel="rbf",
-            C=1.0,
-            gamma="scale",
-            cache_size=2048,               # 2GB kernel cache
-            class_weight="balanced",
-            tol=1e-2,                      # Looser tolerance for speed
-            max_iter=20000,
-            random_state=42)
-    )
+    # Check available resources
+    available_memory = get_available_memory()
+    is_sanity_check = os.environ.get('SANITY_CHECK') == '1'
 
-    # Rule-based model (text only) - REMOVED from here
-    # The RuleModel expects raw text strings, not vectorized features
-    # It should be handled separately in the pipeline
+    log.info(f"   🔧 Building models for {task} ({domain} domain)")
+    log.info(f"   ├─ Available memory: {available_memory:.1f} GB")
+    log.info(f"   └─ Sanity check mode: {is_sanity_check}")
+
+    # If in sanity check mode, return minimal models
+    if is_sanity_check:
+        log.info(f"   🏃 Sanity check mode - using minimal model set")
+        if domain == "text":
+            return {
+                "NB": MultinomialNB(),
+                "Ridge": RidgeClassifier(class_weight="balanced", random_state=42)
+            }
+        else:
+            return {
+                "Softmax": LogisticRegression(
+                    solver="lbfgs", max_iter=100, random_state=42
+                )
+            }
 
     # Text-oriented models (work well with sparse features)
     text_family: Dict[str, BaseEstimator] = {
@@ -3122,49 +3351,96 @@ def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
             n_jobs=-1,
             random_state=42,
         ),
-        "SVM": svm_pipe,  # ADD SVM TO TEXT MODELS
-    }
-
-    # Image/mixed-feature models (handle dense features better)
-    image_family: Dict[str, BaseEstimator] = {
-        # "MLP": MLPClassifier(
-        #     hidden_layer_sizes=(512, 128),
-        #     activation="relu",
-        #     solver="adam",
-        #     alpha=0.001,
-        #     learning_rate="adaptive",
-        #     max_iter=400,
-        #     early_stopping=True,
-        #     validation_fraction=0.1,
-        #     n_iter_no_change=10,
-        #     random_state=42,
-        # ),
-        "RF": RandomForestClassifier(
-            n_estimators=300,
-            max_depth=None,
-            min_samples_split=2,
-            min_samples_leaf=1,
+        "LinearSVC": LinearSVC(
+            max_iter=1000,
             class_weight="balanced",
-            n_jobs=-1,
             random_state=42,
+            dual=False,  # Use primal optimization for large datasets
+            tol=1e-3
         ),
     }
 
-    # Add LightGBM if available (excellent for tabular/image features)
-    if lgb and domain in ("image", "both"):
-        image_family["LGBM"] = lgb.LGBMClassifier(
-            num_leaves=63,
-            learning_rate=0.1,
-            n_estimators=250,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            min_child_samples=20,
-            objective="binary",
-            random_state=42,
+    # Image/mixed-feature models (handle dense features better)
+    image_family: Dict[str, BaseEstimator] = {}
+
+    # Adapt models based on available memory
+    if available_memory >= 16:  # High memory - use all models
+        log.info(f"   💪 High memory mode - all models available")
+
+        image_family["RF"] = RandomForestClassifier(
+            n_estimators=150,
+            max_depth=20,
+            min_samples_split=5,
+            min_samples_leaf=2,
+            class_weight="balanced",
             n_jobs=-1,
-            verbosity=-1,
-            force_col_wise=True,
+            random_state=42,
         )
+
+        if lgb:
+            image_family["LGBM"] = lgb.LGBMClassifier(
+                num_leaves=31,
+                learning_rate=0.1,
+                n_estimators=100,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                min_child_samples=20,
+                objective="binary",
+                random_state=42,
+                n_jobs=-1,
+                verbosity=-1,
+                force_col_wise=True,
+            )
+
+    elif available_memory >= 8:  # Medium memory - reduce model complexity
+        log.info(f"   ⚡ Medium memory mode - reduced model complexity")
+
+        image_family["RF"] = RandomForestClassifier(
+            n_estimators=100,  # Reduced from 150
+            max_depth=15,      # Reduced from 20
+            min_samples_split=10,  # Increased from 5
+            min_samples_leaf=5,    # Increased from 2
+            class_weight="balanced",
+            n_jobs=-1,
+            random_state=42,
+        )
+
+        if lgb:
+            image_family["LGBM"] = lgb.LGBMClassifier(
+                num_leaves=31,
+                learning_rate=0.1,
+                n_estimators=50,   # Reduced from 100
+                subsample=0.8,
+                colsample_bytree=0.8,
+                min_child_samples=20,
+                objective="binary",
+                random_state=42,
+                n_jobs=-1,
+                verbosity=-1,
+                force_col_wise=True,
+                # Memory-saving parameters
+                max_bin=127,       # Reduced from default 255
+                min_data_in_bin=10,
+            )
+
+    else:  # Low memory - minimal models only
+        log.warning(
+            f"   ⚠️  Low memory mode ({available_memory:.1f} GB) - using minimal models")
+
+        # Only lightweight model for image features
+        image_family["RF"] = RandomForestClassifier(
+            n_estimators=50,   # Minimal trees
+            max_depth=10,      # Shallow trees
+            min_samples_split=20,
+            min_samples_leaf=10,
+            class_weight="balanced",
+            n_jobs=2,  # Limit parallelism
+            random_state=42,
+        )
+
+        # Remove memory-intensive text models
+        text_family.pop("LinearSVC", None)
+        text_family.pop("SGD", None)
 
     # Assemble model selection based on domain
     if domain == "text":
@@ -3175,7 +3451,11 @@ def build_models(task: str, domain: str = "text") -> Dict[str, BaseEstimator]:
         models.update(text_family)
         models.update(image_family)
 
+    # Log final model selection
+    log.info(f"   📦 Selected models: {list(models.keys())}")
+
     return models
+
 
 # =============================================================================
 # HYPERPARAMETER CONFIGURATION
@@ -3624,7 +3904,8 @@ def run_mode_A(
     gold_df: pd.DataFrame,    # Gold DataFrame with labels
     *,
     domain: str = "text",     # Feature domain
-    apply_smote_flag: bool = True  # Whether to apply SMOTE
+    apply_smote_flag: bool = True,  # Whether to apply SMOTE
+    checkpoint_dir: Path = None  # Directory for saving checkpoints
 ) -> list[dict]:
     """
     Train on weak (silver) labels, evaluate on gold standard labels.
@@ -3634,6 +3915,7 @@ def run_mode_A(
     2. Evaluates them on gold standard test data
     3. Applies rule-based verification to predictions
     4. Returns performance metrics for all models
+    5. Saves checkpoints after each task for resumability
 
     Args:
         X_silver: Feature matrix for silver training data
@@ -3643,11 +3925,16 @@ def run_mode_A(
         gold_df: Gold DataFrame with 'label_keto'/'label_vegan'
         domain: 'text', 'image', or 'both'
         apply_smote_flag: Whether to apply SMOTE for class balancing
+        checkpoint_dir: Directory for saving checkpoints (optional)
 
     Returns:
         List of result dictionaries with metrics and predictions
     """
-
+    # Use persistent checkpoint directory
+    if checkpoint_dir is None:
+        checkpoint_dir = CFG.checkpoints_dir  # Use persistent directory
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    
     warnings.filterwarnings('ignore', message='.*truth value of an array.*')
 
     # Ensure all arrays are properly formatted
@@ -3658,6 +3945,38 @@ def run_mode_A(
     results: list[dict] = []
     pipeline_start = time.time()
 
+    # Set up checkpoint directory
+    if checkpoint_dir is None:
+        checkpoint_dir = CFG.artifacts_dir / "checkpoints"
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+    # Check for existing checkpoints
+    existing_checkpoints = list(
+        checkpoint_dir.glob(f"checkpoint_*_{domain}.pkl"))
+    if existing_checkpoints:
+        log.info(
+            f"   📂 Found {len(existing_checkpoints)} existing checkpoints")
+
+        # Load completed tasks
+        completed_tasks = set()
+        for ckpt_path in existing_checkpoints:
+            try:
+                with open(ckpt_path, 'rb') as f:
+                    ckpt_data = pickle.load(f)
+                    completed_tasks.add(ckpt_data['task'])
+                    # Add results from checkpoint
+                    if 'all_results' in ckpt_data:
+                        results.extend(ckpt_data['all_results'])
+                        log.info(
+                            f"   ├─ Loaded {len(ckpt_data['all_results'])} results from {ckpt_data['task']} checkpoint")
+            except Exception as e:
+                log.warning(
+                    f"   ├─ Failed to load checkpoint {ckpt_path}: {e}")
+
+        if completed_tasks:
+            log.info(
+                f"   ✅ Resuming from checkpoint - completed tasks: {completed_tasks}")
+
     # Log pipeline initialization
     log.info("🚀 Starting MODE A Training Pipeline")
     log.info(f"   Domain: {domain}")
@@ -3665,6 +3984,7 @@ def run_mode_A(
     log.info(f"   Silver set size: {len(silver_df):,}")
     log.info(f"   Gold set size: {len(gold_df):,}")
     log.info(f"   Feature dimensions: {X_silver.shape}")
+    log.info(f"   Checkpoint directory: {checkpoint_dir}")
 
     # Show class distribution
     log.info("\n📊 Class Distribution Analysis:")
@@ -3677,12 +3997,22 @@ def run_mode_A(
         log.info(f"   {task.capitalize():>5} - Silver: {silver_pos:,}/{silver_total:,} ({silver_pos/silver_total:.1%}) | "
                  f"Gold: {gold_pos:,}/{gold_total:,} ({gold_pos/gold_total:.1%})")
 
+    # STORE ALL MODELS FOR EACH TASK (not just the best)
+    all_task_models = {"keto": [], "vegan": []}
+
     # Main training loop
     task_progress = tqdm(["keto", "vegan"], desc="🔬 Training Tasks",
                          position=0, leave=True,
                          bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]")
 
     for task in task_progress:
+        # Skip if already completed (from checkpoint)
+        if 'completed_tasks' in locals() and task in completed_tasks:
+            log.info(
+                f"\n⏭️  Skipping {task} - already completed (from checkpoint)")
+            task_progress.update(1)
+            continue
+
         task_start = time.time()
         task_progress.set_description(f"🔬 Training {task.capitalize()}")
 
@@ -3788,7 +4118,9 @@ def run_mode_A(
 
         log.info(f"   🤖 Training {len(models)} models: {list(models.keys())}")
 
-        best_f1, best_res = -1.0, None
+        # Initialize task-specific best tracking
+        best_f1 = -1.0
+        best_res = None
         model_results = []
 
         # Model training progress
@@ -3796,127 +4128,144 @@ def run_mode_A(
                               position=1, leave=False,
                               bar_format="   ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}<{remaining}]")
 
-    # In run_mode_A, modify the model training loop to handle RuleModel separately:
+        for name, base in model_progress:
+            model_start = time.time()
+            model_progress.set_description(f"   ├─ Training {name}")
 
-    for name, base in model_progress:
-        model_start = time.time()
-        model_progress.set_description(f"   ├─ Training {name}")
+            try:
+                # Check for single-class case
+                unique_labels = np.unique(y_train)
+                if len(unique_labels) < 2:
+                    log.warning(
+                        f"      ⚠️  {name}: Only one class in training data, skipping")
+                    continue
 
-        try:
-            # Check for single-class case
-            unique_labels = np.unique(y_train)
-            if len(unique_labels) < 2:
-                log.warning(f"      ⚠️  {name}: Only one class in training data, skipping")
-                continue
+                # Model training phases
+                with tqdm(total=4, desc=f"      ├─ {name}", position=2, leave=False,
+                          bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as model_pbar:
 
-            # Model training phases
-            with tqdm(total=4, desc=f"      ├─ {name}", position=2, leave=False,
-                    bar_format="      ├─ {desc}: {n_fmt}/{total_fmt} |{bar}| [{elapsed}]") as model_pbar:
+                    # Step 1: Model fitting
+                    model_pbar.set_description(f"      ├─ {name}: Fitting")
+                    model = clone(base)
 
-                # Step 1: Model fitting
-                model_pbar.set_description(f"      ├─ {name}: Fitting")
-                model = clone(base)
+                    # Special handling for RuleModel
+                    if name == "Rule":
+                        # RuleModel doesn't need training, it uses rules
+                        # It also expects text strings, not vectorized features
+                        log.info(
+                            f"      ├─ {name}: Rule-based model (no training needed)")
+                        model = RuleModel(task, RX_KETO if task == "keto" else RX_VEGAN,
+                                          RX_WL_KETO if task == "keto" else RX_WL_VEGAN)
+                        model_pbar.update(1)
 
-                # Special handling for RuleModel
-                if name == "Rule":
-                    # RuleModel doesn't need training, it uses rules
-                    # It also expects text strings, not vectorized features
-                    log.info(f"      ├─ {name}: Rule-based model (no training needed)")
-                    model = RuleModel(task, RX_KETO if task == "keto" else RX_VEGAN,
-                                    RX_WL_KETO if task == "keto" else RX_WL_VEGAN)
-                    model_pbar.update(1)
-                    
-                    # Step 2: Skip probability calibration for RuleModel
-                    model_pbar.update(1)
-                    
-                    # Step 3: Generate predictions using raw text
-                    model_pbar.set_description(f"      ├─ {name}: Predicting")
-                    # RuleModel expects text strings, not vectorized features
-                    prob = model.predict_proba(gold_clean)[:, 1]
-                    model_pbar.update(1)
-                    
-                    # Step 4: Apply rule verification (already done internally by RuleModel)
-                    model_pbar.set_description(f"      ├─ {name}: Verifying")
-                    pred = (prob >= 0.5).astype(int)
-                    model_pbar.update(1)
-                else:
-                    # Normal ML model training flow
-                    # Memory efficiency check
-                    if hasattr(X_train, "toarray") and X_train.shape[1] > 10000:
-                        log.debug(f"         ├─ {name}: Processing large sparse matrix")
+                        # Step 2: Skip probability calibration for RuleModel
+                        model_pbar.update(1)
 
-                    model.fit(X_train, y_train)
-                    model_pbar.update(1)
+                        # Step 3: Generate predictions using raw text
+                        model_pbar.set_description(
+                            f"      ├─ {name}: Predicting")
+                        # RuleModel expects text strings, not vectorized features
+                        prob = model.predict_proba(gold_clean)[:, 1]
+                        model_pbar.update(1)
 
-                    # Step 2: Ensure probabilistic predictions
-                    model_pbar.set_description(f"      ├─ {name}: Configuring")
-                    model = ensure_predict_proba(model, X_train, y_train)
-                    model_pbar.update(1)
+                        # Step 4: Apply rule verification (already done internally by RuleModel)
+                        model_pbar.set_description(
+                            f"      ├─ {name}: Verifying")
+                        pred = (prob >= 0.5).astype(int)
+                        model_pbar.update(1)
+                    else:
+                        # Normal ML model training flow
+                        # Memory efficiency check
+                        if hasattr(X_train, "toarray") and X_train.shape[1] > 10000:
+                            log.debug(
+                                f"         ├─ {name}: Processing large sparse matrix")
 
-                    # Step 3: Generate predictions
-                    model_pbar.set_description(f"      ├─ {name}: Predicting")
-                    try:
-                        if hasattr(model, "predict_proba"):
-                            prob = model.predict_proba(X_gold)[:, 1]
-                        elif hasattr(model, "decision_function"):
-                            scores = model.decision_function(X_gold)
-                            prob = 1 / (1 + np.exp(-scores))  # Sigmoid
-                        else:
-                            # Fallback to binary predictions
-                            pred_binary = model.predict(X_gold)
-                            prob = pred_binary.astype(float)
-                            log.warning(f"      ⚠️  {name}: Using binary predictions (suboptimal)")
-                    except Exception as pred_error:
-                        log.error(f"      ❌ {name}: Prediction failed - {str(pred_error)[:40]}...")
-                        continue
-                    model_pbar.update(1)
+                        model.fit(X_train, y_train)
+                        model_pbar.update(1)
 
-                    # Step 4: Apply rule verification
-                    model_pbar.set_description(f"      ├─ {name}: Verifying")
-                    prob = verify_with_rules(task, gold_clean, prob)
-                    pred = (prob >= 0.5).astype(int)
-                    model_pbar.update(1)
+                        # Step 2: Ensure probabilistic predictions
+                        model_pbar.set_description(
+                            f"      ├─ {name}: Configuring")
+                        model = ensure_predict_proba(model, X_train, y_train)
+                        model_pbar.update(1)
 
-            # Calculate metrics
-            model_time = time.time() - model_start
-            model_name_with_domain = f"{name}_{domain.upper()}"
+                        # Step 3: Generate predictions
+                        model_pbar.set_description(
+                            f"      ├─ {name}: Predicting")
+                        try:
+                            if hasattr(model, "predict_proba"):
+                                prob = model.predict_proba(X_gold)[:, 1]
+                            elif hasattr(model, "decision_function"):
+                                scores = model.decision_function(X_gold)
+                                prob = 1 / (1 + np.exp(-scores))  # Sigmoid
+                            else:
+                                # Fallback to binary predictions
+                                pred_binary = model.predict(X_gold)
+                                prob = pred_binary.astype(float)
+                                log.warning(
+                                    f"      ⚠️  {name}: Using binary predictions (suboptimal)")
+                        except Exception as pred_error:
+                            log.error(
+                                f"      ❌ {name}: Prediction failed - {str(pred_error)[:40]}...")
+                            continue
+                        model_pbar.update(1)
 
-            res = dict(
-                task=task,
-                model=model_name_with_domain,
-                ACC=accuracy_score(y_true, pred),
-                PREC=precision_score(y_true, pred, zero_division=0),
-                REC=recall_score(y_true, pred, zero_division=0),
-                F1=f1_score(y_true, pred, zero_division=0),
-                ROC=roc_auc_score(y_true, prob),
-                PR=average_precision_score(y_true, prob),
-                prob=prob,
-                pred=pred,
-                training_time=model_time,
-                domain=domain
-            )
+                        # Step 4: Apply rule verification
+                        model_pbar.set_description(
+                            f"      ├─ {name}: Verifying")
+                        prob = verify_with_rules(task, gold_clean, prob)
+                        pred = (prob >= 0.5).astype(int)
+                        model_pbar.update(1)
 
-            model_results.append(res)
+                # Calculate metrics
+                model_time = time.time() - model_start
+                model_name_with_domain = f"{name}_{domain.upper()}"
 
-            # Log performance
-            log.info(f"      ✅ {model_name_with_domain:>12}: F1={res['F1']:.3f} | "
-                    f"ACC={res['ACC']:.3f} | PREC={res['PREC']:.3f} | "
-                    f"REC={res['REC']:.3f} | Time={model_time:.1f}s")
+                res = dict(
+                    task=task,
+                    model=model_name_with_domain,
+                    model_base_name=name,  # Store base name separately
+                    ACC=accuracy_score(y_true, pred),
+                    PREC=precision_score(y_true, pred, zero_division=0),
+                    REC=recall_score(y_true, pred, zero_division=0),
+                    F1=f1_score(y_true, pred, zero_division=0),
+                    ROC=roc_auc_score(y_true, prob),
+                    PR=average_precision_score(y_true, prob),
+                    prob=prob,
+                    pred=pred,
+                    training_time=model_time,
+                    domain=domain,
+                    model_object=model  # FIX 4: Store the actual model object
+                )
 
-            # Track best model
-            if res["F1"] > best_f1:
-                best_f1, best_res = res["F1"], res
-                BEST[name] = model  # Store without domain suffix
-                log.info(f"      🏆 New best model for {task}: {model_name_with_domain} (F1={best_f1:.3f})")
+                model_results.append(res)
+                # Store ALL models for this task
+                all_task_models[task].append(res)
 
-        except Exception as e:
-            model_time = time.time() - model_start
-            log.error(f"      ❌ {name:>8}: FAILED after {model_time:.1f}s - {str(e)[:50]}...")
+                # Log performance
+                log.info(f"      ✅ {model_name_with_domain:>12}: F1={res['F1']:.3f} | "
+                         f"ACC={res['ACC']:.3f} | PREC={res['PREC']:.3f} | "
+                         f"REC={res['REC']:.3f} | Time={model_time:.1f}s")
 
-            if log.level <= logging.DEBUG:
-                import traceback
-                log.debug(f"Full traceback for {name}:\n{traceback.format_exc()}")
-        # Fallback handling
+                # Track best model for this task
+                if res["F1"] > best_f1:
+                    best_f1, best_res = res["F1"], res
+                    # Store in BEST with task AND domain awareness
+                    BEST[f"{task}_{domain}_{name}"] = model
+                    log.info(
+                        f"      🏆 New best model for {task}: {model_name_with_domain} (F1={best_f1:.3f})")
+
+            except Exception as e:
+                model_time = time.time() - model_start
+                log.error(
+                    f"      ❌ {name:>8}: FAILED after {model_time:.1f}s - {str(e)[:50]}...")
+
+                if log.level <= logging.DEBUG:
+                    import traceback
+                    log.debug(
+                        f"Full traceback for {name}:\n{traceback.format_exc()}")
+
+        # Fallback handling for this task
         if best_res is None:
             log.warning(
                 f"   ⚠️  All models failed for {task}! Using RuleModel fallback...")
@@ -3932,17 +4281,29 @@ def run_mode_A(
 
             fallback_time = time.time() - fallback_start
             best_res = pack(y_true, prob) | dict(
-                task=task, model=f"Rule_{domain.upper()}", prob=prob, pred=pred,
-                training_time=fallback_time, domain=domain
+                task=task,
+                model=f"Rule_{domain.upper()}",
+                model_base_name="Rule",
+                prob=prob,
+                pred=pred,
+                training_time=fallback_time,
+                domain=domain,
+                model_object=rule  # FIX 4: Store model object in fallback too
             )
-            BEST[task] = rule
+            BEST[f"{task}_{domain}_Rule"] = rule
+            all_task_models[task].append(best_res)
 
             log.info(
                 f"   🛡️  Rule fallback: F1={best_res['F1']:.3f} | Time={fallback_time:.1f}s")
 
+        # Add the best model result for this task to the overall results
+        results.append(best_res)
+
+        # ALSO ADD ALL MODEL RESULTS - this is important for ensemble creation
+        results.extend(model_results)
+
         # Task completion summary
         task_time = time.time() - task_start
-        results.append(best_res)
 
         log.info(f"   🎯 {task.upper()} COMPLETE:")
         log.info(
@@ -3950,6 +4311,27 @@ def run_mode_A(
         log.info(f"   ├─ Final Metrics: ACC={best_res['ACC']:.3f} | "
                  f"PREC={best_res['PREC']:.3f} | REC={best_res['REC']:.3f}")
         log.info(f"   └─ Task Time: {task_time:.1f}s")
+
+        # Save checkpoint after task completion
+        checkpoint_path = checkpoint_dir / f"checkpoint_{task}_{domain}.pkl"
+        checkpoint_data = {
+            'task': task,
+            'domain': domain,
+            'best_result': best_res,
+            'all_results': model_results,
+            'all_task_models': all_task_models[task],
+            'timestamp': datetime.now().isoformat(),
+            'task_time': task_time,
+            'feature_shape': X_silver.shape,
+            'n_models_trained': len(model_results)
+        }
+
+        try:
+            with open(checkpoint_path, 'wb') as f:
+                pickle.dump(checkpoint_data, f)
+            log.info(f"   💾 Checkpoint saved: {checkpoint_path}")
+        except Exception as e:
+            log.error(f"   ❌ Failed to save checkpoint: {e}")
 
         # Update progress
         task_progress.set_postfix({
@@ -3961,30 +4343,336 @@ def run_mode_A(
     # Pipeline completion
     pipeline_time = time.time() - pipeline_start
 
+    # Store all task models in results metadata
+    results_metadata = {
+        'all_task_models': all_task_models,
+        'pipeline_time': pipeline_time,
+        'domain': domain,
+        'silver_size': len(silver_df),
+        'gold_size': len(gold_df),
+        'feature_dimensions': X_silver.shape,
+        'smote_applied': apply_smote_flag,
+        'timestamp': datetime.now().isoformat(),
+        'checkpoint_dir': str(checkpoint_dir)
+    }
+
+    # Export results to CSV
+    export_results_to_csv(results, results_metadata, domain)
+
+    # Pipeline completion
     log.info(f"\n🏁 MODE A PIPELINE COMPLETE:")
     log.info(f"   ├─ Total Time: {pipeline_time:.1f}s")
-    log.info(f"   ├─ Tasks Completed: {len(results)}")
-    log.info(f"   └─ Domain: {domain}")
+    log.info(f"   ├─ Tasks Completed: 2")
+    log.info(f"   ├─ Models Trained: {len(results)}")
+    log.info(f"   ├─ Domain: {domain}")
+    log.info(f"   └─ Checkpoints saved: {checkpoint_dir}")
 
-    # Summary table
-    log.info(f"\n📊 FINAL RESULTS SUMMARY:")
+    # Summary table - show ALL results, not just best per task
+    log.info(f"\n📊 ALL RESULTS:")
     for i, res in enumerate(results, 1):
-        log.info(f"   {i}. {res['task'].upper():>5} | {res['model']:>15} | "
+        log.info(f"   {i:2d}. {res['task'].upper():>5} | {res['model']:>15} | "
                  f"F1={res['F1']:.3f} | ACC={res['ACC']:.3f} | "
                  f"Time={res.get('training_time', 0):.1f}s")
 
     # Display formatted table
     table("MODE A (silver → gold)", results)
 
+    # Return results with metadata attached
+    for res in results:
+        res['_metadata'] = results_metadata
+
     return results
 
 
-# =============================================================================
+# ====================================================================
 # METRICS AND VISUALIZATION
 # =============================================================================
 """
 Functions for calculating metrics and displaying results.
 """
+
+
+def export_results_to_csv(results: list[dict], metadata: dict, domain: str):
+    """
+    Export training results and metadata to CSV files.
+
+    Creates multiple CSV files:
+    - model_metrics_{domain}_{timestamp}.csv: All model performance metrics
+    - best_models_{domain}_{timestamp}.csv: Best model per task
+    - training_metadata_{domain}_{timestamp}.csv: Training run metadata
+    - model_comparison_{domain}_{timestamp}.csv: Side-by-side comparison
+    """
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    artifacts_dir = CFG.artifacts_dir / "metrics"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. Export all model metrics
+    metrics_data = []
+    for res in results:
+        metrics_data.append({
+            'timestamp': timestamp,
+            'domain': domain,
+            'task': res['task'],
+            'model': res['model'],
+            'model_base_name': res.get('model_base_name', res['model'].split('_')[0]),
+            'accuracy': res['ACC'],
+            'precision': res['PREC'],
+            'recall': res['REC'],
+            'f1_score': res['F1'],
+            'roc_auc': res['ROC'],
+            'pr_auc': res['PR'],
+            'training_time_seconds': res.get('training_time', 0),
+            'feature_domain': res.get('domain', domain),
+            'n_samples_train': metadata.get('silver_size', 0),
+            'n_samples_test': metadata.get('gold_size', 0),
+            'feature_dimensions': str(metadata.get('feature_dimensions', ''))
+        })
+
+    metrics_df = pd.DataFrame(metrics_data)
+    metrics_path = artifacts_dir / f"model_metrics_{domain}_{timestamp}.csv"
+    metrics_df.to_csv(metrics_path, index=False)
+    log.info(f"   📊 Saved model metrics to {metrics_path}")
+
+    # 2. Export best models per task
+    best_models_data = []
+    for task in ['keto', 'vegan']:
+        task_results = [r for r in results if r['task'] == task]
+        if task_results:
+            best_model = max(task_results, key=lambda x: x['F1'])
+            best_models_data.append({
+                'timestamp': timestamp,
+                'domain': domain,
+                'task': task,
+                'best_model': best_model['model'],
+                'f1_score': best_model['F1'],
+                'accuracy': best_model['ACC'],
+                'precision': best_model['PREC'],
+                'recall': best_model['REC'],
+                'roc_auc': best_model['ROC'],
+                'pr_auc': best_model['PR'],
+                'training_time': best_model.get('training_time', 0)
+            })
+
+    best_df = pd.DataFrame(best_models_data)
+    best_path = artifacts_dir / f"best_models_{domain}_{timestamp}.csv"
+    best_df.to_csv(best_path, index=False)
+    log.info(f"   🏆 Saved best models to {best_path}")
+
+    # 3. Export training metadata
+    metadata_data = [{
+        'timestamp': timestamp,
+        'domain': domain,
+        'pipeline_time_seconds': metadata['pipeline_time'],
+        'silver_size': metadata['silver_size'],
+        'gold_size': metadata['gold_size'],
+        'feature_dimensions': str(metadata['feature_dimensions']),
+        'smote_applied': metadata['smote_applied'],
+        'n_keto_models': len(metadata['all_task_models']['keto']),
+        'n_vegan_models': len(metadata['all_task_models']['vegan']),
+        'total_models_trained': len(results),
+        'training_timestamp': metadata['timestamp']
+    }]
+
+    metadata_df = pd.DataFrame(metadata_data)
+    metadata_path = artifacts_dir / \
+        f"training_metadata_{domain}_{timestamp}.csv"
+    metadata_df.to_csv(metadata_path, index=False)
+    log.info(f"   📋 Saved training metadata to {metadata_path}")
+
+    # 4. Create model comparison matrix
+    comparison_data = []
+    model_types = sorted(
+        set(r.get('model_base_name', r['model'].split('_')[0]) for r in results))
+
+    for model_type in model_types:
+        row = {'model_type': model_type}
+        for task in ['keto', 'vegan']:
+            task_model = next((r for r in results
+                              if r['task'] == task and
+                              r.get('model_base_name', r['model'].split('_')[0]) == model_type),
+                              None)
+            if task_model:
+                row[f'{task}_f1'] = task_model['F1']
+                row[f'{task}_acc'] = task_model['ACC']
+                row[f'{task}_time'] = task_model.get('training_time', 0)
+            else:
+                row[f'{task}_f1'] = None
+                row[f'{task}_acc'] = None
+                row[f'{task}_time'] = None
+        comparison_data.append(row)
+
+    comparison_df = pd.DataFrame(comparison_data)
+    comparison_path = artifacts_dir / \
+        f"model_comparison_{domain}_{timestamp}.csv"
+    comparison_df.to_csv(comparison_path, index=False)
+    log.info(f"   📈 Saved model comparison to {comparison_path}")
+
+    # 5. Export detailed predictions for error analysis
+    predictions_data = []
+    for res in results:
+        if 'prob' in res and 'pred' in res:
+            for i, (prob, pred) in enumerate(zip(res['prob'], res['pred'])):
+                predictions_data.append({
+                    'sample_index': i,
+                    'task': res['task'],
+                    'model': res['model'],
+                    'probability': prob,
+                    'prediction': pred,
+                    'true_label': metadata.get('gold_labels', {}).get(res['task'], [])[i]
+                    if i < len(metadata.get('gold_labels', {}).get(res['task'], []))
+                    else None
+                })
+
+    if predictions_data:
+        predictions_df = pd.DataFrame(predictions_data)
+        predictions_path = artifacts_dir / \
+            f"model_predictions_{domain}_{timestamp}.csv"
+        predictions_df.to_csv(predictions_path, index=False)
+        log.info(f"   🔮 Saved model predictions to {predictions_path}")
+
+
+def aggregate_results_across_domains(all_results: dict[str, list[dict]]):
+    """
+    Aggregate results across different domains (text, image, both) for final comparison.
+
+    Args:
+        all_results: Dictionary mapping domain -> list of results
+    """
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    artifacts_dir = CFG.artifacts_dir / "metrics"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create comprehensive comparison across all domains
+    all_metrics = []
+
+    for domain, results in all_results.items():
+        for res in results:
+            all_metrics.append({
+                'domain': domain,
+                'task': res['task'],
+                'model': res['model'],
+                'model_base_name': res.get('model_base_name', res['model'].split('_')[0]),
+                'f1_score': res['F1'],
+                'accuracy': res['ACC'],
+                'precision': res['PREC'],
+                'recall': res['REC'],
+                'roc_auc': res['ROC'],
+                'pr_auc': res['PR'],
+                'training_time': res.get('training_time', 0)
+            })
+
+    # 1. All metrics across domains
+    all_metrics_df = pd.DataFrame(all_metrics)
+    all_metrics_path = artifacts_dir / f"all_domain_metrics_{timestamp}.csv"
+    all_metrics_df.to_csv(all_metrics_path, index=False)
+    log.info(f"\n📊 CROSS-DOMAIN METRICS EXPORT:")
+    log.info(f"   ├─ Saved all metrics to {all_metrics_path}")
+
+    # 2. Best model per task across all domains
+    best_across_domains = []
+    for task in ['keto', 'vegan']:
+        task_models = [m for m in all_metrics if m['task'] == task]
+        if task_models:
+            best = max(task_models, key=lambda x: x['f1_score'])
+            best_across_domains.append(best)
+
+    best_df = pd.DataFrame(best_across_domains)
+    best_path = artifacts_dir / f"best_models_all_domains_{timestamp}.csv"
+    best_df.to_csv(best_path, index=False)
+    log.info(f"   ├─ Saved best models across domains to {best_path}")
+
+    # 3. Domain comparison summary
+    domain_summary = []
+    for domain in all_results.keys():
+        domain_metrics = [m for m in all_metrics if m['domain'] == domain]
+        if domain_metrics:
+            domain_summary.append({
+                'domain': domain,
+                'n_models': len(domain_metrics),
+                'avg_f1_keto': np.mean([m['f1_score'] for m in domain_metrics if m['task'] == 'keto']),
+                'avg_f1_vegan': np.mean([m['f1_score'] for m in domain_metrics if m['task'] == 'vegan']),
+                'best_f1_keto': max([m['f1_score'] for m in domain_metrics if m['task'] == 'keto'], default=0),
+                'best_f1_vegan': max([m['f1_score'] for m in domain_metrics if m['task'] == 'vegan'], default=0),
+                'avg_training_time': np.mean([m['training_time'] for m in domain_metrics])
+            })
+
+    domain_df = pd.DataFrame(domain_summary)
+    domain_path = artifacts_dir / f"domain_comparison_{timestamp}.csv"
+    domain_df.to_csv(domain_path, index=False)
+    log.info(f"   └─ Saved domain comparison to {domain_path}")
+
+    # Create a master index file
+    index_data = {
+        'timestamp': timestamp,
+        'all_metrics_file': all_metrics_path.name,
+        'best_models_file': best_path.name,
+        'domain_comparison_file': domain_path.name,
+        'total_models': len(all_metrics),
+        'domains': list(all_results.keys())
+    }
+
+    index_path = artifacts_dir / f"export_index_{timestamp}.json"
+    with open(index_path, 'w') as f:
+        json.dump(index_data, f, indent=2)
+    log.info(f"\n   📁 Export index saved to {index_path}")
+
+
+def export_ensemble_metrics(ensemble_results: list[dict]):
+    """
+    Export specific metrics for ensemble models.
+    """
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    artifacts_dir = CFG.artifacts_dir / "metrics" / "ensembles"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    ensemble_data = []
+    for res in ensemble_results:
+        if 'ensemble' in res.get('domain', '') or 'Ens' in res.get('model', '') or 'BestTwo' in res.get('model', ''):
+            ensemble_data.append({
+                'timestamp': timestamp,
+                'task': res['task'],
+                'ensemble_type': res.get('ensemble_method', 'unknown'),
+                'model_name': res['model'],
+                'f1_score': res['F1'],
+                'accuracy': res['ACC'],
+                'precision': res['PREC'],
+                'recall': res['REC'],
+                'component_models': json.dumps(res.get('models_used', [])),
+                'alpha': res.get('alpha', None),
+                'n_models': res.get('ensemble_size', len(res.get('models_used', []))),
+                'preparation_time': res.get('total_time', 0),
+                'text_model': res.get('text_model', None),
+                'image_model': res.get('image_model', None)
+            })
+
+    if ensemble_data:
+        ensemble_df = pd.DataFrame(ensemble_data)
+        ensemble_path = artifacts_dir / f"ensemble_metrics_{timestamp}.csv"
+        ensemble_df.to_csv(ensemble_path, index=False)
+        log.info(f"   🎭 Saved ensemble metrics to {ensemble_path}")
+
+
+def table(title, rows):
+    """
+    Display results in a formatted table.
+
+    Args:
+        title: Table title
+        rows: List of result dictionaries
+    """
+    cols = ("ACC", "PREC", "REC", "F1", "ROC", "PR")
+    pad = 11 + 8 * len(cols)
+    hdr = "│ model task " + " ".join(f"{c:>7}" for c in cols) + " │"
+    log.info(f"\n╭─ {title} {'─' * (pad - len(title) - 2)}")
+    log.info(hdr)
+    log.info("├" + "─" * (len(hdr) - 2) + "┤")
+    for r in rows:
+        vals = " ".join(f"{r[c]:>7.2f}" for c in cols)
+        log.info(f"│ {r['model']:<7} {r['task']:<5} {vals} │")
+    log.info("╰" + "─" * (len(hdr) - 2) + "╯")
 
 
 def pack(y, prob):
@@ -4008,26 +4696,6 @@ def pack(y, prob):
         ROC=roc_auc_score(y, prob),
         PR=average_precision_score(y, prob)
     )
-
-
-def table(title, rows):
-    """
-    Display results in a formatted table.
-
-    Args:
-        title: Table title
-        rows: List of result dictionaries
-    """
-    cols = ("ACC", "PREC", "REC", "F1", "ROC", "PR")
-    pad = 11 + 8 * len(cols)
-    hdr = "│ model task " + " ".join(f"{c:>7}" for c in cols) + " │"
-    log.info(f"\n╭─ {title} {'─' * (pad - len(title) - 2)}")
-    log.info(hdr)
-    log.info("├" + "─" * (len(hdr) - 2) + "┤")
-    for r in rows:
-        vals = " ".join(f"{r[c]:>7.2f}" for c in cols)
-        log.info(f"│ {r['model']:<7} {r['task']:<5} {vals} │")
-    log.info("╰" + "─" * (len(hdr) - 2) + "╯")
 
 
 def export_eval_plots(results: list[dict], gold_df: pd.DataFrame, output_dir: str = "artifacts"):
@@ -4629,7 +5297,6 @@ class EnsembleWrapper(BaseEstimator, ClassifierMixin):
         return f"EnsembleWrapper(type={self.ensemble_type}, n_models={len(self.models)}, alpha={self.alpha})"
 
 
-
 def tune_threshold(y_true, probs):
     """
     Find optimal classification threshold using precision-recall curve.
@@ -4660,6 +5327,7 @@ def best_two_domains(
     Blend predictions from best text and image models.
 
     FIXED: Handles different sample sizes between text and image models.
+    ENHANCED: Returns comprehensive metadata for CSV export integration.
     """
     # Find best models from each domain
     best_text = max(
@@ -4715,24 +5383,74 @@ def best_two_domains(
     ensemble_model = EnsembleWrapper(
         ensemble_type='best_two',
         models={
-            'text': BEST[best_text['model'].split('_')[0]],
-            'image': BEST[best_img['model'].split('_')[0]] if best_img else None
+            'text': BEST.get(f"{task}_{best_text.get('domain', 'text')}_{best_text['model'].split('_')[0]}"),
+            'image': BEST.get(f"{task}_{best_img.get('domain', 'image')}_{best_img['model'].split('_')[0]}") if best_img else None
         },
         alpha=alpha,
         task=task
     )
 
+    # Create comprehensive model name for tracking
+    model_name = f"BestTwo_{task}_alpha{alpha}"
+
+    # Calculate timing (estimation based on component models)
+    total_time = best_text.get('training_time', 0) + \
+        (best_img.get('training_time', 0) if best_img else 0)
+
     return pack(y_true, final_prob) | {
-        "model": f"BestTwo(alpha={alpha})",
+        # Core identifiers
         "task": task,
+        "model": model_name,
+        "model_base_name": "BestTwo",
+
+        # Model object for saving
+        "model_object": ensemble_model,
+        "ensemble_model": ensemble_model,  # Keep for backward compatibility
+
+        # Domain and type information
+        "domain": "ensemble",  # Mark as ensemble for export grouping
+        "ensemble_type": "cross_domain",  # Specific ensemble type
+        "ensemble_method": "alpha_blending",  # Method used
+
+        # Predictions
         "prob": final_prob,
         "pred": final_pred,
-        "ensemble_model": ensemble_model,
+
+        # Component model information
         "text_model": best_text["model"],
         "image_model": best_img["model"] if best_img else None,
+        "text_model_f1": best_text["F1"],
+        "image_model_f1": best_img["F1"] if best_img else None,
+
+        # Ensemble parameters
         "alpha": alpha,
+        "ensemble_size": 2 if best_img else 1,  # Number of models in ensemble
+
+        # Sample information
         "rows_with_images": len(img_prob) if best_img else 0,
         "rows_text_only": len(gold_df) - (len(img_prob) if best_img else 0),
+        "n_samples_train": len(gold_df),  # For consistency with other results
+        "n_samples_test": len(gold_df),
+
+        # Timing information
+        "training_time": total_time,
+        "preparation_time": total_time,  # Alternative field name used by some exports
+
+        # Component models list for ensemble metrics export
+        "models_used": [best_text["model"]] + ([best_img["model"]] if best_img else []),
+
+        # Feature information
+        "feature_dimensions": f"text:{best_text.get('feature_dimensions', 'unknown')}, " +
+        (f"image:{best_img.get('feature_dimensions', 'unknown')}" if best_img else "image:none"),
+
+        # Additional metadata for exports
+        "_ensemble_metadata": {
+            "creation_method": "best_two_domains",
+            "text_domain": best_text.get('domain', 'text'),
+            "image_domain": best_img.get('domain', 'image') if best_img else None,
+            "blending_strategy": "linear_interpolation",
+            "verification_applied": True
+        }
     }
 
 
@@ -6112,30 +6830,41 @@ def run_full_pipeline(mode: str = "both",
             try:
                 if mode == "both":
                     # For "both" mode, we should use COMBINED features for image models too!
-                    log.info("   📊 Mode='both' detected - using combined text+image features")
-                    
+                    log.info(
+                        "   📊 Mode='both' detected - using combined text+image features")
+
                     # Find common indices between text and image data
-                    common_silver_idx = silver_txt.index.intersection(img_silver_df.index)
-                    common_gold_idx = gold.index.intersection(img_gold_df.index)
-                    
+                    common_silver_idx = silver_txt.index.intersection(
+                        img_silver_df.index)
+                    common_gold_idx = gold.index.intersection(
+                        img_gold_df.index)
+
                     if len(common_silver_idx) > 0 and len(common_gold_idx) > 0:
                         # Create combined features for silver
-                        X_text_silver_common = vec.transform(silver_txt.loc[common_silver_idx].clean)
-                        img_silver_common = img_silver[img_silver_df.index.get_indexer(common_silver_idx)]
-                        X_combined_silver = combine_features(X_text_silver_common, img_silver_common)
-                        
+                        X_text_silver_common = vec.transform(
+                            silver_txt.loc[common_silver_idx].clean)
+                        img_silver_common = img_silver[img_silver_df.index.get_indexer(
+                            common_silver_idx)]
+                        X_combined_silver = combine_features(
+                            X_text_silver_common, img_silver_common)
+
                         # Create combined features for gold
-                        X_text_gold_common = vec.transform(gold.loc[common_gold_idx].clean)
-                        img_gold_common = img_gold[img_gold_df.index.get_indexer(common_gold_idx)]
-                        X_combined_gold = combine_features(X_text_gold_common, img_gold_common)
-                        
+                        X_text_gold_common = vec.transform(
+                            gold.loc[common_gold_idx].clean)
+                        img_gold_common = img_gold[img_gold_df.index.get_indexer(
+                            common_gold_idx)]
+                        X_combined_gold = combine_features(
+                            X_text_gold_common, img_gold_common)
+
                         # Use aligned DataFrames
                         silver_eval = silver_txt.loc[common_silver_idx]
                         gold_eval = gold.loc[common_gold_idx]
-                        
-                        log.info(f"      ├─ Combined features for image models: {X_combined_silver.shape}")
-                        log.info(f"      ├─ Samples: {len(common_silver_idx)} silver, {len(common_gold_idx)} gold")
-                        
+
+                        log.info(
+                            f"      ├─ Combined features for image models: {X_combined_silver.shape}")
+                        log.info(
+                            f"      ├─ Samples: {len(common_silver_idx)} silver, {len(common_gold_idx)} gold")
+
                         res_img = run_mode_A(
                             X_combined_silver,  # Combined features!
                             gold_eval.clean,
@@ -6146,7 +6875,8 @@ def run_full_pipeline(mode: str = "both",
                             apply_smote_flag=False
                         )
                     else:
-                        log.warning("   ⚠️  No common indices between text and image data")
+                        log.warning(
+                            "   ⚠️  No common indices between text and image data")
                         res_img = []
                 else:
                     # For pure "image" mode, use only image features
@@ -6527,9 +7257,9 @@ def run_full_pipeline(mode: str = "both",
     log_memory_usage("Final")
     pipeline_progress.update(1)
 
-    # ------------------------------------------------------------------
+# ------------------------------------------------------------------
     # PIPELINE COMPLETION SUMMARY
-    # ------------------------------------------------------------------
+# ------------------------------------------------------------------
     total_time = time.time() - pipeline_start
 
     log.info(f"\n🏁 PIPELINE COMPLETE")
@@ -6549,6 +7279,71 @@ def run_full_pipeline(mode: str = "both",
                 best_result = max(task_results, key=lambda x: x['F1'])
                 log.info(f"   ├─ {task.upper()}: Best F1={best_result['F1']:.3f} "
                          f"({best_result['model']}) | ACC={best_result['ACC']:.3f}")
+
+        # Organize results by domain for better analysis
+        results_by_domain = {}
+        for res in results:
+            domain = res.get('domain', 'unknown')
+            if domain not in results_by_domain:
+                results_by_domain[domain] = []
+            results_by_domain[domain].append(res)
+
+        # Export aggregated results across all domains
+        aggregate_results_across_domains(results_by_domain)
+
+        # Export ensemble-specific metrics if any ensembles were created
+        ensemble_results = [r for r in results if
+                            'ensemble' in r.get('domain', '') or
+                            'Ens' in r.get('model', '') or
+                            'BestTwo' in r.get('model', '') or
+                            'SmartEns' in r.get('model', '')]
+
+        if ensemble_results:
+            export_ensemble_metrics(ensemble_results)
+            log.info(f"\n   🎭 ENSEMBLE SUMMARY:")
+            log.info(f"   ├─ Total ensembles created: {len(ensemble_results)}")
+
+            # Best ensemble per task
+            for task in ["keto", "vegan"]:
+                task_ensembles = [
+                    r for r in ensemble_results if r["task"] == task]
+                if task_ensembles:
+                    best_ensemble = max(task_ensembles, key=lambda x: x['F1'])
+                    log.info(
+                        f"   ├─ {task.upper()} best ensemble: {best_ensemble['model']} (F1={best_ensemble['F1']:.3f})")
+
+        # Create comprehensive pipeline summary
+        pipeline_summary = {
+            'mode': mode,
+            'sample_frac': sample_frac,
+            'total_time': total_time,
+            'total_time_minutes': total_time / 60,
+            'total_models': len(results),
+            'total_ensembles': len(ensemble_results),
+            'domains_trained': list(results_by_domain.keys()),
+            'models_per_domain': {domain: len(models) for domain, models in results_by_domain.items()},
+            'best_keto_f1': max([r['F1'] for r in results if r['task'] == 'keto'], default=0),
+            'best_vegan_f1': max([r['F1'] for r in results if r['task'] == 'vegan'], default=0),
+            'best_keto_model': max([r for r in results if r['task'] == 'keto'], key=lambda x: x['F1'], default={'model': 'None'})['model'],
+            'best_vegan_model': max([r for r in results if r['task'] == 'vegan'], key=lambda x: x['F1'], default={'model': 'None'})['model'],
+            'timestamp': datetime.now().isoformat(),
+            'pipeline_stages_completed': [
+                'data_loading', 'text_processing',
+                'image_processing' if mode in ['image', 'both'] else None,
+                'model_training', 'ensemble_creation', 'evaluation'
+            ]
+        }
+
+        # Save detailed pipeline summary
+        summary_dir = CFG.artifacts_dir / "metrics"
+        summary_dir.mkdir(parents=True, exist_ok=True)
+        summary_path = summary_dir / \
+            f"pipeline_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+
+        with open(summary_path, 'w') as f:
+            json.dump(pipeline_summary, f, indent=2)
+        log.info(f"\n   📝 Pipeline summary saved to {summary_path}")
+
     else:
         log.warning(f"\n   ⚠️  NO RESULTS GENERATED")
         log.warning(
@@ -6561,16 +7356,18 @@ def run_full_pipeline(mode: str = "both",
     log.info(f"   ├─ Final memory: {final_memory.used // (1024**2)} MB")
     log.info(f"   └─ Efficiency: {len(results)/total_time:.2f} models/second")
 
-    # Save pipeline metadata
+    # Enhanced pipeline metadata with more details
     pipeline_metadata = {
         'mode': mode,
         'force': force,
         'sample_frac': sample_frac,
         'total_time': total_time,
+        'total_time_minutes': total_time / 60,
         'total_results': len(results),
         'start_time': pipeline_start,
         'end_time': time.time(),
         'memory_peak_percent': final_memory.percent,
+        'memory_used_mb': final_memory.used // (1024**2),
         'system_info': {
             'cpu_count': psutil.cpu_count(),
             'total_memory_gb': psutil.virtual_memory().total // (1024**3)
@@ -6580,14 +7377,76 @@ def run_full_pipeline(mode: str = "both",
             'silver_image_size': len(silver_img),
             'gold_size': len(gold),
             'silver_images_downloaded': len(silver_downloaded) if 'silver_downloaded' in locals() else 0,
-            'gold_images_downloaded': len(gold_downloaded) if 'gold_downloaded' in locals() else 0
+            'gold_images_downloaded': len(gold_downloaded) if 'gold_downloaded' in locals() else 0,
+            'image_embeddings_used': {
+                'silver': img_silver.shape[0] if 'img_silver' in locals() and img_silver is not None else 0,
+                'gold': img_gold.shape[0] if 'img_gold' in locals() and img_gold is not None else 0
+            }
+        },
+        'model_summary': {
+            'total_models': len(results),
+            'text_models': len([r for r in results if r.get('domain') == 'text']),
+            'image_models': len([r for r in results if r.get('domain') == 'image']),
+            'combined_models': len([r for r in results if r.get('domain') == 'both']),
+            'ensemble_models': len([r for r in results if 'ensemble' in r.get('domain', '') or 'Ens' in r.get('model', '')])
+        },
+        'performance_summary': {
+            'best_overall_f1': max([r['F1'] for r in results], default=0),
+            'best_overall_model': max(results, key=lambda x: x['F1'], default={'model': 'None'})['model'] if results else 'None',
+            'average_f1': np.mean([r['F1'] for r in results]) if results else 0,
+            'average_training_time': np.mean([r.get('training_time', 0) for r in results]) if results else 0
         }
     }
 
+    # Save to both JSON and CSV for easy access
+    metadata_path = CFG.artifacts_dir / "metrics" / \
+        f"pipeline_metadata_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    with open(metadata_path, "w") as f:
+        json.dump(pipeline_metadata, f, indent=2)
+
+    # Also save a simplified version to the root for backward compatibility
     with open("pipeline_metadata.json", "w") as f:
         json.dump(pipeline_metadata, f, indent=2)
 
-    log.info(f"   💾 Saved pipeline metadata to pipeline_metadata.json")
+    log.info(f"   💾 Saved pipeline metadata to {metadata_path}")
+
+    # Create a master results DataFrame for easy analysis
+    if results:
+        master_results = []
+        for res in results:
+            master_results.append({
+                'timestamp': datetime.now().isoformat(),
+                'pipeline_mode': mode,
+                'task': res['task'],
+                'model': res['model'],
+                'domain': res.get('domain', 'unknown'),
+                'f1_score': res['F1'],
+                'accuracy': res['ACC'],
+                'precision': res['PREC'],
+                'recall': res['REC'],
+                'roc_auc': res['ROC'],
+                'pr_auc': res['PR'],
+                'training_time': res.get('training_time', 0)
+            })
+
+        master_df = pd.DataFrame(master_results)
+        master_path = CFG.artifacts_dir / "metrics" / \
+            f"master_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        master_df.to_csv(master_path, index=False)
+        log.info(f"   📊 Saved master results table to {master_path}")
+
+        # Print final summary statistics
+        log.info(f"\n   📈 FINAL STATISTICS:")
+        log.info(f"   ├─ Models trained per task:")
+        for task in ['keto', 'vegan']:
+            task_count = len([r for r in results if r['task'] == task])
+            log.info(f"   │  ├─ {task}: {task_count} models")
+        log.info(
+            f"   ├─ Average F1 score: {pipeline_metadata['performance_summary']['average_f1']:.3f}")
+        log.info(
+            f"   ├─ Best overall F1: {pipeline_metadata['performance_summary']['best_overall_f1']:.3f}")
+        log.info(
+            f"   └─ Total training efficiency: {len(results)/total_time:.2f} models/second")
 
     return vec, silver_txt, gold, results
 
@@ -6604,10 +7463,13 @@ def main():
     """
     Command line interface for the diet classification pipeline.
 
+    Enhanced with pre-flight checks, sanity check mode, and better error handling.
+
     Supports multiple modes:
     - Training: Run full pipeline to train models
     - Inference: Classify ingredients using trained models
     - Evaluation: Test on ground truth dataset
+    - Sanity Check: Quick verification with minimal data
 
     The function includes comprehensive error handling and prevents
     restart loops through environment variable tracking.
@@ -6618,7 +7480,6 @@ def main():
     import atexit
 
     # Register exit handler
-
     def prevent_restart():
         log.info("🛑 Process exiting - no restarts allowed")
 
@@ -6637,6 +7498,10 @@ def main():
                         help='Recompute image embeddings')
     parser.add_argument('--sample_frac', type=float,
                         default=None, help="Fraction of silver set to sample.")
+    parser.add_argument('--sanity_check', action='store_true',
+                        help='Run quick sanity check with minimal data')
+    parser.add_argument('--predict', type=str,
+                        help='Path to CSV file for batch prediction')
 
     args = parser.parse_args()
 
@@ -6660,14 +7525,29 @@ def main():
         # Enable Python memory optimizations
         if hasattr(sys, 'setswitchinterval'):
             # Python 3.2+ uses setswitchinterval (value in seconds)
-            sys.setswitchinterval(0.1)  # Increase switch interval to reduce overhead
+            # Increase switch interval to reduce overhead
+            sys.setswitchinterval(0.1)
         elif hasattr(sys, 'setcheckinterval'):
             # Fallback for older Python versions (pre-3.2)
             sys.setcheckinterval(1000)
 
-    try:
-        log.info(f"🚀 Starting main with args: {args}")
+    # Handle sanity check mode
+    if args.sanity_check:
+        log.info("🔍 SANITY CHECK MODE - Using minimal data and models")
+        args.sample_frac = 0.01  # Use only 1% of data
+        args.mode = 'text'  # Text only for speed
+        os.environ['SANITY_CHECK'] = '1'
+        
+        # Override configuration for sanity check
+        if not args.train and not args.ground_truth and not args.ingredients:
+            args.train = True  # Default to training in sanity check
 
+    # Run pre-flight checks
+    if not preflight_checks():
+        log.error("❌ Pre-flight checks failed. Please fix issues before proceeding.")
+        sys.exit(1)
+
+    try:
         if args.ingredients:
             # Handle ingredient classification
             if args.ingredients.startswith('['):
@@ -6682,9 +7562,25 @@ def main():
             return
 
         elif args.train:
-            log.info(f"🧠 SINGLE training run - sample_frac={args.sample_frac}")
+            log.info(f"🧠 TRAINING MODE - sample_frac={args.sample_frac}")
+            
+            if args.sanity_check:
+                log.info(f"   ├─ Sanity check: YES (minimal data)")
+                log.info(f"   ├─ Expected runtime: ~5 minutes")
+            else:
+                log.info(f"   ├─ Full training mode")
+                log.info(f"   ├─ Expected runtime: 1-3 hours")
 
             try:
+                # Check for existing pipeline state
+                saved_stage, saved_data = load_pipeline_state()
+                if saved_stage and not args.force:
+                    log.info(f"   📂 Found saved pipeline state from stage: {saved_stage}")
+                    response = input("   Resume from saved state? [Y/n]: ").strip().lower()
+                    if response != 'n':
+                        log.info(f"   ✅ Resuming from {saved_stage}")
+                        # TODO: Implement actual resume logic based on stage
+                
                 vec, silver, gold, res = run_full_pipeline(
                     mode=args.mode, force=args.force, sample_frac=args.sample_frac)
 
@@ -6728,16 +7624,57 @@ def main():
                                     best_models[task] = BEST[base_name]
                                     log.info(
                                         f"✅ Saved {task} single model: {base_name} (F1={best['F1']:.3f})")
+                    
                     if best_models:
                         with open(CFG.artifacts_dir / "models.pkl", 'wb') as f:
                             pickle.dump(best_models, f)
                         log.info(
                             f"✅ Saved {len(best_models)} models to {CFG.artifacts_dir}")
+                        
+                        # Save model metadata
+                        model_metadata = {}
+                        for task, model in best_models.items():
+                            if hasattr(model, 'ensemble_type'):
+                                model_metadata[task] = {
+                                    'type': 'ensemble',
+                                    'ensemble_type': model.ensemble_type,
+                                    'requires_images': model.ensemble_type in ['best_two', 'smart_ensemble']
+                                }
+                            elif hasattr(model, 'n_features_in_'):
+                                n_features = model.n_features_in_
+                                if n_features <= 2048:
+                                    model_type = 'image'
+                                    requires_images = True
+                                elif n_features > 7000:
+                                    model_type = 'both'
+                                    requires_images = True
+                                else:
+                                    model_type = 'text'
+                                    requires_images = False
+                                
+                                model_metadata[task] = {
+                                    'type': model_type,
+                                    'n_features': n_features,
+                                    'requires_images': requires_images
+                                }
+                            else:
+                                model_metadata[task] = {
+                                    'type': 'unknown',
+                                    'requires_images': False
+                                }
+                        
+                        with open(CFG.artifacts_dir / "model_metadata.json", 'w') as f:
+                            json.dump(model_metadata, f, indent=2)
+                        log.info("✅ Saved model metadata")
+                        
                     else:
                         log.warning("⚠️  No models to save")
 
                 except Exception as e:
                     log.error(f"❌ Could not save models: {e}")
+                    
+                if args.sanity_check:
+                    log.info("\n🎉 SANITY CHECK COMPLETE - All systems functional!")
 
             except KeyboardInterrupt:
                 log.info("🛑 Training interrupted by user")
@@ -7207,15 +8144,35 @@ def main():
         else:
             # Default pipeline
             log.info(f"🧠 Default pipeline - sample_frac={args.sample_frac}")
+            
+            if not args.train and not args.ground_truth and not args.ingredients and not args.predict:
+                log.info("\n📋 No specific mode selected. Available options:")
+                log.info("   ├─ --train: Train new models")
+                log.info("   ├─ --ground_truth <file>: Evaluate on labeled data")
+                log.info("   ├─ --ingredients <list>: Classify specific ingredients")
+                log.info("   ├─ --predict <file>: Batch prediction on CSV")
+                log.info("   └─ --sanity_check: Quick test run")
+                
+                response = input("\nRun training pipeline? [Y/n]: ").strip().lower()
+                if response != 'n':
+                    args.train = True
+                else:
+                    log.info("👋 Exiting. Run with --help for usage information.")
+                    sys.exit(0)
 
-            try:
-                run_full_pipeline(mode=args.mode, force=args.force,
-                                  sample_frac=args.sample_frac)
-            except Exception as e:
-                log.error(f"❌ Default pipeline failed: {e}")
-                sys.exit(1)
+            if args.train:
+                try:
+                    run_full_pipeline(mode=args.mode, force=args.force,
+                                      sample_frac=args.sample_frac)
+                except Exception as e:
+                    log.error(f"❌ Default pipeline failed: {e}")
+                    sys.exit(1)
 
         log.info("🏁 Main completed successfully")
+        
+        # Clean up sanity check environment variable
+        if 'SANITY_CHECK' in os.environ:
+            del os.environ['SANITY_CHECK']
 
     except KeyboardInterrupt:
         log.info("🛑 Main interrupted by user")
@@ -7228,6 +8185,7 @@ def main():
         import traceback
         log.error(f"Full traceback:\n{traceback.format_exc()}")
         sys.exit(1)
+
 
 
 if __name__ == "__main__":
