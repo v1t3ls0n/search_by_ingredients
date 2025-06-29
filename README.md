@@ -190,7 +190,7 @@ silver_txt.to_csv("artifacts/silver_extended.csv", index=False)
 
 # 🤖 Sophisticated Ensemble Methods in Diet Classifier Pipeline
 
-This diet classification pipeline implements several advanced ensemble techniques that progressively combine models to achieve optimal performance. Let me break down the ensemble architecture in detail.
+This diet classification pipeline implements several advanced ensemble techniques that progressively combine models to achieve optimal performance.
 
 ## 📊 Overview of Ensemble Hierarchy
 
@@ -755,117 +755,197 @@ def tune_with_early_stopping(patience=3, min_improvement=0.001):
 - Sparse-dense feature combination
 
 ---
+
 ## 🚀 Project Directory Structure
 
 ### 📁 Directory Overview
 
-**The complete implementation resides in a single file: `web/src/diet_classifiers.py`**. 
-All other files are boilerplate or configuration.
+**The complete implementation is now organized into a modular Python package: `web/src/diet_classification/`**
 
 ---
 
-### 🎯 Core Implementation
+### 🎯 Core Implementation Structure
 
-#### ⭐ **The Heart of the Project**
+#### ⭐ **The Main Package**
 
 ```
-web/src/diet_classifiers.py
+web/src/
+├── diet_classifiers.py           # Compatibility wrapper - imports from package
+├── diet_classification/          # Main package directory
+│   ├── __init__.py              # Package initialization
+│   ├── __main__.py              # CLI entry point
+│   ├── classification/          # Classification logic
+│   │   ├── keto.py              # Keto classification functions
+│   │   ├── vegan.py             # Vegan classification functions
+│   │   └── verification.py      # Rule-based verification
+│   ├── config.py                # Configuration management
+│   ├── core/                    # Core components
+│   │   ├── exceptions.py        # Custom exceptions
+│   │   ├── logging.py           # Logging configuration
+│   │   └── state.py             # Pipeline state management
+│   ├── data/                    # Data loading and processing
+│   │   ├── loaders.py           # Dataset loading functions
+│   │   ├── preprocessing.py     # Text preprocessing
+│   │   ├── silver_labels.py     # Silver label generation
+│   │   └── usda.py              # USDA nutritional data
+│   ├── ensembles/               # Ensemble methods
+│   │   ├── base.py              # Base ensemble classes
+│   │   ├── blending.py          # Blending strategies
+│   │   ├── optimization.py      # Ensemble optimization
+│   │   └── voting.py            # Voting ensemble implementations
+│   ├── evaluation/              # Model evaluation
+│   │   ├── export.py            # Result export functions
+│   │   ├── metrics.py           # Metric calculations
+│   │   └── visualization.py     # Plotting functions
+│   ├── features/                # Feature extraction
+│   │   ├── combiners.py         # Feature combination utilities
+│   │   ├── images.py            # Image feature extraction
+│   │   └── text.py              # Text feature extraction
+│   ├── models/                  # ML models
+│   │   ├── builders.py          # Model building functions
+│   │   ├── io.py                # Model saving/loading
+│   │   ├── rules.py             # Rule-based model
+│   │   ├── training.py          # Training orchestration
+│   │   └── tuning.py            # Hyperparameter tuning
+│   ├── pipeline/                # Pipeline orchestration
+│   │   ├── checkpoints.py       # Checkpoint management
+│   │   ├── evaluation.py        # Pipeline evaluation
+│   │   ├── orchestrator.py      # Main pipeline coordinator
+│   │   └── prediction.py        # Batch prediction
+│   └── utils/                   # Utility functions
+│       ├── constants.py         # Domain-specific constants
+│       ├── memory.py            # Memory management
+│       └── validation.py        # Pre-flight checks
+├── app.py                       # Flask server (unchanged)
+├── index_data.py                # OpenSearch indexing (unchanged)
+├── init.sh                      # Startup script (unchanged)
+└── templates/                   # Web interface templates
+    └── index.html               # Frontend (unchanged)
 ```
-
-**This single file contains:**
-- ✅ Complete ML pipeline implementation
-- ✅ All classification algorithms
-- ✅ Data processing logic
-- ✅ CLI interface
-- ✅ Model training & evaluation
-- ✅ Feature engineering
-- ✅ Hyperparameter optimization
 
 ---
 
-### 🗂️ Directory Layout
+### 🗂️ Module Organization
 
-#### 🌐 **Web & API Container** (`web/`)
-*Contains the actual implementation*
+#### 🔍 **Classification Module** (`classification/`)
+Contains the core classification logic:
+- `keto.py`: Keto diet classification with multi-stage rules and USDA integration
+- `vegan.py`: Vegan diet classification with whitelist/blacklist patterns
+- `verification.py`: Rule-based verification layer for ML predictions
 
-```
-web/
-├── src/
-│   ├── templates/
-│   │   └── index.html            # [Boilerplate - Minimal frontend]
-│   ├── app.py                    # [Boilerplate - Flask server]
-│   ├── diet_classifiers.py       # ⭐ COMPLETE IMPLEMENTATION ⭐
-│   ├── index_data.py             # [Boilerplate - OpenSearch indexing]
-│   └── init.sh                   # [Modified - Startup script]
-├── Dockerfile                    # [Modified - Container config]
-└── requirements.txt              # [Modified - Dependencies]
-```
+#### 📊 **Data Module** (`data/`)
+Handles all data operations:
+- `loaders.py`: Dataset loading with caching and validation
+- `preprocessing.py`: Text normalization and tokenization
+- `silver_labels.py`: Weak label generation using heuristics
+- `usda.py`: USDA nutritional database integration
+
+#### 🧠 **Models Module** (`models/`)
+Machine learning model management:
+- `builders.py`: Model factory with memory-aware selection
+- `training.py`: Complete training pipeline with SMOTE and checkpointing
+- `tuning.py`: Hyperparameter optimization strategies
+- `rules.py`: Rule-based classifier implementation
+- `io.py`: Model serialization and deserialization
+
+#### 🎭 **Ensembles Module** (`ensembles/`)
+Advanced ensemble methods:
+- `base.py`: Base classes and common functionality
+- `voting.py`: Various voting strategies (soft, hard, dynamic)
+- `blending.py`: Cross-domain blending and stacking
+- `optimization.py`: Ensemble size and configuration optimization
+
+#### 🔬 **Features Module** (`features/`)
+Feature extraction and engineering:
+- `text.py`: TF-IDF vectorization with USDA augmentation
+- `images.py`: ResNet-50 embeddings with quality filtering
+- `combiners.py`: Multi-modal feature combination
+
+#### 🚀 **Pipeline Module** (`pipeline/`)
+End-to-end pipeline orchestration:
+- `orchestrator.py`: Main pipeline coordinator
+- `checkpoints.py`: Save/resume functionality
+- `evaluation.py`: Ground truth evaluation
+- `prediction.py`: Batch prediction capabilities
+
+#### 🛠️ **Utils Module** (`utils/`)
+Supporting utilities:
+- `constants.py`: NON_KETO, NON_VEGAN lists and patterns
+- `memory.py`: Memory management and crisis handling
+- `validation.py`: Pre-flight checks and threshold tuning
+
+#### 🏗️ **Core Module** (`core/`)
+Foundational components:
+- `logging.py`: Centralized logging configuration
+- `state.py`: Singleton pipeline state management
+- `exceptions.py`: Custom exception hierarchy
+
+---
+
+### 📁 Supporting Directories
 
 #### 🤖 **Pre-trained Models** (`pretrained_models/`)
-*Model storage*
-
 ```
 pretrained_models/
 └── models.zip                    # Pre-trained models & vectorizers
 ```
 
 #### 📊 **Pipeline Artifacts** (`artifacts/`)
-*Created by `diet_classifiers.py` during execution*
-
+*Created by the pipeline during execution*
 ```
 artifacts/
-├── models.pkl                    # Generated by pipeline
-├── vectorizer.pkl                # Generated by pipeline
-├── silver_extended.csv           # Generated by pipeline
-├── eval_metrics.csv              # Generated by pipeline
-├── ground_truth_predictions.csv  # Generated by pipeline
-├── pipeline.log                  # Generated by pipeline
-└── best_hyperparams.json         # Generated by pipeline
+├── models.pkl                    # Trained models
+├── vectorizer.pkl                # TF-IDF vectorizer
+├── silver_extended.csv           # Extended training data
+├── eval_metrics.csv              # Evaluation results
+├── ground_truth_predictions.csv  # Predictions on test set
+├── pipeline.log                  # Execution logs
+├── best_hyperparams.json         # Optimal parameters
+├── logs/                         # Detailed logs
+├── metrics/                      # Performance metrics
+├── plots/                        # Visualization outputs
+└── predictions/                  # Prediction results
 ```
 
 #### 🔧 **Configuration & Scripts**
-
-##### 🐳 Docker Configuration
 ```
-├── docker-compose.yml            # [Modified - Two-service architecture]
-```
-
-##### 📜 Execution Scripts
-*Shell wrappers that invoke `diet_classifiers.py`*
-```
-scripts/
-├── train.sh                      # Calls diet_classifiers.py --train
-├── eval_ground_truth.sh          # Calls diet_classifiers.py --eval
-├── eval_custom.sh                # Calls diet_classifiers.py --eval-custom
-├── run_full_pipeline.sh          # Calls diet_classifiers.py --full
-└── update_git.sh                 # Git helper
-```
-
-##### 📄 Documentation & Version Control
-```
-├── README.md                     # Project documentation
-├── .gitattributes               # Git LFS configuration
-└── .gitignore                   # Version control exclusions
+├── docker-compose.yml            # Two-service architecture
+├── web/
+│   ├── Dockerfile               # Container configuration
+│   └── requirements.txt         # Python dependencies
+└── scripts/
+    ├── train.sh                 # Training script
+    ├── eval_ground_truth.sh     # Evaluation script
+    ├── eval_custom.sh           # Custom evaluation
+    ├── run_full_pipeline.sh     # Complete pipeline
+    └── update_git.sh            # Version control helper
 ```
 
 ---
 
-### 📝 Implementation Notes
+### 📝 Key Architectural Changes
 
-#### Streamlined Architecture
-The project uses a **two-service Docker architecture** (the original `nb/` notebook container has been removed as unnecessary boilerplate):
-- **`os`**: OpenSearch for recipe indexing and search capabilities
-- **`web`**: Complete ML pipeline, Flask API, and CLI interface
+#### 🏗️ Modular Architecture
+The monolithic `diet_classifiers.py` has been refactored into a well-organized Python package with clear separation of concerns:
+- **40+ focused modules** instead of one 9000+ line file
+- **Clear module boundaries** with defined interfaces
+- **Reusable components** that can be imported individually
+- **Easier testing** with isolated functionality
+- **Better maintainability** through organized code structure
 
-#### Modified Files (Minor Adjustments)
-As per task requirements, only minimal changes were made to:
-- 🐳 **`/web/Dockerfile`** - Container configuration with dataset downloads
-- 🔧 **`/docker-compose.yml`** - Simplified two-service orchestration
-- 📦 **`/web/requirements.txt`** - ML pipeline dependencies
-- 📄 **`/web/src/init.sh`** - Startup script (model extraction moved to Dockerfile)
+#### 🔌 Backward Compatibility
+- `diet_classifiers.py` now serves as a compatibility wrapper
+- Existing code importing from `diet_classifiers` continues to work
+- Public API (`is_keto`, `is_vegan`) remains unchanged
+- CLI interface preserved through `__main__.py`
 
-#### Untouched Boilerplate
-All other files remain as provided in the original boilerplate, ensuring compatibility with the existing infrastructure while removing unnecessary complexity.
+#### 🎯 Benefits of Modularization
+1. **Easier Development**: Find and modify specific functionality quickly
+2. **Better Testing**: Test individual components in isolation
+3. **Code Reuse**: Import only what you need
+4. **Team Collaboration**: Multiple developers can work on different modules
+5. **Performance**: Load only required modules, reducing memory footprint
+6. **Documentation**: Each module has clear purpose and documentation
 
 ---
 
@@ -899,6 +979,8 @@ All other files remain as provided in the original boilerplate, ensuring compati
 | API readiness                     | ✅     | Flask entrypoint included                  |
 | Logging and debugging             | ✅     | Hierarchical progress bars + structured logs|
 | Integration of external knowledge | ✅     | USDA nutrition database                    |
+| Modular architecture              | ✅     | Clean separation of concerns               |
+| Backward compatibility            | ✅     | Wrapper maintains existing API             |
 
 ---
 
@@ -908,7 +990,7 @@ All other files remain as provided in the original boilerplate, ensuring compati
 
 #### Memory Management & Optimization
 
-The system implements sophisticated memory management:
+The system implements sophisticated memory management in `utils/memory.py`:
 
 - **`optimize_memory_usage()`**: Multi-level memory optimization with detailed tracking
 - **`handle_memory_crisis()`**: Emergency recovery with 5 GC passes and GPU clearing
@@ -929,7 +1011,7 @@ Multi-layer fallback architecture:
 
 #### Performance Optimizations
 
-- **Intelligent Caching**: Models cached in `BEST` dictionary
+- **Intelligent Caching**: Models cached in pipeline state
 - **Early Stopping**: `tune_with_early_stopping()` saves computation
 - **Dynamic Feature Selection**: Only compute needed features
 - **Batch Processing**: Dynamic sizing based on operation type
@@ -958,8 +1040,10 @@ Multi-layer fallback architecture:
 
 #### Implementation Patterns
 
-- **Lazy Loading**: Global caches for datasets and USDA data
-- **`build_models()`**: Flexible model construction based on task/domain
+- **Lazy Loading**: Datasets and USDA data loaded on demand
+- **Singleton Pattern**: Pipeline state management
+- **Factory Pattern**: Model builders and ensemble creation
+- **Strategy Pattern**: Different tuning and ensemble strategies
 
 ---
 
