@@ -9,6 +9,5 @@ from .metrics import pack, table, tune_threshold
 __all__ = [
     # Metrics
     'pack',
-    'table',
-    'tune_threshold',
-]
+    'table'
+    ]
