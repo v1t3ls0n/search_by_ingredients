@@ -10,10 +10,19 @@ Provides functions for creating plots and visualizations including:
 - Performance comparisons
 - Feature importance plots
 """
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+import matplotlib.pyplot as plt
+
+# Configure matplotlib to avoid font issues
+plt.rcParams.update({
+    'font.family': 'sans-serif',
+    'font.sans-serif': ['DejaVu Sans', 'Arial', 'Helvetica', 'sans-serif'],
+    'figure.autolayout': True
+})
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any
