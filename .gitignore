@@ -14,7 +14,7 @@ best_params.json
 # C extensions
 *.so
 .jpg
-utils/
+# utils/
 # Distribution / packaging
 .Python
 build/
