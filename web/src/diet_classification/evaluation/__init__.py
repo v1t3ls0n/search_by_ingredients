@@ -4,7 +4,7 @@
 Model evaluation and metrics modules.
 """
 
-from .metrics import pack, table, tune_threshold
+from .metrics import pack, table
 
 __all__ = [
     # Metrics
