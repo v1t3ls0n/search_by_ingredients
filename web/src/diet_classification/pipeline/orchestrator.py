@@ -23,10 +23,10 @@ import pandas as pd
 
 from ..core import log, get_pipeline_state
 from ..config import CFG
-from ..data import get_datasets, show_balance, filter_photo_rows
+from ..data import get_datasets, show_balance
 from ..features.text import extract_text_features
 from ..features.images import download_images, build_image_embeddings
-from ..features.combiners import combine_features
+from ..features.combiners import combine_features, filter_photo_rows
 from ..models.training import run_mode_A
 from ..models.io import save_models_optimized
 from ..ensembles import (
