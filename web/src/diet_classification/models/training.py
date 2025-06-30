@@ -10,6 +10,7 @@ This module implements the full training pipeline including:
 - Comprehensive evaluation
 """
 
+
 import logging
 import os
 
@@ -22,10 +23,12 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
 from tqdm import tqdm
+import warnings
 
 
 from sklearn.base import BaseEstimator
 from sklearn.metrics import accuracy_score, f1_score
+warnings.filterwarnings('ignore', message='X does not have valid feature names')
 
 from ..core import log, get_pipeline_state
 from ..config import CFG

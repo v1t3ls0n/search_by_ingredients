@@ -591,7 +591,20 @@ def run_full_pipeline(
             task_results = [r for r in results if r["task"] == task]
             if task_results:
                 best = max(task_results, key=lambda x: x["F1"])
-                log.info(f"   {task:>5}: {best['model']} (F1={best['F1']:.3f}, ACC={best['ACC']:.3f})")
+                
+                # Get model object
+                if "ensemble_model" in best:
+                    best_models[task] = best["ensemble_model"]
+                elif "model_object" in best:
+                    best_models[task] = best["model_object"]
+                
+                # Update pipeline state with best model
+                pipeline_state.set_best_model(task, best_models[task])
+                
+                log.info(f"   ✅ Best {task}: {best['model']} (F1={best['F1']:.3f})")
+
+        if best_models:
+            save_models_optimized(best_models, vectorizer, CFG.artifacts_dir)
     
     # Memory summary
     final_memory = psutil.virtual_memory()

@@ -21,6 +21,7 @@ from .classification.vegan import is_vegan
 from .utils.memory import get_available_memory
 from .utils.validation import preflight_checks
 from .pipeline.orchestrator import run_full_pipeline
+from .pipeline.evaluation import evaluate_ground_truth
 
 import pandas as pd
 import numpy as np
@@ -59,7 +60,7 @@ def main():
     parser.add_argument('--ingredients', type=str,
                         help='Comma separated ingredients to classify')
     parser.add_argument('--mode', choices=['text', 'image', 'both'],
-                        default='both', help='Feature mode for training')
+                        default=None, help='Feature mode (defaults to "both" for training, "text" for evaluation)')
     parser.add_argument('--force', action='store_true',
                         help='Recompute image embeddings')
     parser.add_argument('--sample_frac', type=float,
@@ -228,12 +229,16 @@ def main():
                 log.info("🚫 EXITING WITHOUT RESTART")
                 sys.exit(1)
 
+       
+      
         elif args.ground_truth:
             log.info(f"📊 Evaluating on ground truth: {args.ground_truth}")
             
-            # Simplified evaluation logic
-            # Full implementation would be in evaluation module
-            from .pipeline.evaluation import evaluate_ground_truth
+            # Default to text mode for ground truth evaluation if not explicitly set
+            if args.mode is None:
+                args.mode = 'text'
+                log.info(f"   ℹ️  Defaulting to text-only evaluation (use --mode both for all features)")
+            
             evaluate_ground_truth(args.ground_truth)
 
         elif args.predict:

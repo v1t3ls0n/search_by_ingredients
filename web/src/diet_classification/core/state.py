@@ -160,6 +160,64 @@ class PipelineStateManager:
             self.log.warning("Model loading failed (%s). Need to train models.", e)
             # Don't set initialized=True on failure
 
+    def get_best_model(self, task: str) -> Optional[Any]:
+        """
+        Get the best available model for a task.
+        
+        Checks in order:
+        1. Direct task key (e.g., 'keto')
+        2. Best model cache
+        3. Any key containing the task name
+        4. None if no model found
+        
+        Args:
+            task: Task name ('keto' or 'vegan')
+            
+        Returns:
+            Best available model or None
+        """
+        # Direct lookup
+        if task in self.models:
+            return self.models[task]
+        
+        # Check best models cache
+        if task in self.best_models:
+            return self.best_models[task]
+        
+        # Find any model for this task
+        task_models = {k: v for k, v in self.models.items() if task in k.lower()}
+        if task_models:
+            # Sort by key to get most specific match
+            # Prefer ensemble models, then 'both', then 'text', then others
+            def model_priority(key):
+                if 'ensemble' in key.lower():
+                    return 0
+                elif 'both' in key.lower():
+                    return 1
+                elif 'text' in key.lower():
+                    return 2
+                else:
+                    return 3
+            
+            sorted_models = sorted(task_models.items(), key=lambda x: model_priority(x[0]))
+            return sorted_models[0][1]
+        
+        return None
+
+    def set_best_model(self, task: str, model: Any):
+        """
+        Set the best model for a task.
+        
+        This ensures consistent access through both direct task key and best models cache.
+        
+        Args:
+            task: Task name ('keto' or 'vegan')
+            model: Model instance
+        """
+        self.models[task] = model
+        self.best_models[task] = model
+        self.log.info(f"Set best model for {task}")
+
 
 def get_pipeline_state() -> PipelineStateManager:
     """

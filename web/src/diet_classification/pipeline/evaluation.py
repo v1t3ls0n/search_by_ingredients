@@ -19,7 +19,7 @@ from ..data.preprocessing import normalise
 from ..evaluation.metrics import pack, table
 
 
-def evaluate_ground_truth(ground_truth_path: str) -> None:
+def evaluate_ground_truth(ground_truth_path: str, mode: str = 'text') -> None:
     """
     Evaluate trained models against ground truth labeled data.
     

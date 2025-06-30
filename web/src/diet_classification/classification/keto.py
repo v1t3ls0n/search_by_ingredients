@@ -9,6 +9,7 @@ Based on original lines 2159-2350, 1965-1989 from diet_classifiers.py
 import json
 from typing import Iterable, Union
 import numpy as np
+import pandas as pd
 
 from ..core import log, get_pipeline_state
 from ..utils.constants import get_keto_patterns
@@ -82,42 +83,7 @@ def is_ingredient_keto(ingredient: str) -> bool:
     if not is_keto_ingredient_list(tokenize_ingredient(norm)):
         return False
 
-    # 5. ML model fallback (with rule verification)
-    pipeline_state = get_pipeline_state()
-    pipeline_state.ensure_pipeline_initialized()
-    
-    if 'keto' in pipeline_state.models and pipeline_state.initialized:
-        model = pipeline_state.models['keto']
-        if pipeline_state.vectorizer:
-            try:
-                X = pipeline_state.vectorizer.transform([norm])
-
-                # Check if model expects more features (was trained with images)
-                if hasattr(model, 'n_features_in_'):
-                    expected_features = model.n_features_in_
-                    actual_features = X.shape[1]
-
-                    if expected_features > actual_features:
-                        # Model expects images, pad with zeros
-                        from ..features.combiners import combine_features
-                        padding = np.zeros((1, 2048), dtype=np.float32)
-                        X = combine_features(X, padding)
-
-                prob = model.predict_proba(X)[0, 1]
-                
-                # Apply rule-based verification
-                from ..classification.verification import verify_with_rules
-                import pandas as pd
-                prob_adj = verify_with_rules(
-                    "keto", pd.Series([norm]), np.array([prob]))[0]
-                return prob_adj >= 0.5
-                
-            except Exception as e:
-                log.warning("Vectorizer failed: %s. Falling back to rules.", e)
-                # Use rule-based approach as fallback
-                return True  # Passed all rule checks
-
-    # If no model available, default to True (passed all rule checks)
+    # If all rules pass, it's keto
     return True
 
 
@@ -125,14 +91,15 @@ def is_keto(ingredients: Union[Iterable[str], str]) -> bool:
     """
     Check if all ingredients in a recipe are keto-friendly.
 
-    This is the main public API for keto classification. It handles
-    various input formats and ensures all ingredients pass the keto test.
+    Uses the best available method:
+    1. Trained ML model (if available) - evaluates the full recipe
+    2. Falls back to rule-based classification per ingredient
 
     Args:
         ingredients: Either a string (comma-separated or JSON) or an iterable
 
     Returns:
-        True if ALL ingredients are keto-friendly, False otherwise
+        True if keto-friendly, False otherwise
 
     Example:
         >>> is_keto("almond flour, eggs, butter")
@@ -144,16 +111,61 @@ def is_keto(ingredients: Union[Iterable[str], str]) -> bool:
         
     Based on original lines 2306-2350
     """
+    # Parse ingredients to string format
     if isinstance(ingredients, str):
+        ingredients_str = ingredients
         try:
             if ingredients.startswith('['):
-                ingredients = json.loads(ingredients)
+                ingredients_list = json.loads(ingredients)
             else:
-                ingredients = [i.strip()
-                               for i in ingredients.split(',') if i.strip()]
+                ingredients_list = [i.strip() for i in ingredients.split(',') if i.strip()]
         except Exception:
-            ingredients = [ingredients]
-    return all(is_ingredient_keto(ing) for ing in ingredients)
+            ingredients_list = [ingredients]
+    else:
+        ingredients_list = list(ingredients)
+        ingredients_str = ', '.join(str(i) for i in ingredients_list)
+    
+    # Check if we have a trained model
+    pipeline_state = get_pipeline_state()
+    pipeline_state.ensure_pipeline_initialized()
+    
+    model = pipeline_state.get_best_model('keto')
+    
+    if model is not None and pipeline_state.vectorizer:
+        # Use ML model on the full recipe
+        try:
+            # Normalize the full ingredient text
+            norm = normalise(ingredients_str)
+            X = pipeline_state.vectorizer.transform([norm])
+            
+            # Check if model expects more features (was trained with images)
+            if hasattr(model, 'n_features_in_'):
+                expected_features = model.n_features_in_
+                actual_features = X.shape[1]
+                
+                if expected_features > actual_features:
+                    # Model expects images, pad with zeros
+                    from ..features.combiners import combine_features
+                    padding = np.zeros((1, 2048), dtype=np.float32)
+                    X = combine_features(X, padding)
+            
+            # Get prediction
+            if hasattr(model, 'predict_proba'):
+                prob = model.predict_proba(X)[0, 1]
+            else:
+                prob = float(model.predict(X)[0])
+            
+            # Apply rule-based verification
+            from ..classification.verification import verify_with_rules
+            prob_adj = verify_with_rules("keto", pd.Series([norm]), np.array([prob]))[0]
+            
+            return prob_adj >= 0.5
+            
+        except Exception as e:
+            log.debug(f"ML prediction failed for keto: {e}, falling back to rules")
+    
+    # Fall back to rule-based classification (check each ingredient)
+    return all(is_ingredient_keto(ing) for ing in ingredients_list)
 
 
 def find_non_keto_hits(text: str) -> list[str]:

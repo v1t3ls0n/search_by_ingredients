@@ -9,6 +9,7 @@ Based on original lines 2352-2443 from diet_classifiers.py
 import json
 from typing import Iterable, Union
 import numpy as np
+import pandas as pd
 
 from ..core import log, get_pipeline_state
 from ..utils.constants import get_vegan_patterns
@@ -57,42 +58,6 @@ def is_ingredient_vegan(ingredient: str) -> bool:
     if patterns['blacklist'].search(normalized) and not patterns['whitelist'].search(ingredient):
         return False
 
-    # Use ML model if available
-    pipeline_state = get_pipeline_state()
-    pipeline_state.ensure_pipeline_initialized()
-    
-    if 'vegan' in pipeline_state.models and pipeline_state.initialized:
-        model = pipeline_state.models['vegan']
-        if pipeline_state.vectorizer:
-            try:
-                X = pipeline_state.vectorizer.transform([normalized])
-
-                # Check if model expects more features (was trained with images)
-                if hasattr(model, 'n_features_in_'):
-                    expected_features = model.n_features_in_
-                    actual_features = X.shape[1]
-
-                    if expected_features > actual_features:
-                        # Model expects images, pad with zeros
-                        from ..features.combiners import combine_features
-                        padding = np.zeros((1, 2048), dtype=np.float32)
-                        X = combine_features(X, padding)
-
-                prob = model.predict_proba(X)[0, 1]
-                
-                # Apply rule-based verification
-                from ..classification.verification import verify_with_rules
-                import pandas as pd
-                prob_adj = verify_with_rules(
-                    "vegan", pd.Series([normalized]), np.array([prob]))[0]
-                return prob_adj >= 0.5
-                
-            except Exception as e:
-                log.warning(
-                    "Vectorizer failed: %s. Using rule-based fallback.", e)
-                # Use rule-based approach as fallback
-                return True  # Passed whitelist/blacklist checks
-
     return True
 
 
@@ -100,8 +65,9 @@ def is_vegan(ingredients: Union[Iterable[str], str]) -> bool:
     """
     Check if all ingredients in a recipe are vegan.
 
-    This is the main public API for vegan classification. It handles
-    various input formats and ensures all ingredients pass the vegan test.
+    Uses the best available method:
+    1. Trained ML model (if available) - evaluates the full recipe
+    2. Falls back to rule-based classification per ingredient
 
     Args:
         ingredients: Either a string (comma-separated or JSON) or an iterable
@@ -119,13 +85,58 @@ def is_vegan(ingredients: Union[Iterable[str], str]) -> bool:
         
     Based on original lines 2398-2443
     """
+    # Parse ingredients to string format
     if isinstance(ingredients, str):
+        ingredients_str = ingredients
         try:
             if ingredients.startswith('['):
-                ingredients = json.loads(ingredients)
+                ingredients_list = json.loads(ingredients)
             else:
-                ingredients = [i.strip()
-                               for i in ingredients.split(',') if i.strip()]
+                ingredients_list = [i.strip() for i in ingredients.split(',') if i.strip()]
         except Exception:
-            ingredients = [ingredients]
-    return all(is_ingredient_vegan(ing) for ing in ingredients)
+            ingredients_list = [ingredients]
+    else:
+        ingredients_list = list(ingredients)
+        ingredients_str = ', '.join(str(i) for i in ingredients_list)
+    
+    # Check if we have a trained model
+    pipeline_state = get_pipeline_state()
+    pipeline_state.ensure_pipeline_initialized()
+    
+    model = pipeline_state.get_best_model('vegan')
+    
+    if model is not None and pipeline_state.vectorizer:
+        # Use ML model on the full recipe
+        try:
+            # Normalize the full ingredient text
+            normalized = normalise(ingredients_str)
+            X = pipeline_state.vectorizer.transform([normalized])
+            
+            # Check if model expects more features
+            if hasattr(model, 'n_features_in_'):
+                expected_features = model.n_features_in_
+                actual_features = X.shape[1]
+                
+                if expected_features > actual_features:
+                    # Model expects images, pad with zeros
+                    from ..features.combiners import combine_features
+                    padding = np.zeros((1, 2048), dtype=np.float32)
+                    X = combine_features(X, padding)
+            
+            # Get prediction
+            if hasattr(model, 'predict_proba'):
+                prob = model.predict_proba(X)[0, 1]
+            else:
+                prob = float(model.predict(X)[0])
+            
+            # Apply rule-based verification
+            from ..classification.verification import verify_with_rules
+            prob_adj = verify_with_rules("vegan", pd.Series([normalized]), np.array([prob]))[0]
+            
+            return prob_adj >= 0.5
+            
+        except Exception as e:
+            log.debug(f"ML prediction failed for vegan: {e}, falling back to rules")
+    
+    # Fall back to rule-based classification (check each ingredient)
+    return all(is_ingredient_vegan(ing) for ing in ingredients_list)
