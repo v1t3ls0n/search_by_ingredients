@@ -29,7 +29,7 @@ My keto classifier uses a sophisticated multi-stage decision pipeline with domai
 4. **USDA Nutritional Fallback** - Scientific validation for unknown ingredients
    - Downloads USDA FoodData Central database (303 food items)
    - Carbohydrate threshold: ≤10g/100g = keto-friendly
-   - Fuzzy matching with 90% similarity threshold using RapidFuzz (when available)
+   - Fuzzy matching with 90% similarity threshold using RapidFuzz
 
 5. **Intelligent Preprocessing** - Robust text normalization
    - Unicode normalization, unit removal, quantity stripping
@@ -60,7 +60,7 @@ The vegan classifier implements a precision-focused approach:
 Both classifiers leverage the same robust preprocessing pipeline:
 - **Unicode Normalization** - Handles accented characters and special formatting
 - **Text Preprocessing** - Removes units, numbers, parenthetical content for cleaner matching
-- **Lemmatization** - Optional NLTK integration for better word matching (falls back gracefully)
+- **Lemmatization** - NLTK WordNet lemmatizer for handling plural forms and word variations (falls back gracefully if unavailable)
 - **Token Analysis** - Intelligent word-level processing for multi-word ingredients
 - **Caching** - USDA database downloaded once and cached locally (~/.cache/diet_classifier)
 - **Graceful Fallbacks** - Continues with rule-based classification if external dependencies unavailable
@@ -79,7 +79,15 @@ Both classifiers leverage the same robust preprocessing pipeline:
 - **Systematic Debugging**: Iterative improvement to achieve 100% accuracy through targeted fixes
 - **Whitelist Strategy**: Surgical precision additions (heavy cream, seasonings, nuts) vs broad blacklist removal
 
-### Testing & Debugging
+### Requirements
+The solution uses the following key dependencies:
+- **pandas** - Data manipulation and CSV processing
+- **scikit-learn** - Performance metrics and evaluation
+- **nltk** - Natural language processing for lemmatization
+- **rapidfuzz** - Fuzzy string matching for USDA lookups
+- **Flask** - Web application framework
+
+All dependencies are specified in `requirements.txt` and automatically installed via Docker.
 I've included a comprehensive testing suite (`test_diet_classifiers.sh`) that demonstrates systematic debugging methodology:
 
 ```bash
