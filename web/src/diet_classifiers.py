@@ -206,6 +206,104 @@ NON_VEGAN = list(set([
 
 # Regex patterns for keto-friendly ingredients (overrides blacklist)
 KETO_WHITELIST = [
+
+    r"\bavocado\b",    # Singular form (to catch lemmatized version)
+    r"\bavocados\b",   # Plural form
+    r"\bgreen onion\b",
+    r"\bgreen onions\b", 
+    r"\bscallion\b",   # Alternative name for green onion
+    r"\bscallions\b",
+    r"\bcumin\b",      # Spice - virtually no carbs
+    r"\bonion\b",      # Base form
+    r"\bonions\b",     # Plural form
+
+    # Other common keto spices/herbs that might be missing:
+    r"\bbasil\b",
+    r"\boregano\b",
+    r"\bthyme\b",
+    r"\brosemary\b",
+    r"\bsage\b",
+    r"\bparsley\b",
+    r"\bcilantro\b",
+    r"\bcoriander\b",
+    r"\bpaprika\b",
+    r"\bturmeric\b",
+    r"\bcinnamon\b",  # Small amounts
+    r"\bnutmeg\b",
+    r"\bcardamom\b",
+    r"\bginger\b",  # Ground ginger
+    r"\bgarlic powder\b",
+    r"\bonion powder\b",
+    r"\bchili powder\b",
+    r"\bcayenne\b",
+    r"\bblack pepper\b",
+    r"\bwhite pepper\b",
+    r"\bred pepper flakes\b",
+
+    # Common keto vegetables that might be missing:
+    r"\basparagus\b",
+    r"\bcelery\b",
+    r"\bkale\b",
+    r"\barugula\b",
+    r"\blettuce\b",
+    r"\bchard\b",
+    r"\bcollard greens\b",
+    r"\bradish\b",
+    r"\bradishes\b",
+    r"\bbok choy\b",
+    r"\bcabbage\b",
+    r"\bsauerkraut\b",
+    r"\bpickle\b",
+    r"\bpickles\b",  # If sugar-free
+    r"\bdill pickle\b",
+    r"\bbell pepper\b",
+    r"\bbell peppers\b",
+    r"\bjalapeno\b",
+    r"\bjalapenos\b",
+    r"\bserrano\b",
+    r"\bhabanero\b",
+
+    # Common keto fats/oils:
+    r"\bghee\b",
+    r"\blard\b",
+    r"\btallow\b",
+    r"\bavocado oil\b",
+    r"\bmct oil\b",
+    r"\bflaxseed oil\b",
+    r"\bwalnut oil\b",
+    r"\bsesame oil\b",
+
+    # Keto proteins:
+    r"\begg\b",
+    r"\beggs\b",
+    r"\bbeef\b",
+    r"\bpork\b",
+    r"\blamb\b",
+    r"\bveal\b",
+    r"\bturkey\b",
+    r"\bduck\b",
+    r"\bvenison\b",
+    r"\bbison\b",
+    r"\btuna\b",
+    r"\bsardine\b",
+    r"\bsardines\b",
+    r"\banchovies\b",
+    r"\banchovy\b",
+    r"\bherring\b",
+    r"\btrout\b",
+    r"\bhalibut\b",
+    r"\bcod\b",
+    r"\btilapia\b",
+    r"\bshrimp\b",
+    r"\bprawns\b",
+    r"\blobster\b",
+    r"\bcrab\b",
+    r"\bscallops\b",
+    r"\bmussels\b",
+    r"\bclams\b",
+    r"\boysters\b",
+
+
     r"\bheavy cream\b",
     r"\bwhipping cream\b", 
     r"\bdouble cream\b",
@@ -301,7 +399,6 @@ KETO_WHITELIST = [
     r"\bketo chocolate\b",
 
     # Low-carb vegetables and foods
-    r"\bavocado\b",
     r"\bcacao\b",
     r"\bcocoa powder\b",
     r"\bketo ice[- ]cream\b",
@@ -607,30 +704,38 @@ def is_ingredient_keto(ingredient: str) -> bool:
     
     Decision pipeline:
     1. Whitelist Check: Immediate acceptance for known keto ingredients
-    2. Regex Blacklist: Pattern matching against NON_KETO (hard rules)
-    3. USDA Numeric Rule: Accept if carbs ≤ 10g/100g
-    4. Token Blacklist: Token-level analysis
+    2. Normalize the ingredient  
+    3. Whitelist Check Again: Check normalized form against whitelist
+    4. Regex Blacklist: Pattern matching against NON_KETO (hard rules)
+    5. Token-level Blacklist: Multi-word ingredient detection
+    6. USDA Numeric Rule: Accept if carbs ≤ 10g/100g
     """
     if not ingredient:
         return True
     
-    # 1. Whitelist (immediate accept)
+    # 1. Whitelist (immediate accept) - Check ORIGINAL string
     if RX_WL_KETO.search(ingredient):
         return True
     
-    # 2. Regex blacklist FIRST (hard domain rules override USDA)
+    # 2. Normalize
     norm = normalise(ingredient)
+    
+    # 3. Whitelist check on NORMALIZED string (FIXES THE ISSUE!)
+    if RX_WL_KETO.search(norm):
+        return True
+    
+    # 4. Regex blacklist (hard domain rules override USDA)
     if RX_KETO.search(norm):
         return False
     
-    # 3. Token-level blacklist check (before USDA)
+    # 5. Token-level blacklist check
     tokens_set = set(tokenize_ingredient(norm))
     for non_keto in NON_KETO:
         ing_tokens = non_keto.split()
         if all(tok in tokens_set for tok in ing_tokens):
             return False
     
-    # 4. USDA Numeric carbohydrate rule (after blacklist checks)
+    # 6. USDA Numeric carbohydrate rule
     # Whole-phrase lookup
     carbs = carbs_per_100g(norm)
     if carbs is not None:
@@ -647,7 +752,7 @@ def is_ingredient_keto(ingredient: str) -> bool:
         if carbs_tok is not None and carbs_tok > 10.0:
             return False
     
-    # 5. Default to keto-friendly if no conflicts found
+    # 7. Default to keto-friendly if no conflicts found
     return True
 
 
@@ -703,3 +808,4 @@ def is_vegan(ingredients):
     if isinstance(ingredients, str):
         ingredients = parse_ingredients(ingredients)
     return all(map(is_ingredient_vegan, ingredients))
+
