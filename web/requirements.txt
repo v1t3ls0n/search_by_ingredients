@@ -6,3 +6,5 @@ pandas==2.2.3
 pyarrow==19.0.1
 tqdm
 scikit-learn==1.6.1
+nltk==3.8.1
+rapidfuzz==3.5.1

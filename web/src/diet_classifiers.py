@@ -11,6 +11,23 @@ from time import time
 import pandas as pd
 import ast
 
+
+# Initialize NLTK data if available
+try:
+    import nltk
+    # Download required NLTK data (only if not already present)
+    try:
+        nltk.data.find('corpora/wordnet')
+    except LookupError:
+        nltk.download('wordnet', quiet=True)
+    try:
+        nltk.data.find('corpora/omw-1.4')
+    except LookupError:
+        nltk.download('omw-1.4', quiet=True)
+except ImportError:
+    pass  # NLTK not available, will use fallback
+
+
 try:
     from sklearn.metrics import classification_report
 except ImportError:
