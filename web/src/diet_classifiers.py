@@ -5,19 +5,10 @@ import unicodedata
 import os
 import zipfile
 import urllib.request
-from argparse import ArgumentParser
 from typing import List, Optional, Dict
-from time import time
 import pandas as pd
 import ast
 
-
-try:
-    from sklearn.metrics import classification_report
-except ImportError:
-    # sklearn is optional
-    def classification_report(y, y_pred):
-        print("sklearn is not installed, skipping classification report")
 
 # ============================================================================
 # CONSTANTS AND PATTERNS
@@ -799,4 +790,3 @@ def is_vegan(ingredients):
     if isinstance(ingredients, str):
         ingredients = parse_ingredients(ingredients)
     return all(map(is_ingredient_vegan, ingredients))
-

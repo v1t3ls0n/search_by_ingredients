@@ -1,3 +1,6 @@
+# This is the notebook version with the main function and CLI interface
+# Copy everything from the web version first, then add the main function at the end
+
 import json
 import sys
 import re
@@ -11,13 +14,13 @@ from time import time
 import pandas as pd
 import ast
 
-
 try:
     from sklearn.metrics import classification_report
 except ImportError:
     # sklearn is optional
     def classification_report(y, y_pred):
         print("sklearn is not installed, skipping classification report")
+
 
 # ============================================================================
 # CONSTANTS AND PATTERNS
@@ -800,8 +803,9 @@ def is_vegan(ingredients):
         ingredients = parse_ingredients(ingredients)
     return all(map(is_ingredient_vegan, ingredients))
 
-
-
+# ============================================================================
+# MAIN FUNCTION FOR NOTEBOOK/CLI USE ONLY
+# ============================================================================
 
 def main(args):
     ground_truth = pd.read_csv(args.ground_truth, index_col=None)
