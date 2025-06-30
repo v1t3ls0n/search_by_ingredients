@@ -156,6 +156,18 @@ KETO_WHITELIST = [
     r"\bwhipping cream\b", 
     r"\bdouble cream\b",
 
+
+    r"\bchicken\b",
+    r"\bgarlic\b", 
+    r"\bparmesan\b",
+    r"\bpine nuts\b",
+    r"\bbutter\b",
+    r"\bricotta\b",
+    r"\bmozzarella\b",
+    r"\bolive oil\b",
+    r"\bmayonnaise\b",
+
+    
     # Keto-friendly flours
     r"\balmond flour\b",
     r"\bcoconut flour\b",
