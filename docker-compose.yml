@@ -42,10 +42,22 @@ services:
       - "8080:8080"
     volumes:
       - ./web/src:/app/web
-      - ./artifacts:/app/artifacts
-      - ./backups:/app/backups
-      - ./pipeline_state:/app/pipeline_state
-      - ./pretrained_models:/app/pretrained_models
+    networks:
+      - argmax
+    depends_on:
+      os:
+        condition: service_healthy
+
+  nb:
+    build:
+      context: nb
+      dockerfile: Dockerfile
+    environment:
+      - OPENSEARCH_URL=http://os:9200
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./nb/src:/usr/src/app
     networks:
       - argmax
     depends_on:
@@ -54,7 +66,7 @@ services:
 
 volumes:
   opensearch-data:
-  recipe-data:   
+
 networks:
   argmax:
     driver: bridge

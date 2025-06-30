@@ -1,22 +1,11 @@
-*.npy
-dataset/
-backups/
-pipeline_state/
-
 # Byte-compiled / optimized / DLL files
-silver_extended.csv
-*.pkl
-*.npy
 __pycache__/
 *.py[cod]
-artifacts/
 *$py.class
-allrecipes.parquet
-best_params.json
+
 # C extensions
 *.so
-.jpg
-# utils/
+
 # Distribution / packaging
 .Python
 build/
@@ -67,7 +56,7 @@ cover/
 *.pot
 
 # Django stuff:
-# *.log
+*.log
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
@@ -189,10 +178,4 @@ web/data/*.ipynb
 .DS_Store
 tmp.py
 internal/*
-.indexedartifacts/embeddings_silver_backup.npy
-pretrained_models/models.zip
-artifacts/embeddings_silver_backup.npy
-pretrained_models/models.zip
-artifacts/embeddings_silver_backup.npy
-pretrained_models/models.zip
-*.npy
+.indexed
