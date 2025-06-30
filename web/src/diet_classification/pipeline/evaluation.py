@@ -10,7 +10,7 @@ against labeled ground truth data.
 import pandas as pd
 from pathlib import Path
 from typing import Optional
-from numpy import np
+import numpy as np
 
 from ..core import log, get_pipeline_state
 from ..config import CFG

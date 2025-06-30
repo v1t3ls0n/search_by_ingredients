@@ -286,10 +286,10 @@ docker-compose exec web bash -c "
     fi
 
     echo '🧠 Training with sample_frac=$SAMPLE_FRAC...' | tee -a \$CONTAINER_LOG
-    python3 web/diet_classifiers.py --train --mode both --sample_frac $SAMPLE_FRAC $FORCE_FLAG 2>&1 | tee -a \$CONTAINER_LOG
+    python3 web/diet_classifiers.py --train --mode text --sample_frac $SAMPLE_FRAC $FORCE_FLAG 2>&1 | tee -a \$CONTAINER_LOG
 
     echo '🧪 Evaluating on provided gold set...' | tee -a \$CONTAINER_LOG
-    python3 web/diet_classifiers.py --ground_truth /app/data/ground_truth_sample.csv 2>&1 | tee -a \$CONTAINER_LOG
+    python3 web/diet_classifiers.py --ground_truth /app/data/ground_truth_sample.csv --mode text 2>&1 | tee -a \$CONTAINER_LOG
 
     echo '🥘 Classifying custom ingredient list...' | tee -a \$CONTAINER_LOG
     python3 web/diet_classifiers.py --ingredients 'almond flour, erythritol, egg whites' 2>&1 | tee -a \$CONTAINER_LOG
