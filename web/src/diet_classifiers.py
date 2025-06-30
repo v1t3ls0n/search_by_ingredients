@@ -122,6 +122,7 @@ NON_KETO = list(set([
 NON_VEGAN = list(set([
 
     "kahlua", "coffee liqueur", "coffee-flavored liqueur",
+    'ox', 'oxen',  # Cattle used as draft animals
 
 
     # Meat - Red meat
