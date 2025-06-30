@@ -270,13 +270,14 @@ print(f'📊 Parsing Summary: {successful_parses} successful, {parse_errors} err
 "
 
 # Test 4: Performance Stress Test
-run_test "⚡ PERFORMANCE STRESS TEST" "
+run_test "⚡ PERFORMANCE STRESS TEST (Web Container)" "
 import pandas as pd
 from diet_classifiers import is_keto, is_vegan, parse_ingredients
 from time import time
 import gc
 
-df = pd.read_csv('/usr/src/data/ground_truth_sample.csv')
+# Use the copied ground truth file in web container
+df = pd.read_csv('/app/ground_truth_sample.csv')
 
 print('=== PERFORMANCE BENCHMARKS ===')
 

@@ -5,3 +5,4 @@ requests==2.32.3
 pandas==2.2.3
 pyarrow==19.0.1
 tqdm
+scikit-learn==1.6.1
