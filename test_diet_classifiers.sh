@@ -22,7 +22,7 @@ run_test() {
     
     if MSYS_NO_PATHCONV=1 docker exec -it search_by_ingredients_v1t3ls0n-nb-1 python3 -c "$2"; then
         end_time=$(date +%s.%N)
-        duration=$(echo "$end_time - $start_time" | bc -l)
+        duration=$(awk "BEGIN {print $end_time - $start_time}")
         echo -e "${GREEN}✅ Test completed successfully in ${duration:0:4}s${NC}"
     else
         echo -e "${RED}❌ Test failed${NC}"
