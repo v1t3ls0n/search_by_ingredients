@@ -1,6 +1,6 @@
 🧪 COMPREHENSIVE DIET CLASSIFIER TESTING SUITE - LIVE CODING READY
 ==================================================================
-Current time: יום ב 30 יונ 2025 13:25:41
+Current time: יום ב 30 יונ 2025 13:27:06
 
 [0;34m🔧 SYSTEM HEALTH CHECK[0m
 ----------------------------------------
@@ -10,15 +10,13 @@ Python version: 3.11.6 | packaged by conda-forge | (main, Oct  3 2023, 10:40:35)
 ✅ NON_KETO items: 358
 ✅ NON_VEGAN items: 160
 ✅ Ground truth file found
-[0;32m✅ Test completed successfully in s[0m
+[0;32m✅ Test completed successfully in 0.92s[0m
 
 [0;34m🧪 ENHANCED INDIVIDUAL INGREDIENT TESTS[0m
 ----------------------------------------
 === COMPREHENSIVE KETO TESTS ===
 ✅ heavy cream          ->     1 (expected True)
 ✅ chicken breast       ->     1 (expected True)
-Downloading USDA nutritional database (one-time download)...
-USDA database downloaded successfully!
 Loaded USDA data: 303 food items
 ✅ eggs                 ->     1 (expected True)
 ✅ almond flour         ->     1 (expected True)
@@ -72,7 +70,7 @@ Loaded USDA data: 303 food items
 ✅ yogurt               ->     0 (expected False)
 
 🎯 Vegan Accuracy: 24/24 (100.0%)
-[0;32m✅ Test completed successfully in s[0m
+[0;32m✅ Test completed successfully in 0.98s[0m
 
 [0;34m🔍 EDGE CASE TESTING[0m
 ----------------------------------------
@@ -133,7 +131,7 @@ newlines' 'normal ingredient']...
   Parsed: ['ingredient\nwith\nnewlines', 'normal ingredient']
   Count: 2
 
-[0;32m✅ Test completed successfully in s[0m
+[0;32m✅ Test completed successfully in 1.00s[0m
 
 [0;34m📋 ADVANCED RECIPE PARSING TEST[0m
 ----------------------------------------
@@ -189,7 +187,7 @@ Recipe 10:
   Sample: 2 cups all-purpose flour...
 
 📊 Parsing Summary: 10 successful, 0 errors
-[0;32m✅ Test completed successfully in s[0m
+[0;32m✅ Test completed successfully in 0.94s[0m
 
 [0;34m⚡ PERFORMANCE STRESS TEST[0m
 ----------------------------------------
@@ -259,11 +257,11 @@ weighted avg       1.00      1.00      1.00       100
 
 ⚡ PERFORMANCE METRICS
 ========================================
-Processing time: 0.199 seconds
-Recipes per second: 501.3
+Processing time: 0.196 seconds
+Recipes per second: 510.1
 Total recipes processed: 100
-Average time per recipe: 1.99ms
-[0;32m✅ Test completed successfully in s[0m
+Average time per recipe: 1.96ms
+[0;32m✅ Test completed successfully in 1.17s[0m
 
 [0;34m🔍 ADVANCED ERROR ANALYSIS[0m
 ----------------------------------------
@@ -285,7 +283,7 @@ False Positives (wrong vegan): 0
    Total errors: 0
    Keto errors: 0
    Vegan errors: 0
-[0;32m✅ Test completed successfully in s[0m
+[0;32m✅ Test completed successfully in 1.13s[0m
 
 [0;34m🔍 PATTERN MATCHING DEEP ANALYSIS[0m
 ----------------------------------------
@@ -343,9 +341,9 @@ False Positives (wrong vegan): 0
 NON_KETO items: 358
 NON_VEGAN items: 160
 
-Sample NON_KETO: ['waffle mix', 'malt syrup', 'sugar', 'whole-wheat flour', 'muscovado sugar', 'honey', 'jobs tear', 'potato', 'hash brown', 'crepe']
-Sample NON_VEGAN: ['knackwurst', 'scallop', 'boar', 'langoustine', 'honey', 'venison', 'milk', 'gelatin', 'kid', 'gravy']
-[0;32m✅ Test completed successfully in s[0m
+Sample NON_KETO: ['milkshake', 'stout', 'sweet chili sauce', 'frangelico', 'ipa', 'caramel', 'mashed potato', 'agave nectar', 'waffle mix', 'jackfruit']
+Sample NON_VEGAN: ['sweetbread', 'honey', 'quark', 'prosciutto', 'coffee-flavored liqueur', 'frog', 'partridge', 'mayonnaise', 'sourcream', 'herring']
+[0;32m✅ Test completed successfully in 0.91s[0m
 
 [0;34m🏛️ USDA DATABASE COMPREHENSIVE TEST[0m
 ----------------------------------------
@@ -371,7 +369,7 @@ Lookup success rate: 11/12 (91.7%)
 === USDA DATABASE ANALYSIS ===
 Average carbs/100g: 20.08
 Keto-friendly items (≤10g): 163/303 (53.8%)
-[0;32m✅ Test completed successfully in s[0m
+[0;32m✅ Test completed successfully in 1.01s[0m
 
 [0;34m🧪 REGRESSION TESTING[0m
 ----------------------------------------
@@ -389,7 +387,7 @@ Testing previously fixed issues...
 ✅ Chicken should be non-vegan
 
 📊 Regression Test Results: 10/10 passed (100.0%)
-[0;32m✅ Test completed successfully in s[0m
+[0;32m✅ Test completed successfully in 0.92s[0m
 
 
 🎯 COMPREHENSIVE TESTING COMPLETE!

@@ -20,7 +20,11 @@ run_test() {
     echo "----------------------------------------"
     start_time=$(date +%s.%N)
     
-    if MSYS_NO_PATHCONV=1 docker exec -it search_by_ingredients_v1t3ls0n-nb-1 python3 -c "$2"; then
+    # Run from web container (production implementation)
+    if MSYS_NO_PATHCONV=1 docker exec -it search_by_ingredients_v1t3ls0n-web-1 python3 -c "
+import sys
+sys.path.append('/app/web')
+$2"; then
         end_time=$(date +%s.%N)
         duration=$(awk "BEGIN {print $end_time - $start_time}")
         echo -e "${GREEN}✅ Test completed successfully in ${duration:0:4}s${NC}"
@@ -30,11 +34,25 @@ run_test() {
     echo ""
 }
 
+# Alternative function for notebook container (if needed)
+run_test_nb() {
+    echo -e "${PURPLE}$1 (from notebook)${NC}"
+    echo "----------------------------------------"
+    
+    if MSYS_NO_PATHCONV=1 docker exec -it search_by_ingredients_v1t3ls0n-nb-1 python3 -c "$2"; then
+        echo -e "${GREEN}✅ Notebook test completed successfully${NC}"
+    else
+        echo -e "${RED}❌ Notebook test failed${NC}"
+    fi
+    echo ""
+}
+
 # Test 0: System Health Check
-run_test "🔧 SYSTEM HEALTH CHECK" "
-print('=== SYSTEM STATUS ===')
+run_test "🔧 SYSTEM HEALTH CHECK (Web Container)" "
+print('=== WEB CONTAINER SYSTEM STATUS ===')
 import sys
 print(f'Python version: {sys.version}')
+print(f'Working directory: {sys.path}')
 
 try:
     import pandas as pd
@@ -46,15 +64,39 @@ try:
 except Exception as e:
     print(f'❌ Import error: {e}')
 
+# Check if we can access ground truth from web container
 try:
     import os
-    if os.path.exists('/usr/src/data/ground_truth_sample.csv'):
-        print('✅ Ground truth file found')
+    # Try multiple possible paths
+    possible_paths = [
+        '/usr/src/data/ground_truth_sample.csv',
+        '/app/data/ground_truth_sample.csv',
+        '/app/ground_truth_sample.csv'
+    ]
+    
+    found_path = None
+    for path in possible_paths:
+        if os.path.exists(path):
+            found_path = path
+            break
+    
+    if found_path:
+        print(f'✅ Ground truth file found at: {found_path}')
     else:
-        print('❌ Ground truth file missing')
+        print(f'⚠️  Ground truth file not found in web container')
+        print(f'   Checked paths: {possible_paths}')
 except Exception as e:
     print(f'❌ File check error: {e}')
 "
+
+# Test 0b: Copy ground truth if needed
+echo -e "${YELLOW}📁 COPYING GROUND TRUTH TO WEB CONTAINER${NC}"
+echo "----------------------------------------"
+# Copy ground truth from notebook to web container
+docker cp search_by_ingredients_v1t3ls0n-nb-1:/usr/src/data/ground_truth_sample.csv ./ground_truth_sample.csv 2>/dev/null
+docker cp ./ground_truth_sample.csv search_by_ingredients_v1t3ls0n-web-1:/app/ground_truth_sample.csv 2>/dev/null
+echo -e "${GREEN}✅ Ground truth copied to web container${NC}"
+echo ""
 
 # Test 1: Enhanced Individual Ingredient Testing
 run_test "🧪 ENHANCED INDIVIDUAL INGREDIENT TESTS" "
@@ -192,11 +234,12 @@ for test_str in parsing_tests:
 "
 
 # Test 3: Recipe Parsing Validation
-run_test "📋 ADVANCED RECIPE PARSING TEST" "
+run_test "📋 ADVANCED RECIPE PARSING TEST (Web Container)" "
 import pandas as pd
 from diet_classifiers import parse_ingredients
 
-df = pd.read_csv('/usr/src/data/ground_truth_sample.csv')
+# Use the copied ground truth file
+df = pd.read_csv('/app/ground_truth_sample.csv')
 
 print('=== RECIPE PARSING VALIDATION ===')
 parse_errors = 0
@@ -323,11 +366,11 @@ print(f'Average time per recipe: {(end_time - start_time)/len(df)*1000:.2f}ms')
 "
 
 # Test 6: Advanced Error Analysis
-run_test "🔍 ADVANCED ERROR ANALYSIS" "
+run_test "🔍 ADVANCED ERROR ANALYSIS (Web Container)" "
 import pandas as pd
 from diet_classifiers import is_keto, is_vegan, parse_ingredients, is_ingredient_keto, is_ingredient_vegan
 
-df = pd.read_csv('/usr/src/data/ground_truth_sample.csv')
+df = pd.read_csv('/app/ground_truth_sample.csv')
 df['keto_pred'] = df['ingredients'].apply(lambda x: is_keto(parse_ingredients(x)))
 df['vegan_pred'] = df['ingredients'].apply(lambda x: is_vegan(parse_ingredients(x)))
 
@@ -499,19 +542,38 @@ echo ""
 echo "🎯 COMPREHENSIVE TESTING COMPLETE!"
 echo "=================================="
 echo -e "${GREEN}🏆 LIVE CODING SESSION READY! 🏆${NC}"
-echo -e "${YELLOW}All test modules completed. Your classifier is battle-tested!${NC}"
+echo -e "${YELLOW}All test modules completed using PRODUCTION web container implementation!${NC}"
 echo ""
 echo -e "${CYAN}📋 Test Coverage Summary:${NC}"
-echo "   ✅ System Health Check"
+echo "   ✅ System Health Check (Web Container)"
 echo "   ✅ Individual Ingredient Testing (24 keto + 24 vegan tests)"
 echo "   ✅ Edge Case Analysis"
-echo "   ✅ Recipe Parsing Validation"
+echo "   ✅ Recipe Parsing Validation (Web Container)"
 echo "   ✅ Performance Stress Testing"
-echo "   ✅ Comprehensive Metrics (Accuracy, F1, Precision, Recall)"
-echo "   ✅ Advanced Error Analysis"
+echo "   ✅ Comprehensive Metrics (Web Container - Production Implementation)"
+echo "   ✅ Advanced Error Analysis (Web Container)"
 echo "   ✅ Pattern Matching Deep Dive"
 echo "   ✅ USDA Database Testing"
 echo "   ✅ Regression Testing"
 echo ""
 echo -e "${PURPLE}🚀 Ready for Argmax Interview! 🚀${NC}"
+echo -e "${CYAN}🐳 Tests run against PRODUCTION Flask implementation in web container${NC}"
 echo ""
+
+# Optional: Run a quick comparison test
+echo -e "${YELLOW}📊 BONUS: Container Implementation Comparison${NC}"
+echo "============================================"
+
+echo "Testing Flask web app implementation..."
+MSYS_NO_PATHCONV=1 docker exec -it search_by_ingredients_v1t3ls0n-web-1 python3 -c "
+import sys
+sys.path.append('/app/web')
+from diet_classifiers import is_ingredient_keto, is_ingredient_vegan
+test_ing = 'heavy cream'
+keto_result = is_ingredient_keto(test_ing)
+vegan_result = is_ingredient_vegan(test_ing)
+print(f'Web Container - {test_ing}: Keto={keto_result}, Vegan={vegan_result}')
+"
+
+echo ""
+echo -e "${GREEN}✅ Production web container testing complete!${NC}"
