@@ -26,7 +26,7 @@ except ImportError:
 NON_KETO = list(set([
     # High-carb fruits
     "apple", "banana", "orange", "grape", "kiwi", "mango", "peach",
-    "strawberry", "pineapple", "apricot", "tangerine", "persimmon",
+    "strawberry","strawberries", "pineapple", "apricot", "tangerine", "persimmon",
     "pomegranate", "prune", "papaya", "jackfruit",
 
     # Grains and grain products
@@ -95,6 +95,10 @@ NON_KETO = list(set([
 
 # Animal-derived ingredients that disqualify vegan classification
 NON_VEGAN = list(set([
+
+    "coffee liqueur", "kahlua",
+
+    
     # Meat - Red meat
     'beef', 'steak', 'ribeye', 'sirloin', 'veal', 'lamb', 'mutton',
     'pork', 'bacon', 'ham', 'boar', 'goat', 'kid', 'venison',
@@ -142,7 +146,7 @@ NON_VEGAN = list(set([
     'icecream', 'gelatin', 'collagen',
 
     # Eggs
-    'egg', 'yolk', 'albumen', 'omelet', 'omelette', 'meringue',
+    'egg', 'eggs', 'yolk', 'albumen', 'omelet', 'omelette', 'meringue',
 
     # Other animal products
     'honey', 'shellfish', 'escargot', 'snail', 'frog',
@@ -198,9 +202,6 @@ KETO_WHITELIST = [
     r"\bpecan flour\b",
     r"\bmacadamia flour\b",
     r"\bhazelnut flour\b",
-
-    # Special exceptions for "kidney" (organ meat, not kidney beans)
-    r"\bkidney\b",
 
     # Low-carb citrus exceptions
     r"\blemon juice\b",
@@ -264,6 +265,9 @@ KETO_WHITELIST = [
 
 # Regex patterns for vegan-friendly ingredients (overrides blacklist)
 VEGAN_WHITELIST = [
+    r"\bkidney beans\b",
+
+
     # Egg exceptions (plant-based)
     r"\beggplant\b",
     r"\begg\s*fruit\b",
@@ -638,7 +642,6 @@ def parse_ingredients(ingredients_str):
         except:
             return [ingredients_str]
     return ingredients_str
-
 
 def is_keto(ingredients):
     if isinstance(ingredients, str):
