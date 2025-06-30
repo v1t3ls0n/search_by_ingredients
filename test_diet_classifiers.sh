@@ -569,27 +569,15 @@ print(f'📊 Total recipes processed: {len(df)}')
 
 # Test 11: NLTK Functionality Test
 run_test "🔤 NLTK LEMMATIZATION TEST" "
-from diet_classifiers import normalise
+from diet_classifiers import normalise, _ensure_nltk
 
 print('=== NLTK AVAILABILITY CHECK ===')
-try:
-    import nltk
-    from nltk.stem import WordNetLemmatizer
-    print('✅ NLTK is installed')
-    
-    # Check if wordnet data is available
-    try:
-        nltk.data.find('corpora/wordnet')
-        print('✅ WordNet data is available')
-    except LookupError:
-        print('❌ WordNet data not found - downloading may be needed')
-        
-    # Test lemmatization functionality
-    lemm = WordNetLemmatizer()
-    print('✅ WordNetLemmatizer initialized')
-    
-except ImportError:
-    print('⚠️  NLTK not installed - using fallback normalization')
+# Force NLTK check/download
+nltk_available = _ensure_nltk()
+if nltk_available:
+    print('✅ NLTK is available and configured')
+else:
+    print('⚠️  NLTK not available - using fallback normalization')
 
 print('\\n=== LEMMATIZATION TESTS ===')
 # Test cases where lemmatization makes a difference
