@@ -21,7 +21,7 @@ run_test() {
     start_time=$(date +%s.%N)
     
     # Run from web container (production implementation)
-    if MSYS_NO_PATHCONV=1 docker exec -it search_by_ingredients_v1t3ls0n-web-1 python3 -c "
+    if MSYS_NO_PATHCONV=1 docker exec -it search_by_ingredients-web-1 python3 -c "
 import sys
 sys.path.append('/app/web')
 $2"; then
@@ -39,7 +39,7 @@ run_test_nb() {
     echo -e "${PURPLE}$1 (from notebook)${NC}"
     echo "----------------------------------------"
     
-    if MSYS_NO_PATHCONV=1 docker exec -it search_by_ingredients_v1t3ls0n-nb-1 python3 -c "
+    if MSYS_NO_PATHCONV=1 docker exec -it search_by_ingredients-nb-1 python3 -c "
 import sys
 sys.path.append('/usr/src/app')
 $2"; then
@@ -96,8 +96,8 @@ except Exception as e:
 echo -e "${YELLOW}📁 COPYING GROUND TRUTH TO WEB CONTAINER${NC}"
 echo "----------------------------------------"
 # Copy ground truth from notebook to web container
-docker cp search_by_ingredients_v1t3ls0n-nb-1:/usr/src/data/ground_truth_sample.csv ./ground_truth_sample.csv 2>/dev/null
-docker cp ./ground_truth_sample.csv search_by_ingredients_v1t3ls0n-web-1:/app/ground_truth_sample.csv 2>/dev/null
+docker cp search_by_ingredients-nb-1:/usr/src/data/ground_truth_sample.csv ./ground_truth_sample.csv 2>/dev/null
+docker cp ./ground_truth_sample.csv search_by_ingredients-web-1:/app/ground_truth_sample.csv 2>/dev/null
 echo -e "${GREEN}✅ Ground truth copied to web container${NC}"
 echo ""
 
@@ -656,7 +656,7 @@ echo -e "${YELLOW}📊 BONUS: Container Implementation Comparison${NC}"
 echo "============================================"
 
 echo "Testing Flask web app implementation..."
-MSYS_NO_PATHCONV=1 docker exec -it search_by_ingredients_v1t3ls0n-web-1 python3 -c "
+MSYS_NO_PATHCONV=1 docker exec -it search_by_ingredients-web-1 python3 -c "
 import sys
 sys.path.append('/app/web')
 from diet_classifiers import is_ingredient_keto, is_ingredient_vegan
