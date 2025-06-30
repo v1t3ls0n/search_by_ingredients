@@ -87,7 +87,7 @@ def is_ingredient_keto(ingredient: str) -> bool:
     return True
 
 
-def is_keto(ingredients: Union[Iterable[str], str], mode: Optional[str] = None) -> bool:
+def is_keto(ingredients: Union[Iterable[str], str], mode: Optional[str] = 'text') -> bool:
     """
     Check if all ingredients in a recipe are keto-friendly.
 
@@ -98,7 +98,7 @@ def is_keto(ingredients: Union[Iterable[str], str], mode: Optional[str] = None) 
 
     Args:
         ingredients: Either a string (comma-separated or JSON) or an iterable
-        mode: Optional mode ('text', 'image', 'both') to use specific model
+        mode: Optional mode ('text', 'image', or 'both') to use specific model
 
     Returns:
         True if keto-friendly, False otherwise
@@ -133,18 +133,63 @@ def is_keto(ingredients: Union[Iterable[str], str], mode: Optional[str] = None) 
     pipeline_state = get_pipeline_state()
     pipeline_state.ensure_pipeline_initialized()
     
-    # Try to get mode-specific model first
+    # Determine the best model to use based on mode
     model = None
+    model_source = None
+    
     if mode:
+        # Try to get mode-specific model first
         from ..models.io import load_best_model_for_mode
         model = load_best_model_for_mode('keto', mode)
         if model:
+            model_source = f"{mode}-specific"
             log.debug(f"Using {mode}-specific model for keto classification")
     
-    # Fall back to general best model
+    # If no mode specified or mode-specific model not found, try to determine best model
+    if model is None and pipeline_state.vectorizer:
+        # Check what models are available in pipeline state
+        available_models = []
+        
+        # Check for domain-specific models
+        for domain in ['ensemble', 'both', 'text', 'image']:
+            key = f"keto_{domain}"
+            if key in pipeline_state.models:
+                available_models.append((domain, pipeline_state.models[key]))
+        
+        # Also check for simple task key
+        if 'keto' in pipeline_state.models:
+            available_models.append(('general', pipeline_state.models['keto']))
+        
+        # Select best model based on mode preference
+        if mode == 'text':
+            # Prefer text model, then ensemble, then both
+            preference_order = ['text', 'ensemble', 'both', 'general']
+        elif mode == 'image':
+            # Prefer image model, then ensemble, then both
+            preference_order = ['image', 'ensemble', 'both', 'general']
+        elif mode == 'both':
+            # Prefer both, then ensemble
+            preference_order = ['both', 'ensemble', 'text', 'image', 'general']
+        else:
+            # No mode specified - use best available
+            preference_order = ['ensemble', 'both', 'text', 'image', 'general']
+        
+        # Find first available model in preference order
+        for pref_domain in preference_order:
+            for avail_domain, avail_model in available_models:
+                if avail_domain == pref_domain:
+                    model = avail_model
+                    model_source = avail_domain
+                    log.debug(f"Using {avail_domain} model for keto classification")
+                    break
+            if model:
+                break
+    
+    # Final fallback to general best model
     if model is None:
         model = pipeline_state.get_best_model('keto')
         if model:
+            model_source = "general best"
             log.debug(f"Using general best model for keto classification")
     
     if model is not None and pipeline_state.vectorizer:
@@ -170,6 +215,10 @@ def is_keto(ingredients: Union[Iterable[str], str], mode: Optional[str] = None) 
                         from ..features.combiners import combine_features
                         padding = np.zeros((1, 2048), dtype=np.float32)
                         X = combine_features(X, padding)
+                        log.debug(f"Padded features for {model_source} model expecting images")
+                elif expected_features < actual_features and mode == 'image':
+                    # Text model but image mode requested
+                    log.warning(f"Using {model_source} model but image mode was requested")
             
             # Get prediction
             if hasattr(model, 'predict_proba'):
@@ -181,12 +230,15 @@ def is_keto(ingredients: Union[Iterable[str], str], mode: Optional[str] = None) 
             from ..classification.verification import verify_with_rules
             prob_adj = verify_with_rules("keto", pd.Series([norm]), np.array([prob]))[0]
             
+            log.debug(f"Keto prediction using {model_source} model: {prob_adj:.3f}")
+            
             return prob_adj >= 0.5
             
         except Exception as e:
-            log.debug(f"ML prediction failed for keto: {e}, falling back to rules")
+            log.debug(f"ML prediction failed for keto using {model_source} model: {e}, falling back to rules")
     
     # Fall back to rule-based classification (check each ingredient)
+    log.debug("Using rule-based classification for keto")
     return all(is_ingredient_keto(ing) for ing in ingredients_list)
 
 
