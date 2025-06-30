@@ -632,6 +632,50 @@ def carbs_per_100g(ingredient: str, fuzzy: bool = True) -> Optional[float]:
 # TEXT PREPROCESSING
 # ============================================================================
 
+# Global cache for NLTK availability
+_NLTK_AVAILABLE = None
+_LEMMATIZER = None
+
+def _ensure_nltk():
+    """Ensure NLTK and required data are available."""
+    global _NLTK_AVAILABLE, _LEMMATIZER
+    
+    if _NLTK_AVAILABLE is not None:
+        return _NLTK_AVAILABLE
+    
+    try:
+        import nltk
+        try:
+            # Try to find wordnet data
+            nltk.data.find('corpora/wordnet')
+            from nltk.stem import WordNetLemmatizer
+            _LEMMATIZER = WordNetLemmatizer()
+            _NLTK_AVAILABLE = True
+        except LookupError:
+            # Try to download
+            try:
+                import os
+                nltk_data_dir = os.path.expanduser('~/.nltk_data')
+                os.makedirs(nltk_data_dir, exist_ok=True)
+                nltk.data.path.append(nltk_data_dir)
+                
+                print("NLTK wordnet data not found, downloading...")
+                nltk.download('wordnet', download_dir=nltk_data_dir, quiet=True)
+                nltk.download('omw-1.4', download_dir=nltk_data_dir, quiet=True)
+                nltk.download('averaged_perceptron_tagger', download_dir=nltk_data_dir, quiet=True)
+                
+                from nltk.stem import WordNetLemmatizer
+                _LEMMATIZER = WordNetLemmatizer()
+                _NLTK_AVAILABLE = True
+                print("NLTK data downloaded successfully")
+            except Exception as e:
+                print(f"Could not download NLTK data: {e}")
+                _NLTK_AVAILABLE = False
+    except ImportError:
+        _NLTK_AVAILABLE = False
+    
+    return _NLTK_AVAILABLE
+
 def tokenize_ingredient(text: str) -> List[str]:
     """Extract word tokens from ingredient text."""
     return re.findall(r"\b\w[\w-]*\b", text.lower())
@@ -662,19 +706,10 @@ def normalise(t: str) -> str:
     t = re.sub(r"\s+", " ", t).strip()
     
     # Apply lemmatization if available
-    try:
-        import nltk
-        try:
-            # Try to use WordNetLemmatizer
-            nltk.data.find('corpora/wordnet')
-            from nltk.stem import WordNetLemmatizer
-            lemm = WordNetLemmatizer()
-            return " ".join(lemm.lemmatize(w) for w in t.split() if len(w) > 2)
-        except (LookupError, ImportError):
-            # NLTK data not found, use fallback
-            return " ".join(w for w in t.split() if len(w) > 2)
-    except ImportError:
-        # NLTK not available, just filter short words
+    if _ensure_nltk() and _LEMMATIZER:
+        return " ".join(_LEMMATIZER.lemmatize(w) for w in t.split() if len(w) > 2)
+    else:
+        # Fallback: just filter short words
         return " ".join(w for w in t.split() if len(w) > 2)
 
 # ============================================================================
@@ -811,6 +846,7 @@ def is_vegan(ingredients):
     if isinstance(ingredients, str):
         ingredients = parse_ingredients(ingredients)
     return all(map(is_ingredient_vegan, ingredients))
+
 # ============================================================================
 # MAIN FUNCTION FOR NOTEBOOK/CLI USE ONLY
 # ============================================================================
