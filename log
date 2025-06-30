@@ -1,0 +1,506 @@
+🧪 COMPREHENSIVE DIET CLASSIFIER TESTING SUITE - LIVE CODING READY
+==================================================================
+Current time: יום ב 30 יונ 2025 14:55:41
+
+[0;34m🔧 SYSTEM HEALTH CHECK (Web Container)[0m
+----------------------------------------
+=== WEB CONTAINER SYSTEM STATUS ===
+Python version: 3.11.13 (main, Jun 10 2025, 23:54:42) [GCC 12.2.0]
+Working directory: ['', '/usr/local/lib/python311.zip', '/usr/local/lib/python3.11', '/usr/local/lib/python3.11/lib-dynload', '/usr/local/lib/python3.11/site-packages', '/app/web']
+✅ All imports successful
+✅ NON_KETO items: 358
+✅ NON_VEGAN items: 160
+✅ Ground truth file found at: /app/ground_truth_sample.csv
+[0;32m✅ Test completed successfully in 0.84s[0m
+
+[1;33m📁 COPYING GROUND TRUTH TO WEB CONTAINER[0m
+----------------------------------------
+[0;32m✅ Ground truth copied to web container[0m
+
+[0;34m🧪 ENHANCED INDIVIDUAL INGREDIENT TESTS[0m
+----------------------------------------
+=== COMPREHENSIVE KETO TESTS ===
+✅ heavy cream          ->     1 (expected True)
+✅ chicken breast       ->     1 (expected True)
+✅ eggs                 ->     1 (expected True)
+✅ almond flour         ->     1 (expected True)
+✅ broccoli             ->     1 (expected True)
+✅ avocado              ->     1 (expected True)
+✅ olive oil            ->     1 (expected True)
+✅ butter               ->     1 (expected True)
+Loaded USDA data: 303 food items
+✅ cheddar cheese       ->     1 (expected True)
+✅ salmon               ->     1 (expected True)
+✅ spinach              ->     1 (expected True)
+✅ cauliflower          ->     1 (expected True)
+✅ white rice           ->     0 (expected False)
+✅ strawberries         ->     0 (expected False)
+✅ sugar                ->     0 (expected False)
+✅ bread                ->     0 (expected False)
+✅ pasta                ->     0 (expected False)
+✅ banana               ->     0 (expected False)
+✅ potato               ->     0 (expected False)
+✅ corn syrup           ->     0 (expected False)
+✅ cooking spray        ->     0 (expected False)
+✅ oats                 ->     0 (expected False)
+✅ honey                ->     0 (expected False)
+✅ apple                ->     0 (expected False)
+
+🎯 Keto Accuracy: 24/24 (100.0%)
+
+=== COMPREHENSIVE VEGAN TESTS ===
+✅ broccoli             ->     1 (expected True)
+✅ almond milk          ->     1 (expected True)
+✅ kidney beans         ->     1 (expected True)
+✅ tofu                 ->     1 (expected True)
+✅ quinoa               ->     1 (expected True)
+✅ spinach              ->     1 (expected True)
+✅ avocado              ->     1 (expected True)
+✅ olive oil            ->     1 (expected True)
+✅ mushrooms            ->     1 (expected True)
+✅ tomatoes             ->     1 (expected True)
+✅ eggplant             ->     1 (expected True)
+✅ peanut butter        ->     1 (expected True)
+✅ eggs                 ->     0 (expected False)
+✅ chicken              ->     0 (expected False)
+✅ milk                 ->     0 (expected False)
+✅ cheese               ->     0 (expected False)
+✅ butter               ->     0 (expected False)
+✅ honey                ->     0 (expected False)
+✅ beef                 ->     0 (expected False)
+✅ fish                 ->     0 (expected False)
+✅ kahlua               ->     0 (expected False)
+✅ coffee liqueur       ->     0 (expected False)
+✅ bacon                ->     0 (expected False)
+✅ yogurt               ->     0 (expected False)
+
+🎯 Vegan Accuracy: 24/24 (100.0%)
+[0;32m✅ Test completed successfully in 1.08s[0m
+
+[0;34m🔍 EDGE CASE TESTING[0m
+----------------------------------------
+=== EDGE CASE ANALYSIS ===
+Original: "6 eggs"
+  Normalized: "eggs"
+  Keto: True, Vegan: False
+
+Original: "2 cups heavy cream"
+  Normalized: "heavy cream"
+  Keto: True, Vegan: False
+
+Original: "1/4 teaspoon salt"
+  Normalized: "salt"
+  Keto: True, Vegan: True
+
+Original: "3 tablespoons olive oil"
+  Normalized: "tablespoons olive oil"
+  Keto: True, Vegan: True
+
+Original: "salt and pepper to taste"
+  Normalized: "salt and pepper taste"
+  Keto: True, Vegan: True
+
+Original: "cooking spray (optional)"
+  Normalized: "cooking spray"
+  Keto: False, Vegan: True
+
+Loaded USDA data: 303 food items
+Original: "1 (14 oz) can kidney beans"
+  Normalized: "can kidney beans"
+  Keto: True, Vegan: True
+
+Original: "fresh ground black pepper"
+  Normalized: "fresh ground black pepper"
+  Keto: True, Vegan: True
+
+=== PARSING EDGE CASES ===
+Input: ['ingredient1' 'ingredient2' 'ingredient3']...
+  Parsed: ['ingredient1', 'ingredient2', 'ingredient3']
+  Count: 3
+
+Input: ['single ingredient']...
+  Parsed: ['single ingredient']
+  Count: 1
+
+Input: ingredient without brackets...
+  Parsed: ['gredient without bracke']
+  Count: 1
+
+Input: ['ingredient with, comma' 'another ingredient']...
+  Parsed: ['ingredient with, comma', 'another ingredient']
+  Count: 2
+
+Input: ['ingredient
+with
+newlines' 'normal ingredient']...
+  Parsed: ['ingredient\nwith\nnewlines', 'normal ingredient']
+  Count: 2
+
+[0;32m✅ Test completed successfully in 1.04s[0m
+
+[0;34m📋 ADVANCED RECIPE PARSING TEST (Web Container)[0m
+----------------------------------------
+=== RECIPE PARSING VALIDATION ===
+Recipe 1:
+  Raw length: 256
+  Parsed count: 9
+  Sample: 3 cups all-purpose flour...
+
+Recipe 2:
+  Raw length: 177
+  Parsed count: 6
+  Sample: 3 tablespoons brown sugar...
+
+Recipe 3:
+  Raw length: 364
+  Parsed count: 12
+  Sample: 1/2 cup red wine vinegar...
+
+Recipe 4:
+  Raw length: 112
+  Parsed count: 5
+  Sample: 1 cup ice cubes, or as needed...
+
+Recipe 5:
+  Raw length: 252
+  Parsed count: 9
+  Sample: 3 cups all-purpose flour...
+
+Recipe 6:
+  Raw length: 239
+  Parsed count: 8
+  Sample: 2 cups fresh or frozen blueber...
+
+Recipe 7:
+  Raw length: 63
+  Parsed count: 2
+  Sample: 2 pounds strawberries, hulled ...
+
+Recipe 8:
+  Raw length: 213
+  Parsed count: 7
+  Sample: 1 tablespoon soy sauce...
+
+Recipe 9:
+  Raw length: 172
+  Parsed count: 5
+  Sample: 3 pounds apples - peeled, core...
+
+Recipe 10:
+  Raw length: 171
+  Parsed count: 5
+  Sample: 2 cups all-purpose flour...
+
+📊 Parsing Summary: 10 successful, 0 errors
+[0;32m✅ Test completed successfully in 0.48s[0m
+
+[0;34m⚡ PERFORMANCE STRESS TEST (Web Container)[0m
+----------------------------------------
+=== PERFORMANCE BENCHMARKS ===
+1. Individual Ingredient Speed Test:
+   100 ingredients processed in 0.428s
+   Rate: 233.4 ingredients/second
+
+2. Recipe Processing Speed Test:
+Loaded USDA data: 303 food items
+   50 recipes processed in 0.155s
+   Rate: 322.2 recipes/second
+
+3. Memory Management: ✅ Garbage collection completed
+[0;32m✅ Test completed successfully in 1.17s[0m
+
+[0;34m📊 COMPREHENSIVE PERFORMANCE EVALUATION[0m
+----------------------------------------
+Loading and processing ground truth data...
+Loaded USDA data: 303 food items
+
+============================================================
+🥑 KETO CLASSIFICATION RESULTS
+============================================================
+📊 Summary Metrics:
+   Accuracy:  0.9900 (99.00%)
+   F1-Score:  0.9873
+   Precision: 1.0000
+   Recall:    0.9750
+
+📋 Confusion Matrix:
+   True Negatives:  60
+   False Positives: 0
+   False Negatives: 1
+   True Positives:  39
+
+📈 Detailed Classification Report:
+              precision    recall  f1-score   support
+
+       False       0.98      1.00      0.99        60
+        True       1.00      0.97      0.99        40
+
+    accuracy                           0.99       100
+   macro avg       0.99      0.99      0.99       100
+weighted avg       0.99      0.99      0.99       100
+
+
+============================================================
+🌱 VEGAN CLASSIFICATION RESULTS
+============================================================
+📊 Summary Metrics:
+   Accuracy:  1.0000 (100.00%)
+   F1-Score:  1.0000
+   Precision: 1.0000
+   Recall:    1.0000
+
+📋 Confusion Matrix:
+   True Negatives:  60
+   False Positives: 0
+   False Negatives: 0
+   True Positives:  40
+
+📈 Detailed Classification Report:
+              precision    recall  f1-score   support
+
+       False       1.00      1.00      1.00        60
+        True       1.00      1.00      1.00        40
+
+    accuracy                           1.00       100
+   macro avg       1.00      1.00      1.00       100
+weighted avg       1.00      1.00      1.00       100
+
+
+⚡ PERFORMANCE METRICS
+========================================
+Processing time: 0.285 seconds
+Recipes per second: 350.6
+Total recipes processed: 100
+Average time per recipe: 2.85ms
+[0;32m✅ Test completed successfully in 1.17s[0m
+
+[0;34m🔍 ADVANCED ERROR ANALYSIS (Web Container)[0m
+----------------------------------------
+Loaded USDA data: 303 food items
+
+==================================================
+KETO ERROR ANALYSIS
+==================================================
+False Negatives (missed keto): 1
+False Positives (wrong keto): 0
+
+❌ MISSED KETO RECIPES:
+   Recipe 53: ['1/4 cup butter or margarine, softened', '2 tablespoons ground mustard']...
+      Problem ingredients: ['2 tablespoons ground mustard']...
+
+==================================================
+VEGAN ERROR ANALYSIS
+==================================================
+False Negatives (missed vegan): 0
+False Positives (wrong vegan): 0
+
+📊 ERROR SUMMARY:
+   Total errors: 1
+   Keto errors: 1
+   Vegan errors: 0
+[0;32m✅ Test completed successfully in 1.16s[0m
+
+[0;34m🔍 PATTERN MATCHING DEEP ANALYSIS[0m
+----------------------------------------
+=== PATTERN MATCHING ANALYSIS ===
+
+"6 eggs" -> "eggs"
+   Keto whitelist:     1 | Keto blacklist:     0
+   Vegan whitelist:     0 | Vegan blacklist:     1
+
+"heavy cream" -> "heavy cream"
+   Keto whitelist:     1 | Keto blacklist:     0
+   Vegan whitelist:     0 | Vegan blacklist:     1
+
+"peanut butter" -> "peanut butter"
+   Keto whitelist:     1 | Keto blacklist:     0
+   Vegan whitelist:     1 | Vegan blacklist:     1
+
+"eggplant" -> "eggplant"
+   Keto whitelist:     0 | Keto blacklist:     0
+   Vegan whitelist:     1 | Vegan blacklist:     0
+
+"kidney beans" -> "kidney beans"
+   Keto whitelist:     0 | Keto blacklist:     0
+   Vegan whitelist:     1 | Vegan blacklist:     1
+
+"cooking spray" -> "cooking spray"
+   Keto whitelist:     0 | Keto blacklist:     1
+   Vegan whitelist:     0 | Vegan blacklist:     0
+
+"kahlua" -> "kahlua"
+   Keto whitelist:     0 | Keto blacklist:     1
+   Vegan whitelist:     0 | Vegan blacklist:     1
+
+"coffee liqueur" -> "coffee liqueur"
+   Keto whitelist:     0 | Keto blacklist:     0
+   Vegan whitelist:     0 | Vegan blacklist:     1
+
+"almond flour" -> "almond flour"
+   Keto whitelist:     1 | Keto blacklist:     0
+   Vegan whitelist:     0 | Vegan blacklist:     0
+
+"coconut oil" -> "coconut oil"
+   Keto whitelist:     0 | Keto blacklist:     0
+   Vegan whitelist:     0 | Vegan blacklist:     0
+
+"strawberries" -> "strawberries"
+   Keto whitelist:     0 | Keto blacklist:     1
+   Vegan whitelist:     0 | Vegan blacklist:     0
+
+"white rice" -> "white rice"
+   Keto whitelist:     0 | Keto blacklist:     1
+   Vegan whitelist:     0 | Vegan blacklist:     0
+
+=== BLACKLIST STATS ===
+NON_KETO items: 358
+NON_VEGAN items: 160
+
+Sample NON_KETO: ['chutney', 'flavored milk', 'parsnip', 'raw sugar', 'buckwheat flour', 'scone', 'potato chip', 'pita', 'soft drink', 'bloody mary']
+Sample NON_VEGAN: ['guanciale', 'chorizo', 'mozzarella', 'salmon', 'hare', 'cream', 'gelatin', 'frog', 'speck', 'curd']
+[0;32m✅ Test completed successfully in 0.99s[0m
+
+[0;34m🏛️ USDA DATABASE COMPREHENSIVE TEST[0m
+----------------------------------------
+Loaded USDA data: 303 food items
+USDA database loaded: 303 items
+
+=== USDA LOOKUP TESTS ===
+chicken         ->   0.00g carbs/100g
+rice            ->  79.80g carbs/100g
+broccoli        ->   6.27g carbs/100g
+heavy cream     ->   3.80g carbs/100g
+strawberries    -> Not found
+beef            ->   2.89g carbs/100g
+milk            ->   6.86g carbs/100g
+cheese          ->   6.86g carbs/100g
+butter          ->  22.30g carbs/100g
+eggs            ->   2.36g carbs/100g
+bread           ->  49.20g carbs/100g
+pasta           -> Not found
+
+Lookup success rate: 10/12 (83.3%)
+
+=== USDA DATABASE ANALYSIS ===
+Average carbs/100g: 20.08
+Keto-friendly items (≤10g): 163/303 (53.8%)
+[0;32m✅ Test completed successfully in 0.60s[0m
+
+[0;34m🧪 REGRESSION TESTING[0m
+----------------------------------------
+=== REGRESSION TESTS ===
+Testing previously fixed issues...
+✅ Heavy cream should be keto
+✅ Eggs should be non-vegan
+✅ Strawberries should be non-keto
+✅ Kidney beans should be vegan
+✅ Cooking spray should be non-keto
+✅ Kahlua should be non-vegan
+✅ Salt should be keto
+✅ Garlic should be keto
+✅ Chicken should be keto but non-vegan
+✅ Chicken should be non-vegan
+
+📊 Regression Test Results: 10/10 passed (100.0%)
+[0;32m✅ Test completed successfully in 1.03s[0m
+
+[0;35m📊 NOTEBOOK CONTAINER EVALUATION (from notebook)[0m
+----------------------------------------
+Loading ground truth data from notebook container...
+Loaded USDA data: 303 food items
+
+=== KETO CLASSIFICATION ===
+              precision    recall  f1-score   support
+
+       False       0.98      1.00      0.99        60
+        True       1.00      0.97      0.99        40
+
+    accuracy                           0.99       100
+   macro avg       0.99      0.99      0.99       100
+weighted avg       0.99      0.99      0.99       100
+
+
+=== VEGAN CLASSIFICATION ===
+              precision    recall  f1-score   support
+
+       False       1.00      1.00      1.00        60
+        True       1.00      1.00      1.00        40
+
+    accuracy                           1.00       100
+   macro avg       1.00      1.00      1.00       100
+weighted avg       1.00      1.00      1.00       100
+
+
+⏱️  Processing time: 0.307 seconds
+📊 Total recipes processed: 100
+[0;32m✅ Notebook test completed successfully[0m
+
+[0;34m🔤 NLTK LEMMATIZATION TEST[0m
+----------------------------------------
+=== NLTK AVAILABILITY CHECK ===
+✅ NLTK is installed
+❌ WordNet data not found - downloading may be needed
+✅ WordNetLemmatizer initialized
+
+=== LEMMATIZATION TESTS ===
+Testing normalization with potential lemmatization:
+strawberries              -> strawberries             
+   ⚠️  Expected to contain: strawberry
+potatoes                  -> potatoes                 
+   ⚠️  Expected to contain: potato
+tomatoes                  -> tomatoes                 
+   ⚠️  Expected to contain: tomato
+cherries                  -> cherries                 
+   ⚠️  Expected to contain: cherry
+berries                   -> berries                  
+   ⚠️  Expected to contain: berry
+leaves                    -> leaves                   
+   ⚠️  Expected to contain: leaf
+loaves                    -> loaves                   
+   ⚠️  Expected to contain: loaf
+geese                     -> geese                    
+   ⚠️  Expected to contain: goose
+oxen                      -> oxen                     
+   ⚠️  Expected to contain: ox
+children                  -> children                 
+   ⚠️  Expected to contain: child
+6 eggs                    -> eggs                     
+   ⚠️  Expected to contain: egg
+2 cups strawberries       -> strawberries             
+   ⚠️  Expected to contain: cup strawberry
+
+=== LEMMATIZATION IMPACT ON CLASSIFICATION ===
+✅ strawberries    is keto : False (expected False)
+✅ cherries        is keto : False (expected False)
+Loaded USDA data: 303 food items
+✅ potatoes        is keto : False (expected False)
+✅ tomatoes        is vegan: True (expected True)
+❌ oxen            is vegan: True (expected False)
+[0;32m✅ Test completed successfully in 1.04s[0m
+
+
+🎯 COMPREHENSIVE TESTING COMPLETE!
+==================================
+[1;33mAll test modules completed using PRODUCTION web container implementation![0m
+
+[0;36m📋 Test Coverage Summary:[0m
+   ✅ System Health Check (Web Container)
+   ✅ Individual Ingredient Testing (24 keto + 24 vegan tests)
+   ✅ Edge Case Analysis
+   ✅ Recipe Parsing Validation (Web Container)
+   ✅ Performance Stress Testing
+   ✅ Comprehensive Metrics (Web Container - Production Implementation)
+   ✅ Advanced Error Analysis (Web Container)
+   ✅ Pattern Matching Deep Dive
+   ✅ USDA Database Testing
+   ✅ Regression Testing
+   ✅ Notebook Container Evaluation
+
+[0;36m🐳 Tests run against PRODUCTION Flask implementation in web container[0m
+
+[1;33m📊 BONUS: Container Implementation Comparison[0m
+============================================
+Testing Flask web app implementation...
+Web Container - heavy cream: Keto=True, Vegan=False
+
+[0;32m✅ Production web container testing complete![0m

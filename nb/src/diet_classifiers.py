@@ -226,6 +226,20 @@ KETO_WHITELIST = [
     r"\bblack pepper\b",
     r"\bwhite pepper\b",
     r"\bred pepper flakes\b",
+    
+    # Mustard varieties (very low carb)
+    r"\bmustard\b",
+    r"\bground mustard\b",
+    r"\bmustard powder\b",
+    r"\bmustard seed\b",
+    r"\bmustard seeds\b",
+    r"\bdijon mustard\b",
+    r"\byellow mustard\b",
+    r"\bbrown mustard\b",
+    r"\bwhole grain mustard\b",
+    r"\bspicy mustard\b",
+    r"\bprepared mustard\b",
+    r"\bdry mustard\b",
 
     # Common keto vegetables that might be missing:
     r"\basparagus\b",
