@@ -283,7 +283,7 @@ This solution completes the requested task with perfect accuracy using domain kn
 
 **Note: The task only asked to implement two functions. The rule-based solution above completely solves it with 100% accuracy.**
 
-For those curious about "what if we went completely overboard?", I created an entirely optional ML solution on the `ml-overskill-solution` branch. This is a **9000+ line production ML system** organized into **40+ modules** - essentially what you'd build for a Fortune 500 company, not a classification task.
+For those curious about "what if we went completely overboard?", I created an entirely optional ML solution on the `ml-overkill-solution` branch. This is a **9000+ line production ML system** organized into **40+ modules** - essentially what you'd build for a Fortune 500 company, not a classification task.
 
 ### What's in the ML branch:
 - Complete weak supervision pipeline with silver labeling
