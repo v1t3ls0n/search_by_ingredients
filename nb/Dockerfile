@@ -20,6 +20,10 @@ RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/ground_truth_samp
 # Install dependencies from requirements.txt
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && rm requirements.txt
+
+# Download NLTK data during build
+RUN python -c "import nltk; nltk.download('wordnet'); nltk.download('omw-1.4'); nltk.download('averaged_perceptron_tagger')"
+
 ENV JUPYTER_ENABLE_LAB=yes
 
 CMD ["start-notebook.sh", "--NotebookApp.token=''", "--NotebookApp.password=''"]
