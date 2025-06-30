@@ -167,7 +167,17 @@ KETO_WHITELIST = [
     r"\bolive oil\b",
     r"\bmayonnaise\b",
 
-    
+
+    r"\bsalt\b",
+    r"\bpepper\b", 
+    r"\bblack pepper\b",
+    r"\bsalt and pepper\b",
+    r"\bground black pepper\b",
+    r"\bblue cheese\b",
+    r"\blight cream\b",
+
+
+
     # Keto-friendly flours
     r"\balmond flour\b",
     r"\bcoconut flour\b",
