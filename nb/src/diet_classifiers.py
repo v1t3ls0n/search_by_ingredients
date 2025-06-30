@@ -129,7 +129,7 @@ NON_KETO = list(set([
 # Animal-derived ingredients that disqualify vegan classification
 NON_VEGAN = list(set([
 
-    "kahlua", "coffee liqueur", "coffee-flavored liqueur"
+    "kahlua", "coffee liqueur", "coffee-flavored liqueur",
 
     
     # Meat - Red meat
