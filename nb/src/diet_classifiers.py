@@ -152,6 +152,10 @@ NON_VEGAN = list(set([
 
 # Regex patterns for keto-friendly ingredients (overrides blacklist)
 KETO_WHITELIST = [
+    r"\bheavy cream\b",
+    r"\bwhipping cream\b", 
+    r"\bdouble cream\b",
+
     # Keto-friendly flours
     r"\balmond flour\b",
     r"\bcoconut flour\b",
