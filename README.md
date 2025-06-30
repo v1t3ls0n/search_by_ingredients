@@ -1,75 +1,75 @@
-# 🥑 Search By Ingredients Challenge
-![Argmax](https://argmaxml.com/wp-content/uploads/2024/04/Argmax_logo_inline.svg)
+# 🥑 Solution For Argmax's Search By Ingredients Challenge By **Guy Vitelson**
 
-🗓 Submission Deadline: June 30th, 2025
+---
+##### Ping me via 🔗 **[Linkedin](https://www.linkedin.com/in/guyvitelson/)**  🐙 **[GitHub](https://github.com/v1t3ls0n)**  ✉️ **[Mail](mailto:guyvitelson@gmail.com)**
+---
 
+## 🧠 My Implementation
 
-🎥 Please watch [this explainer video](https://youtu.be/rfdaZXseRro) to understand the task.
+### Core Solution (`web/src/diet_classifiers.py`)
 
-## 👋 Who Is This Repo For?
+I've implemented a comprehensive rule-based diet classification system with the following key features:
 
-[Argmax](https://www.argmaxml.com) is hiring Junior Data scientists in Israel (TLV) and the United States (NYC area).
-This repo is meant to be a the first step in the process and it will set the stage for the interview.
+#### 🥑 Keto Classification Pipeline
+My keto classifier uses a multi-stage decision pipeline:
 
-The data is taken from a real-life scenario, and it reflects the type of work you will do at Argmax.
+1. **Whitelist Override** - Immediate acceptance for known keto ingredients (almond flour, coconut oil, etc.)
+2. **USDA Nutritional Lookup** - Downloads and integrates USDA FoodData Central database for authoritative carbohydrate content (≤10g/100g = keto-friendly)
+3. **Fuzzy Matching** - Uses RapidFuzz (when available) for intelligent ingredient matching with 90% similarity threshold
+4. **Regex Blacklist** - Pattern matching against comprehensive NON_KETO list
+5. **Token-level Analysis** - Handles multi-word ingredients and edge cases
 
+#### 🌱 Vegan Classification Pipeline
+The vegan classifier implements:
 
-## 💼 About the Position
+1. **Whitelist Override** - Handles edge cases like "eggplant" (not "egg"), "peanut butter" (not dairy "butter")
+2. **Text Normalization** - Same preprocessing pipeline as keto (Unicode normalization, unit removal, lemmatization)
+3. **Comprehensive Animal Product Detection** - Extensive blacklist covering meat, dairy, seafood, eggs, and other animal-derived ingredients
+4. **Smart Pattern Matching** - Regex patterns with word boundaries to avoid false positives
 
-Argmax is a boutique consulting firm specializing in personalized search and recommendation systems. We work with medium to large-scale clients across retail, advertising, healthcare, and finance.
+#### 🔧 Shared Advanced Features
+Both classifiers leverage the same robust preprocessing pipeline:
+- **Unicode Normalization** - Handles accented characters and special formatting
+- **Text Preprocessing** - Removes units, numbers, parenthetical content for cleaner matching
+- **Lemmatization** - Optional NLTK integration for better word matching (falls back gracefully)
+- **Token Analysis** - Intelligent word-level processing for multi-word ingredients
+- **Caching** - USDA database downloaded once and cached locally
+- **Graceful Fallbacks** - Continues with rule-based classification if external dependencies unavailable
 
-We use tools like large language models, vector databases, and behavioral data to build personalization systems that actually deliver results.
+#### 📊 Performance Characteristics
+- **Fast Execution** - Rule-based approach with compiled regex patterns
+- **High Accuracy** - Leverages authoritative nutritional data from USDA
+- **Robust Handling** - Comprehensive edge case coverage and error handling
+- **Memory Efficient** - Lazy loading and intelligent caching
 
-We're looking for candidates who are:
+### Testing
+You can test the implementation by running:
+```bash
+python nb/src/diet_classifiers.py --ground_truth /usr/src/data/ground_truth_sample.csv
+```
 
--	✅ Proficient in Python
--	🔍 Naturally curious
--	🧠 Able to perform independent research
+## 🤖 Advanced ML Solution
 
-This challenge is designed to simulate the type of problems you'll tackle with us, and it applies to positions in both our:
--	🇮🇱 Ramat Gan, Israel office
--	🇺🇸 North Bergen County, New Jersey office
+For those interested in a more sophisticated approach, I've developed a comprehensive machine learning solution available on the `ml-overskill-solution` branch. This advanced implementation includes:
 
-## 🎥 Past Project Talks
+### 🚀 Full ML Pipeline Features
+- **Weak Supervision** - Silver label generation using rule-based heuristics combined with USDA nutritional data
+- **Multi-Modal Learning** - Text (TF-IDF) + Image (ResNet-50) feature extraction and fusion
+- **Hierarchical Ensembles** - 4-level ensemble architecture with dynamic weighting
+- **15+ ML Models** - Including Logistic Regression, Random Forest, LightGBM, Neural Networks
+- **Advanced Training** - SMOTE class balancing, hyperparameter tuning, cross-validation
+- **Production Features** - Memory management, error handling, Docker containerization, comprehensive logging
 
-1. [Uri's talk on Persona based evaluation with large language models](https://www.youtube.com/watch?v=44--JTG0aMg)
-1. [Benjamin Kempinski on offline metrics](https://www.youtube.com/watch?v=5OPa2RYL5VI)
-1. [Daniel Hen & Uri Goren on pricing with contextual bandits](https://www.youtube.com/watch?v=IJtNBbINKbI)
-1. [Eitan Zimmerman's talk on visual feed reranking](https://www.youtube.com/watch?v=q4uF8nF5SWk)
+### 🎯 Model Performance
+- **Keto Models**: F1-scores up to 0.963 with sophisticated ensemble methods
+- **Vegan Models**: Perfect F1-scores (1.0) achieved with multi-modal ensembles
+- **Image Processing**: 70K+ recipe images processed with GPU acceleration
+- **Scale**: Handles datasets with millions of recipes efficiently
 
-## 🚀 Getting Started
+### 🏗️ Architecture Highlights
+- **Modular Design** - Clean separation into 40+ focused modules
+- **Memory Optimization** - Intelligent sparse matrix usage and GPU memory management
+- **Ensemble Methods** - Top-N model selection, alpha blending, recursive ensembles
+- **Rule Verification** - ML predictions verified against domain constraints
 
-### 🛠️ Setup
-
-1.	Make sure Docker is installed on your machine.
-1.	Run the following in your terminal:  `docker compose build` and  `docker compose up -d`
-1. Open your browser and go to [localhost:8888](http://localhost:8888)
-1. Follow the instructions in the [task.ipynb](https://github.com/argmaxml/search_by_ingredients/blob/master/nb/src/task.ipynb) notebook
-
-### 📬 Submission Instructions
-
-1. **Clone** this repository into a **private GitHub repo** under your own account.
-1. **Invite** [argmax2025](https://github.com/argmax2025) as a collaborator.
-1. **Implement** the missing parts in the codebase.
-1. Once done, fill in the application form:
-1.1. [US Application Form](https://forms.clickup.com/25655193/f/rexwt-1832/L0YE9OKG2FQIC3AYRR) 
-1.1 [IL Application Form](https://forms.clickup.com/25655193/f/rexwt-1812/IP26WXR9X4P6I4LGQ6)
-1. We'll reach out to you after reviewing your submission.
-
-## 🧪 The Interview Process
-### 🧑‍💻 Hands-On Technical Interview (July 2025)
-
-1.	A 3-hour live coding session focused on your submitted solution.
-1.	You'll be asked to extend, modify, and explain parts of the codebase.
-1.	Please ensure you're in a quiet space with a workstation capable of running your solution.
-
-### 🏢 On-Site Interview (August-September 2025)
-
-1. A non-technical, in-person meeting at our offices in Ramat Gan or New Jersey.
-1. We’ll get to know you and discuss your goals.
-1. Successful candidates will receive offers around late August or early September.
-
-## ❓ Still Have Questions?
-
-Feel free to mail us at [challenge25@argmaxml.com](mailto:challenge25@argmaxml.com)
-
+The ML solution demonstrates advanced techniques in weak supervision, ensemble learning, and production-grade ML systems while maintaining backward compatibility with the core rule-based approach.
