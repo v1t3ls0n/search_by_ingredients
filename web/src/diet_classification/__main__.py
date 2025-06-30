@@ -61,6 +61,8 @@ def main():
                         help='Comma separated ingredients to classify')
     parser.add_argument('--mode', choices=['text', 'image', 'both'],
                         default=None, help='Feature mode (defaults to "both" for training, "text" for evaluation)')
+    parser.add_argument('--inference_mode', choices=['text', 'image', 'both'],
+                        default=None, help='Inference mode for ingredient classification')
     parser.add_argument('--force', action='store_true',
                         help='Recompute image embeddings')
     parser.add_argument('--sample_frac', type=float,
@@ -118,9 +120,19 @@ def main():
                 ingredients = [i.strip()
                                for i in args.ingredients.split(',') if i.strip()]
 
-            keto = is_keto(ingredients)
-            vegan = is_vegan(ingredients)
-            log.info(json.dumps({'keto': keto, 'vegan': vegan}))
+            # Use mode-specific models if specified
+            inference_mode = args.inference_mode or args.mode
+            
+            keto = is_keto(ingredients, mode=inference_mode)
+            vegan = is_vegan(ingredients, mode=inference_mode)
+            
+            result = {
+                'keto': keto, 
+                'vegan': vegan,
+                'inference_mode': inference_mode or 'auto'
+            }
+            
+            log.info(json.dumps(result))
             return
 
         elif args.train:
@@ -154,11 +166,18 @@ def main():
                             log.info(f"   ├─ Restored {len(saved_data['best_models'])} models to cache")
                 
                 # Run pipeline (it will handle resume internally)
-                vec, silver, gold, res = run_full_pipeline(
-                    mode=args.mode, 
+                results = run_full_pipeline(
+                    mode=args.mode or 'both', 
                     force=args.force, 
                     sample_frac=args.sample_frac
                 )
+                
+                # Unpack results
+                if len(results) == 5:
+                    vec, silver, gold, res, model_registry = results
+                else:
+                    vec, silver, gold, res = results
+                    model_registry = None
                 
                 if not res:
                     log.error("❌ Pipeline produced no results!")
@@ -168,10 +187,14 @@ def main():
 
                 # Save models with optimized serialization
                 try:
-                    from .models.io import save_models_optimized
+                    from .models.io import save_models_optimized, save_best_models_by_domain
                     CFG.artifacts_dir.mkdir(parents=True, exist_ok=True)
                     
-                    # Prepare best models
+                    # Save best models by domain if not already done
+                    if model_registry is None:
+                        model_registry = save_best_models_by_domain(res, vec, CFG.artifacts_dir)
+                    
+                    # Prepare best overall models
                     best_models = {}
                     for task in ['keto', 'vegan']:
                         task_res = [r for r in res if r['task'] == task]
@@ -199,6 +222,7 @@ def main():
                         final_state = {
                             'stage': 'completed',
                             'best_models': {k: v for k, v in pipeline_state.best_models.items()},
+                            'model_registry': model_registry,
                             'results_summary': {
                                 'total_models': len(res),
                                 'best_keto_f1': max([r['F1'] for r in res if r['task'] == 'keto'], default=0),
@@ -239,7 +263,7 @@ def main():
                 args.mode = 'text'
                 log.info(f"   ℹ️  Defaulting to text-only evaluation (use --mode both for all features)")
             
-            evaluate_ground_truth(args.ground_truth)
+            evaluate_ground_truth(args.ground_truth, mode=args.mode)
 
         elif args.predict:
             log.info(f"🔮 Running prediction on unlabeled data: {args.predict}")

@@ -7,7 +7,7 @@ Based on original lines 2159-2350, 1965-1989 from diet_classifiers.py
 """
 
 import json
-from typing import Iterable, Union
+from typing import Iterable, Union, Optional
 import numpy as np
 import pandas as pd
 
@@ -87,16 +87,18 @@ def is_ingredient_keto(ingredient: str) -> bool:
     return True
 
 
-def is_keto(ingredients: Union[Iterable[str], str]) -> bool:
+def is_keto(ingredients: Union[Iterable[str], str], mode: Optional[str] = None) -> bool:
     """
     Check if all ingredients in a recipe are keto-friendly.
 
-    Uses the best available method:
-    1. Trained ML model (if available) - evaluates the full recipe
-    2. Falls back to rule-based classification per ingredient
+    Uses the best available method for the specified mode:
+    1. Mode-specific trained ML model (if available)
+    2. General best model (if no mode-specific model)
+    3. Falls back to rule-based classification per ingredient
 
     Args:
         ingredients: Either a string (comma-separated or JSON) or an iterable
+        mode: Optional mode ('text', 'image', 'both') to use specific model
 
     Returns:
         True if keto-friendly, False otherwise
@@ -107,6 +109,8 @@ def is_keto(ingredients: Union[Iterable[str], str]) -> bool:
         >>> is_keto(["chicken", "broccoli", "rice"])
         False  # Rice is not keto
         >>> is_keto('["spinach", "cheese", "cream"]')
+        True
+        >>> is_keto("almond flour, eggs", mode="text")  # Use text-only model
         True
         
     Based on original lines 2306-2350
@@ -129,7 +133,19 @@ def is_keto(ingredients: Union[Iterable[str], str]) -> bool:
     pipeline_state = get_pipeline_state()
     pipeline_state.ensure_pipeline_initialized()
     
-    model = pipeline_state.get_best_model('keto')
+    # Try to get mode-specific model first
+    model = None
+    if mode:
+        from ..models.io import load_best_model_for_mode
+        model = load_best_model_for_mode('keto', mode)
+        if model:
+            log.debug(f"Using {mode}-specific model for keto classification")
+    
+    # Fall back to general best model
+    if model is None:
+        model = pipeline_state.get_best_model('keto')
+        if model:
+            log.debug(f"Using general best model for keto classification")
     
     if model is not None and pipeline_state.vectorizer:
         # Use ML model on the full recipe
@@ -144,10 +160,16 @@ def is_keto(ingredients: Union[Iterable[str], str]) -> bool:
                 actual_features = X.shape[1]
                 
                 if expected_features > actual_features:
-                    # Model expects images, pad with zeros
-                    from ..features.combiners import combine_features
-                    padding = np.zeros((1, 2048), dtype=np.float32)
-                    X = combine_features(X, padding)
+                    # Model expects images
+                    if mode == 'image':
+                        log.warning("Image model requested but no image features available")
+                        # Fall back to rules
+                        return all(is_ingredient_keto(ing) for ing in ingredients_list)
+                    elif mode == 'both' or (mode is None and expected_features > actual_features + 2048):
+                        # Pad with zeros for missing image features
+                        from ..features.combiners import combine_features
+                        padding = np.zeros((1, 2048), dtype=np.float32)
+                        X = combine_features(X, padding)
             
             # Get prediction
             if hasattr(model, 'predict_proba'):
