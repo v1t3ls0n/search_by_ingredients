@@ -24,79 +24,112 @@ except ImportError:
 
 # High-carb ingredients that disqualify keto classification
 NON_KETO = list(set([
+    "cooking spray",
+
     # High-carb fruits
     "apple", "banana", "orange", "grape", "kiwi", "mango", "peach",
-    "strawberry","strawberries", "pineapple", "apricot", "tangerine", "persimmon",
-    "pomegranate", "prune", "papaya", "jackfruit",
+    "strawberry", "strawberries", "pineapple", "apricot", "tangerine", "persimmon",
+    "pomegranate", "prune", "papaya", "jackfruit", "watermelon", "cantaloupe",
+    "honeydew", "plum", "cherry", "cherries", "blueberry", "blueberries",
+    "raspberry", "raspberries", "blackberry", "blackberries", "cranberry", "cranberries",
+    "fig", "figs", "date", "dates", "raisin", "raisins",
 
     # Grains and grain products
-    "white rice", "long grain rice", "cornmeal", "corn",
-    "all-purpose flour", "bread", "pasta", "couscous",
-    "bulgur", "quinoa", "barley flour", "buckwheat flour",
-    "durum wheat flour", "wheat flour", "whole-wheat flour",
-    "oat flour", "oatmeal", "rye flour", "semolina",
+    "white rice", "long grain rice", "brown rice", "wild rice", "jasmine rice", "basmati rice",
+    "cornmeal", "corn", "all-purpose flour", "bread", "pasta", "couscous",
+    "bulgur", "quinoa", "barley flour", "buckwheat flour", "barley",
+    "durum wheat flour", "wheat flour", "whole-wheat flour", "wheat",
+    "oat flour", "oatmeal", "oats", "rye flour", "semolina", "rye",
     "amaranth", "millet", "sorghum flour", "sorghum grain",
     "spelt flour", "teff grain", "triticale",
     "einkorn flour", "emmer grain", "fonio", "freekeh",
-    "kamut flour", "farina",
+    "kamut flour", "farina", "polenta", "hominy", "grits",
 
     # Starchy vegetables
     "potato", "baking potato", "potato wedge", "potato slice",
     "russet potato", "sweet potato", "yam", "cassava",
-    "taro", "lotus root", "water chestnut", "ube",
+    "taro", "lotus root", "water chestnut", "ube", "plantain",
+    "parsnip", "rutabaga", "turnip", "beet", "beets", "beetroot",
+    "carrot", "carrots", "corn kernels", "peas", "green peas",
 
     # Legumes
     "kidney bean", "black bean", "pinto bean", "navy bean",
     "lima bean", "cannellini bean", "great northern bean",
-    "garbanzo bean", "chickpea", "adzuki bean", "baked bean",
-    "refried bean", "hummus",
+    "garbanzo bean", "chickpea", "chickpeas", "adzuki bean", "baked bean", "baked beans",
+    "refried bean", "refried beans", "hummus", "lentil", "lentils",
+    "split pea", "split peas", "black-eyed pea", "black-eyed peas",
+    "fava bean", "fava beans", "edamame", "soy beans", "soybeans",
 
-    # Sweeteners and sugars
+    # Sweeteners and sugars - ENHANCED
     "sugar", "brown sugar", "coconut sugar", "muscovado sugar",
     "demerara", "turbinado", "molasses", "honey", "agave nectar",
-    "maple syrup",
+    "maple syrup", "agave syrup", "brown rice syrup",
+    "corn syrup", "high fructose corn syrup", "light corn syrup", "dark corn syrup",
+    "glucose syrup", "rice syrup", "barley malt syrup", "malt syrup",
+    "golden syrup", "invert syrup", "cane syrup", "sorghum syrup",
+    "date syrup", "coconut nectar", "yacon syrup",
+    "powdered sugar", "confectioners sugar", "icing sugar",
+    "raw sugar", "caster sugar", "superfine sugar", "rock sugar",
 
     # Sauces and condiments high in sugar
-    "tomato sauce", "ketchup", "bbq sauce", "teriyaki sauce",
-    "hoisin sauce", "sweet chili sauce", "sweet pickle",
-    "sweet relish", "sweet soy glaze", "marmalade",
+    "tomato sauce", "ketchup", "bbq sauce", "barbecue sauce", "teriyaki sauce",
+    "hoisin sauce", "sweet chili sauce", "sweet pickle", "sweet and sour sauce",
+    "sweet relish", "sweet soy glaze", "marmalade", "jam", "jelly", "preserves",
+    "cranberry sauce", "apple sauce", "applesauce", "chutney",
+    "glazed", "honey mustard", "sweet mustard",
 
     # Processed foods and snacks
-    "bread", "bagel", "muffin", "cookie", "cooky", "cake",
-    "pastry", "pie crust", "pizza", "pizza crust", "pizza flour",
-    "naan", "pita", "roti", "chapati", "tortilla",
-    "pretzel", "chip", "french fry", "tater tot",
-    "doughnut", "graham cracker", "hamburger bun", "hot-dog bun",
+    "bread", "white bread", "whole wheat bread", "bagel", "muffin", "cookie", "cookies", "cooky", "cake",
+    "pastry", "pie crust", "pizza", "pizza crust", "pizza flour", "pizza dough",
+    "naan", "pita", "pita bread", "roti", "chapati", "tortilla", "flour tortilla",
+    "pretzel", "chip", "chips", "potato chip", "corn chip", "french fry", "french fries", "tater tot",
+    "doughnut", "donut", "graham cracker", "crackers", "hamburger bun", "hot-dog bun", "bun",
+    "pancake", "waffle", "crepe", "biscuit", "scone", "roll", "dinner roll",
+    "cereal bar", "granola bar", "protein bar", "power bar",
 
     # Breakfast items
-    "breakfast cereal", "granola", "muesli", "energy bar",
+    "breakfast cereal", "cereal", "granola", "muesli", "energy bar",
+    "oatmeal", "porridge", "pancake mix", "waffle mix",
 
     # Beverages
-    "soy sauce", "orange juice", "fruit punch", "chocolate milk",
+    "soy sauce", "orange juice", "apple juice", "grape juice", "cranberry juice",
+    "fruit punch", "lemonade", "chocolate milk", "flavored milk",
     "sweetened condensed milk", "sweetened cranberry", "sweetened yogurt",
+    "sports drink", "energy drink", "soda", "soft drink", "cola",
+    "fruit smoothie", "milkshake", "frappuccino",
 
     # Alcoholic beverages (carbs from alcohol and mixers)
-    "ale", "beer", "lager", "ipa", "pilsner", "stout", "porter",
-    "moscato", "riesling", "port", "sherry", "sangria",
+    "ale", "beer", "lager", "ipa", "pilsner", "stout", "porter", "wheat beer",
+    "moscato", "riesling", "port", "sherry", "sangria", "dessert wine",
     "margarita", "mojito", "pina colada", "daiquiri", "mai tai",
-    "cosmopolitan", "whiskey sour", "bloody mary",
-    "bailey", "kahlua", "amaretto", "frangelico", "limoncello",
-    "triple sec", "curacao", "alcoholic lemonade", "alcopop",
+    "cosmopolitan", "whiskey sour", "bloody mary", "long island iced tea",
+    "bailey", "baileys", "kahlua", "amaretto", "frangelico", "limoncello",
+    "triple sec", "curacao", "alcoholic lemonade", "alcopop", "wine cooler",
     "breezer", "smirnoff ice", "mike hard lemonade", "hard cider", "cider",
+    "mead", "sake", "plum wine",
 
     # Specialty items
-    "tapioca", "arrowroot", "job's tear", "jobs tear", "job tear",
-    "gnocchi", "tempura batter", "breading",
-    "ice cream", "candy", "hard candy", "gummy bear",
+    "tapioca", "tapioca starch", "arrowroot", "job's tear", "jobs tear", "job tear",
+    "gnocchi", "tempura batter", "breading", "breadcrumbs", "panko",
+    "ice cream", "gelato", "sorbet", "sherbet", "frozen yogurt",
+    "candy", "hard candy", "gummy bear", "gummy candy", "chocolate bar",
+    "milk chocolate", "caramel", "toffee", "fudge", "nougat", "marshmallow",
 
     # Soy products (often sweetened)
-    "soybean sweetened",
+    "soybean sweetened", "teriyaki tofu", "sweetened soy milk",
+
+    # Additional high-carb items
+    "cornstarch", "potato starch", "wheat starch", "modified food starch",
+    "flour tortilla", "corn tortilla", "rice cake", "rice cakes", "rice noodle", "rice noodles",
+    "ramen", "udon", "soba", "lo mein", "pad thai", "pho",
+    "risotto", "pilaf", "stuffing", "dressing",
+    "hashbrown", "hash brown", "mashed potato", "scalloped potato",
 ]))
 
 # Animal-derived ingredients that disqualify vegan classification
 NON_VEGAN = list(set([
 
-    "coffee liqueur", "kahlua",
+    "kahlua", "coffee liqueur", "coffee-flavored liqueur"
 
 
     # Meat - Red meat
