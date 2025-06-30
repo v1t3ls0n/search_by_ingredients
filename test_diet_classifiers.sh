@@ -567,6 +567,81 @@ print(f'\\n⏱️  Processing time: {end_time - start_time:.3f} seconds')
 print(f'📊 Total recipes processed: {len(df)}')
 "
 
+# Test 11: NLTK Functionality Test
+run_test "🔤 NLTK LEMMATIZATION TEST" "
+from diet_classifiers import normalise
+
+print('=== NLTK AVAILABILITY CHECK ===')
+try:
+    import nltk
+    from nltk.stem import WordNetLemmatizer
+    print('✅ NLTK is installed')
+    
+    # Check if wordnet data is available
+    try:
+        nltk.data.find('corpora/wordnet')
+        print('✅ WordNet data is available')
+    except LookupError:
+        print('❌ WordNet data not found - downloading may be needed')
+        
+    # Test lemmatization functionality
+    lemm = WordNetLemmatizer()
+    print('✅ WordNetLemmatizer initialized')
+    
+except ImportError:
+    print('⚠️  NLTK not installed - using fallback normalization')
+
+print('\\n=== LEMMATIZATION TESTS ===')
+# Test cases where lemmatization makes a difference
+test_cases = [
+    ('strawberries', 'strawberry'),
+    ('potatoes', 'potato'),
+    ('tomatoes', 'tomato'),
+    ('cherries', 'cherry'),
+    ('berries', 'berry'),
+    ('leaves', 'leaf'),
+    ('loaves', 'loaf'),
+    ('geese', 'goose'),
+    ('oxen', 'ox'),
+    ('children', 'child'),
+    ('6 eggs', 'egg'),
+    ('2 cups strawberries', 'cup strawberry'),
+]
+
+print('Testing normalization with potential lemmatization:')
+for original, expected_stem in test_cases:
+    normalized = normalise(original)
+    print(f'{original:25} -> {normalized:25}')
+    
+    # Check if any expected stem word appears in normalized
+    if any(expected_word in normalized.split() for expected_word in expected_stem.split()):
+        print(f'   ✅ Contains expected stem')
+    else:
+        print(f'   ⚠️  Expected to contain: {expected_stem}')
+
+# Test that lemmatization helps with classification
+print('\\n=== LEMMATIZATION IMPACT ON CLASSIFICATION ===')
+from diet_classifiers import is_ingredient_keto, is_ingredient_vegan
+
+# These should work even if only singular forms are in blacklist
+lemma_test_cases = [
+    ('strawberries', 'keto', False),  # Should catch via lemmatization
+    ('cherries', 'keto', False),
+    ('potatoes', 'keto', False),
+    ('tomatoes', 'vegan', True),  # Should be vegan
+    ('oxen', 'vegan', False),  # Ox -> beef
+]
+
+for ingredient, test_type, expected in lemma_test_cases:
+    if test_type == 'keto':
+        result = is_ingredient_keto(ingredient)
+    else:
+        result = is_ingredient_vegan(ingredient)
+    
+    status = '✅' if result == expected else '❌'
+    print(f'{status} {ingredient:15} is {test_type:5}: {result} (expected {expected})')
+"
+
 echo ""
 echo "🎯 COMPREHENSIVE TESTING COMPLETE!"
 echo "=================================="
