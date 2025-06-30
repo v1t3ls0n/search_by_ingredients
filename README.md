@@ -110,7 +110,6 @@ Input: "2 cups heavy cream" → classify_ingredient(ingredient, task="keto"|"veg
 ### Modified Files:
 1. **`web/src/diet_classifiers.py`** - Complete implementation (was just TODOs)
 2. **`web/requirements.txt`** - Added: scikit-learn, nltk, rapidfuzz
-3. **`web/Dockerfile`** - Modified CMD to use init.sh
 4. **`web/src/init.sh`** - Added NLTK initialization
 5. **`nb/src/diet_classifiers.py`** - Complete implementation with CLI
 6. **`nb/requirements.txt`** - Added: nltk, rapidfuzz
