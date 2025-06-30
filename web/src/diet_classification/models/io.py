@@ -240,6 +240,24 @@ def save_best_models_by_domain(
                         info = model_registry[key]
                         log.info(f"      ├─ {domain}: {info['model_name']} (F1={info['metrics']['F1']:.3f})")
     
+
+
+    model_mappings = {}
+    for key, info in model_registry.items():
+        task, domain = key.split('_')
+        if task not in model_mappings:
+            model_mappings[task] = {}
+        model_mappings[task][domain] = {
+            'model_name': info['model_name'],
+            'metrics': info['metrics'],
+            'file': f"best_{key}.pkl.gz"
+        }
+
+    mappings_path = path / "model_mappings.json"
+    with open(mappings_path, 'w') as f:
+        json.dump(model_mappings, f, indent=2)
+    log.info(f"   ✅ Saved model mappings to {mappings_path}")
+
     return model_registry
 
 
@@ -344,13 +362,24 @@ def load_best_model_for_mode(task: str, mode: str) -> Optional[Any]:
     """
     pipeline_state = get_pipeline_state()
     
-    # First check if models are already loaded
+    # First check if models are already loaded in memory
     model_key = f"{task}_{mode}"
     if model_key in pipeline_state.models:
+        log.debug(f"Found {model_key} in pipeline state")
         return pipeline_state.models[model_key]
     
     # Try to load from disk
-    for directory in [CFG.artifacts_dir, CFG.pretrained_models_dir]:
+    search_paths = [
+        CFG.artifacts_dir,
+        CFG.pretrained_models_dir,
+        CFG.artifacts_dir / "models" / mode,  # Check domain-specific subdirectory
+    ]
+    
+    for directory in search_paths:
+        if not directory.exists():
+            continue
+            
+        # Try exact match first
         model_path = directory / f"best_{model_key}.pkl.gz"
         if model_path.exists():
             try:
@@ -360,6 +389,37 @@ def load_best_model_for_mode(task: str, mode: str) -> Optional[Any]:
                 return model
             except Exception as e:
                 log.warning(f"   ⚠️  Failed to load {model_path}: {e}")
+        
+        # Try without .gz extension
+        model_path_pkl = directory / f"best_{model_key}.pkl"
+        if model_path_pkl.exists():
+            try:
+                with open(model_path_pkl, 'rb') as f:
+                    model = pickle.load(f)
+                pipeline_state.models[model_key] = model
+                log.info(f"   ✅ Loaded {task} {mode} model from {model_path_pkl}")
+                return model
+            except Exception as e:
+                log.warning(f"   ⚠️  Failed to load {model_path_pkl}: {e}")
+    
+    # Check model mappings file for guidance
+    mappings_path = CFG.artifacts_dir / "model_mappings.json"
+    if mappings_path.exists():
+        try:
+            with open(mappings_path, 'r') as f:
+                mappings = json.load(f)
+            
+            if task in mappings and mode in mappings[task]:
+                model_file = mappings[task][mode]['file']
+                model_path = CFG.artifacts_dir / model_file
+                if model_path.exists():
+                    model = joblib.load(model_path)
+                    pipeline_state.models[model_key] = model
+                    log.info(f"   ✅ Loaded {task} {mode} model using mappings")
+                    return model
+        except Exception as e:
+            log.debug(f"Could not use model mappings: {e}")
     
     # Fall back to general model
+    log.warning(f"   ⚠️  No {mode}-specific model found for {task}, trying general model")
     return pipeline_state.get_best_model(task)

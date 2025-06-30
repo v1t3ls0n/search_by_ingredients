@@ -29,7 +29,7 @@ from ..features.text import extract_text_features
 from ..features.images import download_images, build_image_embeddings
 from ..features.combiners import combine_features, filter_photo_rows
 from ..models.training import run_mode_A
-from ..models.io import save_models_optimized
+from ..models.io import save_models_optimized, save_best_models_by_domain
 from ..ensembles import (
     best_two_domains,
     top_n_ensemble,
@@ -533,8 +533,12 @@ def run_full_pipeline(
         
         # 4. Save best models
         log.info("\n💾 Saving best models...")
+
+        # First, save best models by domain
+        model_registry = save_best_models_by_domain(results, vectorizer, CFG.artifacts_dir)
+
+        # Then save the overall best models for backward compatibility
         best_models = {}
-        
         for task in ["keto", "vegan"]:
             task_results = [r for r in results if r["task"] == task]
             if task_results:
@@ -546,10 +550,15 @@ def run_full_pipeline(
                 elif "model_object" in best:
                     best_models[task] = best["model_object"]
                 
-                log.info(f"   ✅ Best {task}: {best['model']} (F1={best['F1']:.3f})")
-        
+                log.info(f"   ✅ Best {task} overall: {best['model']} (F1={best['F1']:.3f})")
+
         if best_models:
             save_models_optimized(best_models, vectorizer, CFG.artifacts_dir)
+
+        # Log what was saved
+        log.info(f"\n   📊 Models saved:")
+        log.info(f"   ├─ Overall best models: {list(best_models.keys())}")
+        log.info(f"   └─ Domain-specific models: {list(model_registry.keys())}")
         
         # 5. Display final results
         log.info("\n📋 FINAL RESULTS SUMMARY")
