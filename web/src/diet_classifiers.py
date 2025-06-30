@@ -98,7 +98,7 @@ NON_VEGAN = list(set([
 
     "coffee liqueur", "kahlua",
 
-    
+
     # Meat - Red meat
     'beef', 'steak', 'ribeye', 'sirloin', 'veal', 'lamb', 'mutton',
     'pork', 'bacon', 'ham', 'boar', 'goat', 'kid', 'venison',
@@ -557,8 +557,8 @@ def is_ingredient_keto(ingredient: str) -> bool:
     
     Decision pipeline:
     1. Whitelist Check: Immediate acceptance for known keto ingredients
-    2. USDA Numeric Rule: Reject if carbs > 10g/100g
-    3. Regex Blacklist: Pattern matching against NON_KETO
+    2. Regex Blacklist: Pattern matching against NON_KETO (hard rules)
+    3. USDA Numeric Rule: Accept if carbs ≤ 10g/100g
     4. Token Blacklist: Token-level analysis
     """
     if not ingredient:
@@ -568,15 +568,25 @@ def is_ingredient_keto(ingredient: str) -> bool:
     if RX_WL_KETO.search(ingredient):
         return True
     
-    # 2. Numeric carbohydrate rule
+    # 2. Regex blacklist FIRST (hard domain rules override USDA)
     norm = normalise(ingredient)
+    if RX_KETO.search(norm):
+        return False
     
+    # 3. Token-level blacklist check (before USDA)
+    tokens_set = set(tokenize_ingredient(norm))
+    for non_keto in NON_KETO:
+        ing_tokens = non_keto.split()
+        if all(tok in tokens_set for tok in ing_tokens):
+            return False
+    
+    # 4. USDA Numeric carbohydrate rule (after blacklist checks)
     # Whole-phrase lookup
     carbs = carbs_per_100g(norm)
     if carbs is not None:
         return carbs <= 10.0
     
-    # Token-level fallback
+    # Token-level USDA fallback
     tokens = tokenize_ingredient(norm)
     for tok in tokens:
         # Skip common stop words and units
@@ -587,18 +597,9 @@ def is_ingredient_keto(ingredient: str) -> bool:
         if carbs_tok is not None and carbs_tok > 10.0:
             return False
     
-    # 3. Regex blacklist
-    if RX_KETO.search(norm):
-        return False
-    
-    # 4. Token-level heuristic
-    tokens_set = set(tokens)
-    for non_keto in NON_KETO:
-        ing_tokens = non_keto.split()
-        if all(tok in tokens_set for tok in ing_tokens):
-            return False
-    
+    # 5. Default to keto-friendly if no conflicts found
     return True
+
 
 def is_ingredient_vegan(ingredient: str) -> bool:
     """
