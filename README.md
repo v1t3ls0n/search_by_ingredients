@@ -16,6 +16,7 @@ My keto classifier uses a sophisticated multi-stage decision pipeline with domai
 1. **Whitelist Override** - Immediate acceptance for known keto ingredients
    - Patterns: `r"\balmond flour\b"`, `r"\bheavy cream\b"`, `r"\bcoconut oil\b"`
    - Covers keto staples: nut flours, high-fat dairy, MCT oils, sugar-free sweeteners
+   - Double-check approach: Tests both original and normalized forms for maximum accuracy
 
 2. **Domain Blacklist (Priority)** - Hard rules override database lookups
    - Comprehensive NON_KETO list: 358 items covering grains, fruits, legumes, sugars
@@ -60,7 +61,7 @@ The vegan classifier implements a precision-focused approach:
 Both classifiers leverage the same robust preprocessing pipeline:
 - **Unicode Normalization** - Handles accented characters and special formatting
 - **Text Preprocessing** - Removes units, numbers, parenthetical content for cleaner matching
-- **Lemmatization** - NLTK WordNet lemmatizer for handling plural forms and word variations (falls back gracefully if unavailable)
+- **Lemmatization** - NLTK integration for better plural/variation handling (falls back gracefully)
 - **Token Analysis** - Intelligent word-level processing for multi-word ingredients
 - **Caching** - USDA database downloaded once and cached locally (~/.cache/diet_classifier)
 - **Graceful Fallbacks** - Continues with rule-based classification if external dependencies unavailable
@@ -72,6 +73,7 @@ Both classifiers leverage the same robust preprocessing pipeline:
 - **Robust Parsing**: Handles malformed ingredient strings with custom parser
 - **Production Ready**: Comprehensive error handling and fallback strategies
 - **Memory Efficient**: Lazy USDA loading, compiled regex patterns, intelligent caching
+- **Enhanced Dependencies**: NLTK + RapidFuzz for improved accuracy on large datasets
 
 #### 🔧 Key Engineering Decisions
 - **Domain Knowledge First**: Blacklists override database lookups for controversial edge cases
@@ -88,6 +90,8 @@ The solution uses the following key dependencies:
 - **Flask** - Web application framework
 
 All dependencies are specified in `requirements.txt` and automatically installed via Docker.
+
+### Testing & Debugging
 I've included a comprehensive testing suite (`test_diet_classifiers.sh`) that demonstrates systematic debugging methodology:
 
 ```bash
