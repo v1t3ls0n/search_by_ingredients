@@ -17,7 +17,7 @@
 - ✅ **Complete implementation** achieving 100% accuracy
 - ✅ **Unified classification function** - Both classifiers share 90% of their logic
 - ✅ **USDA nutritional database** integration for scientific validation (keto only)
-- ✅ **358 non-keto and 160 non-vegan** curated ingredient lists
+- ✅ **358 non-keto and 280+ non-vegan** curated ingredient lists
 - ✅ **Smart preprocessing** handling edge cases and variations
 - ✅ **Comprehensive test suite** proving correctness
 - ✅ **Production optimizations** for fast startup and reliability
@@ -77,7 +77,7 @@ Input: "2 cups heavy cream" → classify_ingredient(ingredient, task="keto"|"veg
 
 3. **Domain Blacklist Check** - Pattern matching against curated lists
    - NON_KETO: 358 items (grains, fruits, sugars)
-   - NON_VEGAN: 160 items (meat, dairy, eggs, honey)
+   - NON_VEGAN: 280+ items (meat, dairy, eggs, honey)
    - Regex with word boundaries prevents false matches
 
 4. **Token-level Analysis** - Multi-word ingredient detection
@@ -90,12 +90,47 @@ Input: "2 cups heavy cream" → classify_ingredient(ingredient, task="keto"|"veg
      - Fuzzy matching with 90% similarity
    - **Vegan**: Simple token blacklist check (no USDA needed)
 
+### 🔍 Deep Dive: Two-Layer Blacklist Matching
+
+We use two complementary blacklist checks to ensure nothing slips through:
+
+**Layer 1 - Regex Pattern Matching (Step 4):**
+- Fast substring search with word boundaries
+- Uses compiled regex: `r"\b(?:beef|chicken|pork|...)\b"`
+- ✅ Matches: "beef stock" → finds "beef"
+- ✅ Matches: "chicken breast" → finds "chicken"  
+- ❌ Won't match: "chickpeas" → word boundaries prevent matching "chicken"
+
+**Layer 2 - Token Set Matching (Step 5):**
+- Handles multi-word ingredients flexibly
+- Critical for ingredients like "kidney bean" that might appear as "kidney beans"
+- Process:
+  ```python
+  # Example: "canned red kidney beans"
+  tokens_set = {"canned", "red", "kidney", "beans"}
+  
+  # Blacklist has "kidney bean"
+  blacklist_tokens = ["kidney", "bean"]
+  
+  # Check if ALL blacklist tokens are present
+  if all(tok in tokens_set for tok in blacklist_tokens):
+      return False  # NOT KETO
+  ```
+
+**Real Examples:**
+- ✅ "kidney beans" → catches blacklist "kidney bean"
+- ✅ "dried kidney beans" → still catches "kidney bean"
+- ✅ "red kidney beans, canned" → still catches "kidney bean"
+- ✅ "sweet and sour sauce" → catches all three tokens
+
+This two-layer approach ensures we catch both simple ingredients ("honey") and complex ones ("sweet and sour sauce") regardless of how they're written in recipes.
+
 ### 🎯 Key Differences
 
 | Aspect | Keto Classifier | Vegan Classifier |
 |--------|----------------|------------------|
-| Whitelist Items | 100+ keto patterns | 50+ vegan patterns |
-| Blacklist Items | 358 high-carb items | 160 animal products |
+| Whitelist Items | 110+ keto patterns | 140+ vegan patterns |
+| Blacklist Items | 358 high-carb items | 280+ animal products |
 | Numerical Check | ✅ USDA carb lookup | ❌ Not applicable |
 | Decision Type | Threshold (≤10g/100g) | Binary (animal/plant) |
 
@@ -136,7 +171,7 @@ open http://localhost:8080
 ## 📊 Performance
 
 My solution achieves on the provided test set:
-- **Keto Classification**: 100% accuracy (463.5 recipes/second)
+- **Keto Classification**: 100% accuracy (~460 recipes/second)
 - **Vegan Classification**: 100% accuracy
 - **Zero false negatives** for both classifiers
 - **Efficient shared logic**: Single preprocessing step for both classifications
@@ -182,6 +217,12 @@ def parse_ingredients(ingredients_str):
     return ingredients
 ```
 
+**The CSV Format Challenge:**
+The ground truth data uses a non-standard format where ingredient lists are stored as Python-like string representations rather than proper CSV arrays. Instead of standard JSON arrays or comma-separated values, we get:
+- Input: `"['2 cups flour' '1 egg' '1/2 cup milk']"`
+- Challenge: Spaces separate items instead of commas
+- Solution: Custom regex parsing to extract individual ingredients
+
 ### USDA Integration (Keto Only)
 ```python
 def carbs_per_100g(ingredient: str, fuzzy: bool = True) -> Optional[float]:
@@ -205,7 +246,7 @@ The included test suite validates:
 ✅ heavy cream -> True (expected True)
 ✅ strawberries -> False (expected False)
 🎯 Keto Accuracy: 24/24 (100.0%)
-⚡ Processing rate: 463.5 recipes/second
+⚡ Processing rate: ~460 recipes/second
 ```
 
 ## 🏗️ Architecture Decisions
