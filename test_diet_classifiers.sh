@@ -23,7 +23,7 @@ run_test() {
     # Run from web container (production implementation)
     if MSYS_NO_PATHCONV=1 docker exec -it search_by_ingredients_v1t3ls0n-web-1 python3 -c "
 import sys
-sys.path.append('/app/web')
+sys.path.append('/app/web/src')
 $2"; then
         end_time=$(date +%s.%N)
         duration=$(awk "BEGIN {print $end_time - $start_time}")
@@ -39,7 +39,10 @@ run_test_nb() {
     echo -e "${PURPLE}$1 (from notebook)${NC}"
     echo "----------------------------------------"
     
-    if MSYS_NO_PATHCONV=1 docker exec -it search_by_ingredients_v1t3ls0n-nb-1 python3 -c "$2"; then
+    if MSYS_NO_PATHCONV=1 docker exec -it search_by_ingredients_v1t3ls0n-nb-1 python3 -c "
+import sys
+sys.path.append('/usr/src/app')
+$2"; then
         echo -e "${GREEN}✅ Notebook test completed successfully${NC}"
     else
         echo -e "${RED}❌ Notebook test failed${NC}"
@@ -272,7 +275,7 @@ print(f'📊 Parsing Summary: {successful_parses} successful, {parse_errors} err
 # Test 4: Performance Stress Test
 run_test "⚡ PERFORMANCE STRESS TEST (Web Container)" "
 import pandas as pd
-from diet_classifiers import is_keto, is_vegan, parse_ingredients
+from diet_classifiers import is_keto, is_vegan, parse_ingredients, is_ingredient_keto, is_ingredient_vegan
 from time import time
 import gc
 
@@ -320,7 +323,7 @@ from sklearn.metrics import classification_report, accuracy_score, f1_score, pre
 from time import time
 
 print('Loading and processing ground truth data...')
-df = pd.read_csv('/usr/src/data/ground_truth_sample.csv')
+df = pd.read_csv('/app/ground_truth_sample.csv')
 
 start_time = time()
 df['keto_pred'] = df['ingredients'].apply(lambda x: is_keto(parse_ingredients(x)))
@@ -539,6 +542,31 @@ for description, ingredient, test_type, expected in regression_tests:
 print(f'\\n📊 Regression Test Results: {passed_tests}/{len(regression_tests)} passed ({100*passed_tests/len(regression_tests):.1f}%)')
 "
 
+# Test 10: Run evaluation from notebook container
+run_test_nb "📊 NOTEBOOK CONTAINER EVALUATION" "
+from diet_classifiers import is_keto, is_vegan
+import pandas as pd
+from sklearn.metrics import classification_report
+from time import time
+
+print('Loading ground truth data from notebook container...')
+df = pd.read_csv('/usr/src/data/ground_truth_sample.csv')
+
+start_time = time()
+df['keto_pred'] = df['ingredients'].apply(is_keto)
+df['vegan_pred'] = df['ingredients'].apply(is_vegan)
+end_time = time()
+
+print('\\n=== KETO CLASSIFICATION ===')
+print(classification_report(df['keto'], df['keto_pred']))
+
+print('\\n=== VEGAN CLASSIFICATION ===') 
+print(classification_report(df['vegan'], df['vegan_pred']))
+
+print(f'\\n⏱️  Processing time: {end_time - start_time:.3f} seconds')
+print(f'📊 Total recipes processed: {len(df)}')
+"
+
 echo ""
 echo "🎯 COMPREHENSIVE TESTING COMPLETE!"
 echo "=================================="
@@ -555,6 +583,7 @@ echo "   ✅ Advanced Error Analysis (Web Container)"
 echo "   ✅ Pattern Matching Deep Dive"
 echo "   ✅ USDA Database Testing"
 echo "   ✅ Regression Testing"
+echo "   ✅ Notebook Container Evaluation"
 echo ""
 echo -e "${CYAN}🐳 Tests run against PRODUCTION Flask implementation in web container${NC}"
 echo ""
@@ -566,7 +595,7 @@ echo "============================================"
 echo "Testing Flask web app implementation..."
 MSYS_NO_PATHCONV=1 docker exec -it search_by_ingredients_v1t3ls0n-web-1 python3 -c "
 import sys
-sys.path.append('/app/web')
+sys.path.append('/app/web/src')
 from diet_classifiers import is_ingredient_keto, is_ingredient_vegan
 test_ing = 'heavy cream'
 keto_result = is_ingredient_keto(test_ing)
