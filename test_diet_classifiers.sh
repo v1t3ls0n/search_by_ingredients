@@ -23,7 +23,7 @@ run_test() {
     # Run from web container (production implementation)
     if MSYS_NO_PATHCONV=1 docker exec -it search_by_ingredients_v1t3ls0n-web-1 python3 -c "
 import sys
-sys.path.append('/app/web/src')
+sys.path.append('/app/web')
 $2"; then
         end_time=$(date +%s.%N)
         duration=$(awk "BEGIN {print $end_time - $start_time}")
@@ -595,7 +595,7 @@ echo "============================================"
 echo "Testing Flask web app implementation..."
 MSYS_NO_PATHCONV=1 docker exec -it search_by_ingredients_v1t3ls0n-web-1 python3 -c "
 import sys
-sys.path.append('/app/web/src')
+sys.path.append('/app/web')
 from diet_classifiers import is_ingredient_keto, is_ingredient_vegan
 test_ing = 'heavy cream'
 keto_result = is_ingredient_keto(test_ing)
