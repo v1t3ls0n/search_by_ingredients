@@ -9,6 +9,7 @@ from argparse import ArgumentParser
 from typing import List, Optional, Dict
 from time import time
 import pandas as pd
+import ast
 
 try:
     from sklearn.metrics import classification_report
@@ -586,12 +587,30 @@ def is_ingredient_vegan(ingredient: str) -> bool:
     
     return True
 
-def is_keto(ingredients: List[str]) -> bool:
+
+def parse_ingredients(ingredients_str):
+    """Parse string representation of ingredient list into actual list"""
+    if isinstance(ingredients_str, str):
+        try:
+            # Handle string representation of list
+            if ingredients_str.startswith('[') and ingredients_str.endswith(']'):
+                return ast.literal_eval(ingredients_str)
+            else:
+                # Handle other string formats
+                return [ingredients_str]
+        except:
+            return [ingredients_str]
+    return ingredients_str
+
+def is_keto(ingredients):
+    if isinstance(ingredients, str):
+        ingredients = parse_ingredients(ingredients)
     return all(map(is_ingredient_keto, ingredients))
 
-def is_vegan(ingredients: List[str]) -> bool:
+def is_vegan(ingredients):
+    if isinstance(ingredients, str):
+        ingredients = parse_ingredients(ingredients)
     return all(map(is_ingredient_vegan, ingredients))
-
 
 def main(args):
     ground_truth = pd.read_csv(args.ground_truth, index_col=None)
