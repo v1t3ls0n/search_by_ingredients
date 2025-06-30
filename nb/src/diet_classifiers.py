@@ -176,6 +176,14 @@ KETO_WHITELIST = [
     r"\bblue cheese\b",
     r"\blight cream\b",
 
+    r"\bwalnuts\b",
+    r"\bgreen beans\b", 
+    r"\blemon peel\b",
+    r"\blemon zest\b",
+    r"\bsplenda\b",
+    r"\bartificial sweetener\b",
+    r"\bsugar substitute\b",
+    r"\bsherry\b",  # Small cooking amounts
 
 
     # Keto-friendly flours
