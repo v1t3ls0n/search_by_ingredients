@@ -21,8 +21,23 @@ RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/ground_truth_samp
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && rm requirements.txt
 
-# Download NLTK data during build
-RUN python -c "import nltk; nltk.download('wordnet'); nltk.download('omw-1.4'); nltk.download('averaged_perceptron_tagger')"
+# Download NLTK data during build with same logic as init.sh
+RUN python -c " \
+try: \
+    import nltk; \
+    try: \
+        nltk.data.find('corpora/wordnet'); \
+        print('NLTK wordnet data already present') \
+    except LookupError: \
+        print('Downloading NLTK wordnet data...'); \
+        nltk.download('wordnet'); \
+        nltk.download('omw-1.4'); \
+        nltk.download('averaged_perceptron_tagger'); \
+        print('NLTK data downloaded successfully') \
+except Exception as e: \
+    print(f'Warning: Could not setup NLTK: {e}'); \
+    print('Continuing without lemmatization support...') \
+" || true
 
 ENV JUPYTER_ENABLE_LAB=yes
 

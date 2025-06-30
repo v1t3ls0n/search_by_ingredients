@@ -77,7 +77,6 @@ The vegan classifier implements a precision-focused approach:
 7. **`nb/Dockerfile`** - Added NLTK data download during build
 
 ### New Files Created:
-1. **`web/src/init_dependencies.py`** - Handles NLTK/USDA downloads
 2. **`test_diet_classifiers.sh`** - Comprehensive test suite
 3. **This README.md** - Complete documentation
 

@@ -1,6 +1,3 @@
-# This is the notebook version with the main function and CLI interface
-# Copy everything from the web version first, then add the main function at the end
-
 import json
 import sys
 import re
@@ -8,18 +5,9 @@ import unicodedata
 import os
 import zipfile
 import urllib.request
-from argparse import ArgumentParser
 from typing import List, Optional, Dict
-from time import time
 import pandas as pd
 import ast
-
-try:
-    from sklearn.metrics import classification_report
-except ImportError:
-    # sklearn is optional
-    def classification_report(y, y_pred):
-        print("sklearn is not installed, skipping classification report")
 
 
 # ============================================================================
@@ -135,6 +123,7 @@ NON_VEGAN = list(set([
 
     "kahlua", "coffee liqueur", "coffee-flavored liqueur",
     'ox', 'oxen',  # Cattle used as draft animals
+
 
     # Meat - Red meat
     'beef', 'steak', 'ribeye', 'sirloin', 'veal', 'lamb', 'mutton',
@@ -705,89 +694,95 @@ RX_WL_VEGAN = re.compile("|".join(VEGAN_WHITELIST), re.I)
 # ============================================================================
 # MAIN CLASSIFICATION FUNCTIONS
 # ============================================================================
-
-def is_ingredient_keto(ingredient: str) -> bool:
+def classify_ingredient(ingredient: str, task: str) -> bool:
     """
-    Determine if a single ingredient is keto-friendly.
+    Unified classification function for both keto and vegan.
+    
+    Args:
+        ingredient: The ingredient to classify
+        task: Either "keto" or "vegan"
     
     Decision pipeline:
-    1. Whitelist Check: Immediate acceptance for known keto ingredients
+    1. Whitelist Check: Immediate acceptance for known friendly ingredients
     2. Normalize the ingredient  
     3. Whitelist Check Again: Check normalized form against whitelist
-    4. Regex Blacklist: Pattern matching against NON_KETO (hard rules)
+    4. Regex Blacklist: Pattern matching against blacklist (hard rules)
     5. Token-level Blacklist: Multi-word ingredient detection
-    6. USDA Numeric Rule: Accept if carbs ≤ 10g/100g
+    6. Task-specific analysis: USDA for keto, single-token check for vegan
     """
     if not ingredient:
         return True
     
+    # Select appropriate patterns and lists based on task
+    if task == "keto":
+        whitelist_rx = RX_WL_KETO
+        blacklist_rx = RX_KETO
+        blacklist_items = NON_KETO
+    else:  # vegan
+        whitelist_rx = RX_WL_VEGAN
+        blacklist_rx = RX_VEGAN
+        blacklist_items = NON_VEGAN
+    
     # 1. Whitelist (immediate accept) - Check ORIGINAL string
-    if RX_WL_KETO.search(ingredient):
+    if whitelist_rx.search(ingredient):
         return True
     
     # 2. Normalize
     norm = normalise(ingredient)
     
-    # 3. Whitelist check on NORMALIZED string (FIXES THE ISSUE!)
-    if RX_WL_KETO.search(norm):
+    # 3. Whitelist check on NORMALIZED string
+    if whitelist_rx.search(norm):
         return True
     
-    # 4. Regex blacklist (hard domain rules override USDA)
-    if RX_KETO.search(norm):
+    # 4. Regex blacklist (hard domain rules)
+    if blacklist_rx.search(norm):
         return False
     
     # 5. Token-level blacklist check
     tokens_set = set(tokenize_ingredient(norm))
-    for non_keto in NON_KETO:
-        ing_tokens = non_keto.split()
+    for blacklist_item in blacklist_items:
+        ing_tokens = blacklist_item.split()
         if all(tok in tokens_set for tok in ing_tokens):
             return False
     
-    # 6. USDA Numeric carbohydrate rule
-    # Whole-phrase lookup
-    carbs = carbs_per_100g(norm)
-    if carbs is not None:
-        return carbs <= 10.0
+    # 6. Task-specific token analysis
+    if task == "keto":
+        # USDA Numeric carbohydrate rule
+        # Whole-phrase lookup
+        carbs = carbs_per_100g(norm)
+        if carbs is not None:
+            return carbs <= 10.0
     
-    # Token-level USDA fallback
+    # Token-level analysis for both tasks
     tokens = tokenize_ingredient(norm)
     for tok in tokens:
         # Skip common stop words and units
         if tok in {"raw", "fresh", "dried", "powder", "mix", "sliced",
                    "organic", "cup", "cups", "tsp", "tbsp", "g", "kg", "oz"}:
             continue
-        carbs_tok = carbs_per_100g(tok, fuzzy=True)
-        if carbs_tok is not None and carbs_tok > 10.0:
-            return False
+            
+        if task == "keto":
+            # USDA token-level fallback
+            carbs_tok = carbs_per_100g(tok, fuzzy=True)
+            if carbs_tok is not None and carbs_tok > 10.0:
+                return False
+        else:  # vegan
+            # Check if individual token is an animal product
+            if tok in blacklist_items:
+                return False
     
-    # 7. Default to keto-friendly if no conflicts found
+    # 7. Default to friendly if no conflicts found
     return True
+
+
+def is_ingredient_keto(ingredient: str) -> bool:
+    """Determine if a single ingredient is keto-friendly."""
+    return classify_ingredient(ingredient, "keto")
 
 
 def is_ingredient_vegan(ingredient: str) -> bool:
-    """
-    Determine if an ingredient is vegan.
-    
-    Decision pipeline:
-    1. Whitelist Check: Accept known vegan alternatives
-    2. Blacklist Check: Reject animal products
-    """
-    if not ingredient:
-        return True
-    
-    # Quick whitelist check
-    if RX_WL_VEGAN.search(ingredient):
-        return True
-    
-    # Normalize
-    normalized = normalise(ingredient)
-    
-    # Quick blacklist check
-    if RX_VEGAN.search(normalized) and not RX_WL_VEGAN.search(ingredient):
-        return False
-    
-    return True
-
+    """Determine if an ingredient is vegan."""
+    return classify_ingredient(ingredient, "vegan")
 
 def parse_ingredients(ingredients_str):
     """Parse string representation of ingredient list into actual list"""
@@ -816,7 +811,6 @@ def is_vegan(ingredients):
     if isinstance(ingredients, str):
         ingredients = parse_ingredients(ingredients)
     return all(map(is_ingredient_vegan, ingredients))
-
 # ============================================================================
 # MAIN FUNCTION FOR NOTEBOOK/CLI USE ONLY
 # ============================================================================
