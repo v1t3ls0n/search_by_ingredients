@@ -8,6 +8,9 @@ import urllib.request
 from typing import List, Optional, Dict
 import pandas as pd
 import ast
+from argparse import ArgumentParser
+from time import time
+from sklearn.metrics import classification_report
 
 
 # ============================================================================
@@ -846,7 +849,6 @@ def is_vegan(ingredients):
     if isinstance(ingredients, str):
         ingredients = parse_ingredients(ingredients)
     return all(map(is_ingredient_vegan, ingredients))
-
 # ============================================================================
 # MAIN FUNCTION FOR NOTEBOOK/CLI USE ONLY
 # ============================================================================
