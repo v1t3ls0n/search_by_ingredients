@@ -1,5 +1,7 @@
 *.npy
 dataset/
+backups/
+pipeline_state/
 
 # Byte-compiled / optimized / DLL files
 silver_extended.csv
