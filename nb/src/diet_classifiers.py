@@ -12,22 +12,6 @@ import pandas as pd
 import ast
 
 
-# Initialize NLTK data if available
-try:
-    import nltk
-    # Download required NLTK data (only if not already present)
-    try:
-        nltk.data.find('corpora/wordnet')
-    except LookupError:
-        nltk.download('wordnet', quiet=True)
-    try:
-        nltk.data.find('corpora/omw-1.4')
-    except LookupError:
-        nltk.download('omw-1.4', quiet=True)
-except ImportError:
-    pass  # NLTK not available, will use fallback
-
-
 try:
     from sklearn.metrics import classification_report
 except ImportError:
@@ -673,11 +657,18 @@ def normalise(t: str) -> str:
     
     # Apply lemmatization if available
     try:
-        from nltk.stem import WordNetLemmatizer
-        lemm = WordNetLemmatizer()
-        return " ".join(lemm.lemmatize(w) for w in t.split() if len(w) > 2)
+        import nltk
+        try:
+            # Try to use WordNetLemmatizer
+            nltk.data.find('corpora/wordnet')
+            from nltk.stem import WordNetLemmatizer
+            lemm = WordNetLemmatizer()
+            return " ".join(lemm.lemmatize(w) for w in t.split() if len(w) > 2)
+        except (LookupError, ImportError):
+            # NLTK data not found, use fallback
+            return " ".join(w for w in t.split() if len(w) > 2)
     except ImportError:
-        # If NLTK not available, just filter short words
+        # NLTK not available, just filter short words
         return " ".join(w for w in t.split() if len(w) > 2)
 
 # ============================================================================
@@ -808,6 +799,7 @@ def is_vegan(ingredients):
     if isinstance(ingredients, str):
         ingredients = parse_ingredients(ingredients)
     return all(map(is_ingredient_vegan, ingredients))
+
 
 
 
