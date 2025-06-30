@@ -120,10 +120,8 @@ NON_KETO = list(set([
 
 # Animal-derived ingredients that disqualify vegan classification
 NON_VEGAN = list(set([
-
     "kahlua", "coffee liqueur", "coffee-flavored liqueur",
     'ox', 'oxen',  # Cattle used as draft animals
-
 
     # Meat - Red meat
     'beef', 'steak', 'ribeye', 'sirloin', 'veal', 'lamb', 'mutton',
@@ -138,12 +136,24 @@ NON_VEGAN = list(set([
     'liver', 'kidney', 'heart', 'tongue', 'brain', 'sweetbread',
     'tripe', 'gizzard', 'offal', 'bone', 'marrow', 'oxtail',
 
-    # Meat - Processed
+    # Meat - Processed (ENHANCED)
     'sausage', 'bratwurst', 'knackwurst', 'mettwurst',
     'salami', 'pepperoni', 'pastrami', 'bresaola',
     'prosciutto', 'pancetta', 'guanciale', 'speck',
     'mortadella', 'capocollo', 'coppa', 'cotechino',
     'chorizo', 'lard', 'tallow',
+    
+    # Hot dog variations (NEW)
+    'hot dog', 'hotdog', 'hot dogs', 'hotdogs', 'frankfurter', 'frankfurters',
+    'wiener', 'wieners', 'vienna sausage', 'cocktail sausage',
+    
+    # Additional processed meats (NEW)
+    'bologna', 'liverwurst', 'head cheese', 'spam', 'corned beef',
+    'beef jerky', 'turkey jerky', 'venison jerky', 'biltong',
+    'pate', 'foie gras', 'terrine', 'rillettes', 'confit',
+    'kielbasa', 'andouille', 'boudin', 'blood sausage', 'black pudding',
+    'haggis', 'scrapple', 'chicharron', 'pork rind', 'pork rinds',
+    'crackling', 'cracklings',
 
     # Fish and Seafood
     'fish', 'salmon', 'tuna', 'cod', 'haddock', 'halibut',
@@ -154,10 +164,20 @@ NON_VEGAN = list(set([
     'octopus', 'krill', 'caviar', 'roe',
     'fishpaste', 'shrimppaste', 'anchovypaste', 'bonito',
     'katsuobushi', 'dashi', 'nampla',
+    
+    # Additional seafood (NEW)
+    'crayfish', 'crawfish', 'abalone', 'conch', 'sea urchin', 'uni',
+    'fish sauce', 'oyster sauce', 'fish stock', 'seafood stock',
+    'surimi', 'crab stick', 'fish cake', 'fish ball',
 
     # Dairy - Milk products
     'milk', 'cream', 'butter', 'buttermilk', 'condensed', 'evaporated',
     'lactose', 'whey', 'casein', 'ghee', 'kefir',
+    
+    # Additional dairy (NEW)
+    'half and half', 'heavy cream', 'whipping cream', 'clotted cream',
+    'milk powder', 'milk solids', 'dairy', 'lactalbumin', 'lactoglobulin',
+    'milk protein', 'milk fat', 'milkfat', 'butter fat', 'butterfat',
 
     # Dairy - Cheese
     'cheese', 'cheddar', 'mozzarella', 'parmesan', 'parmigiano',
@@ -166,19 +186,51 @@ NON_VEGAN = list(set([
     'emmental', 'gruyere', 'fontina', 'asiago', 'manchego',
     'halloumi', 'feta', 'quark', 'paneer', 'stracciatella',
     'provolone', 'taleggio',
+    
+    # Additional cheeses (NEW)
+    'gouda', 'edam', 'jarlsberg', 'havarti', 'muenster', 'colby',
+    'monterey jack', 'pepper jack', 'swiss cheese', 'american cheese',
+    'velveeta', 'cheese whiz', 'nacho cheese', 'cotija', 'oaxaca',
+    'boursin', 'chevre', 'fromage', 'burrata', 'comte', 'raclette',
 
     # Dairy - Other
     'yogurt', 'sourcream', 'cremefraiche', 'curd', 'custard',
     'icecream', 'gelatin', 'collagen',
+    
+    # Additional dairy products (NEW)
+    'yoghurt', 'frozen yogurt', 'lassi', 'ayran', 'buttermilk',
+    'sour cream', 'creme fraiche', 'clotted cream', 'double cream',
+    'single cream', 'table cream', 'coffee cream', 'pudding',
+    'panna cotta', 'creme brulee', 'mousse', 'tiramisu',
 
     # Eggs
     'egg', 'eggs', 'yolk', 'albumen', 'omelet', 'omelette', 'meringue',
+    
+    # Additional egg products (NEW)
+    'egg white', 'egg whites', 'egg yolk', 'egg yolks', 'whole egg',
+    'egg powder', 'dried egg', 'liquid egg', 'egg wash', 'beaten egg',
+    'scrambled egg', 'fried egg', 'poached egg', 'deviled egg',
+    'egg noodle', 'egg pasta', 'egg drop', 'egg salad', 'egg sandwich',
+    'quiche', 'frittata', 'shakshuka', 'egg custard', 'egg nog', 'eggnog',
+    'hollandaise', 'bearnaise', 'carbonara',
 
-    # Other animal products
+    # Other animal products (ENHANCED)
     'honey', 'shellfish', 'escargot', 'snail', 'frog',
     'worcestershire', 'aioli', 'mayonnaise',
     'broth', 'stock', 'gravy',
+    
+    # Additional animal products (NEW)
+    'beeswax', 'royal jelly', 'propolis', 'lanolin', 'lard',
+    'tallow', 'schmaltz', 'duck fat', 'goose fat', 'bone broth',
+    'chicken broth', 'beef broth', 'fish broth', 'demi glace',
+    'consomme', 'aspic', 'isinglass', 'carmine', 'cochineal',
+    'shellac', 'vitamin d3', 'omega 3', 'fish oil', 'cod liver oil',
+    'rennet', 'pepsin', 'lipase', 'animal enzyme', 'animal enzymes',
+    'mono and diglycerides', 'monoglycerides', 'diglycerides',
+    'stearic acid', 'lactic acid', 'glycerin', 'glycerine',
+    'vitamin a palmitate', 'retinol', 'cholecalciferol',
 ]))
+
 
 # Regex patterns for keto-friendly ingredients (overrides blacklist)
 KETO_WHITELIST = [
@@ -403,12 +455,55 @@ KETO_WHITELIST = [
 # Regex patterns for vegan-friendly ingredients (overrides blacklist)
 VEGAN_WHITELIST = [
     r"\bkidney beans\b",
-
+    
+    # Vegan indicators (NEW)
+    r"\bmeatless\b",
+    r"\bmeat[- ]?free\b",
+    r"\bplant[- ]?based\b",
+    r"\bvegan\b",
+    r"\bvegetarian\b",
+    r"\bnon[- ]?dairy\b",
+    r"\bdairy[- ]?free\b",
+    r"\begg[- ]?free\b",
+    r"\banimal[- ]?free\b",
+    r"\bcruelty[- ]?free\b",
+    
+    # Meat alternatives (NEW)
+    r"\bfaux\s+(?:meat|chicken|beef|pork|turkey|bacon|sausage)\b",
+    r"\bfake\s+(?:meat|chicken|beef|pork|turkey|bacon|sausage)\b",
+    r"\bmock\s+(?:meat|chicken|beef|pork|turkey|duck)\b",
+    r"\bimitation\s+(?:meat|chicken|beef|pork|crab|shrimp)\b",
+    r"\bvegetarian\s+(?:meat|chicken|beef|pork|bacon|sausage)\b",
+    r"\bsoy\s+(?:meat|chicken|beef|pork|bacon|sausage|chorizo)\b",
+    r"\bwheat\s+(?:meat|protein)\b",
+    r"\bseitan\b",
+    r"\btempeh\b",
+    r"\btofu\b",
+    r"\btextured\s+vegetable\s+protein\b",
+    r"\btvp\b",
+    r"\btsp\b",  # textured soy protein
+    r"\bquorn\b",
+    r"\bgardein\b",
+    r"\bbeyond\s+(?:meat|burger|sausage)\b",
+    r"\bimpossible\s+(?:meat|burger|sausage)\b",
+    r"\btofurky\b",
+    r"\btofurkey\b",
+    r"\bfield\s+roast\b",
+    r"\blightlife\b",
+    r"\bmorningstar\b",
+    r"\bboca\b",
+    r"\bsimple\s+truth\s+plant[- ]?based\b",
 
     # Egg exceptions (plant-based)
     r"\beggplant\b",
     r"\begg\s*fruit\b",
     r"\bvegan\s+egg\b",
+    r"\begg\s+replacer\b",
+    r"\bener[- ]?g\s+egg\s+replacer\b",
+    r"\baqua[- ]?faba\b",
+    r"\bflax\s+egg\b",
+    r"\bchia\s+egg\b",
+    r"\bjust\s+egg\b",
 
     # Milk exceptions (plant-based)
     r"\bmillet\b",  # grain, not milk
@@ -421,6 +516,21 @@ VEGAN_WHITELIST = [
     r"\brice\s+milk\b",
     r"\bhazelnut\s+milk\b",
     r"\bpea\s+milk\b",
+    r"\bhemp\s+milk\b",
+    r"\bflax\s+milk\b",
+    r"\bmacadamia\s+milk\b",
+    r"\bwalnut\s+milk\b",
+    r"\bsunflower\s+milk\b",
+    r"\bpumpkin\s+seed\s+milk\b",
+    r"\bquinoa\s+milk\b",
+    r"\bsesame\s+milk\b",
+    r"\bpistachio\s+milk\b",
+    r"\bbarley\s+milk\b",
+    r"\bspelt\s+milk\b",
+    r"\btiger\s+nut\s+milk\b",
+    r"\bplant\s+milk\b",
+    r"\bnon[- ]?dairy\s+milk\b",
+    r"\bmylk\b",  # Common spelling for plant milks
 
     # Rice alternatives (vegetable-based)
     r"\bcauliflower rice\b",
@@ -442,6 +552,19 @@ VEGAN_WHITELIST = [
     r"\bsunflower(?:\s*seed)?\s+butter\b",
     r"\bpistachio\s+butter\b",
     r"\bvegan\s+butter\b",
+    r"\bplant\s+butter\b",
+    r"\bnut\s+butter\b",
+    r"\bseed\s+butter\b",
+    r"\btahini\b",
+    r"\bcashew\s+butter\b",
+    r"\bhazelnut\s+butter\b",
+    r"\bwalnut\s+butter\b",
+    r"\bpecan\s+butter\b",
+    r"\bmacadamia\s+butter\b",
+    r"\bsoy\s+butter\b",
+    r"\bearth\s+balance\b",
+    r"\bmiyoko\b",
+    r"\bcountry\s+crock\s+plant\b",
 
     # Honey exceptions (plants)
     r"\bhoneydew\b",
@@ -449,6 +572,11 @@ VEGAN_WHITELIST = [
     r"\bhoneycrisp\b",
     r"\bhoney\s+locust\b",
     r"\bhoneyberry\b",
+    r"\bagave\b",
+    r"\bmaple\s+syrup\b",
+    r"\bdate\s+syrup\b",
+    r"\bbrown\s+rice\s+syrup\b",
+    r"\bcoconut\s+nectar\b",
 
     # Cream exceptions (plant-based)
     r"\bcream\s+of\s+tartar\b",
@@ -456,19 +584,44 @@ VEGAN_WHITELIST = [
     r"\bcoconut\s+cream\b",
     r"\bcashew\s+cream\b",
     r"\bvegan\s+cream\b",
+    r"\bplant\s+cream\b",
+    r"\boat\s+cream\b",
+    r"\bsoy\s+cream\b",
+    r"\balmond\s+cream\b",
+    r"\brice\s+cream\b",
+    r"\bnon[- ]?dairy\s+cream\b",
+    r"\bwhipped\s+coconut\b",
+    r"\bcoconut\s+whip\b",
 
     # Cheese exceptions (plant-based)
     r"\bcheesewood\b",
     r"\bvegan\s+cheese\b",
     r"\bcashew\s+cheese\b",
+    r"\bnut\s+cheese\b",
+    r"\bplant\s+cheese\b",
+    r"\bnon[- ]?dairy\s+cheese\b",
+    r"\balmond\s+cheese\b",
+    r"\bcoconut\s+cheese\b",
+    r"\bsoy\s+cheese\b",
+    r"\bnutritional\s+yeast\b",
+    r"\bnooch\b",
+    r"\bdaiya\b",
+    r"\bviolife\b",
+    r"\bchao\b",
+    r"\bkite\s+hill\b",
+    r"\bmiyoko\s+creamery\b",
+    r"\bfollow\s+your\s+heart\b",
 
     # Fish exceptions (plants)
     r"\bfish\s+mint\b",
     r"\bfish\s+pepper\b",
+    r"\bsilverfish\s+melon\b",
+    r"\bfish\s+grass\b",
 
     # Beef exceptions (plants/mushrooms)
     r"\bbeefsteak\s+plant\b",
     r"\bbeefsteak\s+mushroom\b",
+    r"\bbeefsteak\s+tomato\b",
 
     # Chicken/hen exceptions (mushrooms)
     r"\bchicken[- ]of[- ]the[- ]woods\b",
@@ -477,12 +630,39 @@ VEGAN_WHITELIST = [
 
     # Meat exceptions (plants)
     r"\bsweetmeat\s+(?:pumpkin|squash)\b",
+    r"\bmeatball\s+plant\b",
 
     # Bacon alternatives
     r"\bcoconut\s+bacon\b",
     r"\bmushroom\s+bacon\b",
     r"\bsoy\s+bacon\b",
     r"\bvegan\s+bacon\b",
+    r"\brice\s+paper\s+bacon\b",
+    r"\beggplant\s+bacon\b",
+    r"\bcarrot\s+bacon\b",
+    r"\btempeh\s+bacon\b",
+    r"\bseitan\s+bacon\b",
+    r"\btofu\s+bacon\b",
+
+    # Mayo alternatives (NEW)
+    r"\bvegan\s+mayo\b",
+    r"\bvegenaise\b",
+    r"\bplant\s+mayo\b",
+    r"\begg[- ]?free\s+mayo\b",
+    r"\baquafaba\s+mayo\b",
+    r"\bsoy\s+mayo\b",
+    r"\bjust\s+mayo\b",
+    r"\bhellmann\s+vegan\b",
+
+    # Stock/broth alternatives (NEW)
+    r"\bvegetable\s+(?:stock|broth)\b",
+    r"\bmushroom\s+(?:stock|broth)\b",
+    r"\bmiso\s+(?:stock|broth|soup)\b",
+    r"\bkombu\s+(?:stock|broth|dashi)\b",
+    r"\bvegan\s+(?:stock|broth)\b",
+    r"\bplant\s+(?:stock|broth)\b",
+    r"\bno[- ]?chicken\s+(?:stock|broth|base)\b",
+    r"\bno[- ]?beef\s+(?:stock|broth|base)\b",
 ]
 
 # ============================================================================
@@ -492,6 +672,8 @@ VEGAN_WHITELIST = [
 # Global cache for USDA carb data
 _CARB_MAP: Optional[Dict[str, float]] = None
 _FUZZY_KEYS: Optional[List[str]] = None
+
+
 
 def _download_and_extract_usda():
     """Download USDA FoodData Central if not already present."""
