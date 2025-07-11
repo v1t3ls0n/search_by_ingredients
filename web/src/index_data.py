@@ -11,7 +11,16 @@ from pathlib import Path
 from typing import List, Dict
 from argparse import ArgumentParser
 from tqdm import tqdm
+import numpy as np
 from diet_classifiers import is_keto, is_vegan
+
+# Try to import swifter for parallel processing
+try:
+    import swifter
+    SWIFTER_AVAILABLE = True
+except ImportError:
+    SWIFTER_AVAILABLE = False
+
 # Configure logging
 logging.getLogger('opensearch').setLevel(logging.ERROR)
 logging.basicConfig(level=logging.INFO)
@@ -128,39 +137,48 @@ def create_index(client: OpenSearch):
         logger.info(f"Created index: ingredients")
 
 
-def batch_index_recipes(client: OpenSearch, recipes: List[Dict], batch_size: int = 10240):
-    """Index a batch of recipes into OpenSearch"""
+def batch_index_recipes(client: OpenSearch, df: pd.DataFrame, batch_size: int = 10240):
+    """
+    Index a batch of recipes with diet classification using pandas with swifter for parallel processing.
+    """
+    if SWIFTER_AVAILABLE:
+        logger.info("Applying diet classifiers with swifter (parallel processing)...")
+        # Use swifter for parallel processing
+        df['keto'] = df['ingredients'].swifter.apply(is_keto)
+        df['vegan'] = df['ingredients'].swifter.apply(is_vegan)
+    else:
+        logger.warning("Swifter not available, using standard pandas (sequential processing)")
+        logger.info("Install swifter for parallel processing: pip install swifter")
+        # Fallback to standard pandas
+        df['keto'] = df['ingredients'].apply(is_keto)
+        df['vegan'] = df['ingredients'].apply(is_vegan)
+    
+    # Convert to records for OpenSearch indexing
+    recipes = df.to_dict('records')
+    
+    # Bulk index to OpenSearch
     actions = []
     ingredients = set()
+    
     for recipe in recipes:
-
-        # Modify shallow copy to prevent mutation of source data
-        recipe_with_diet = recipe.copy()
-        # Initialize keto (boolean) value with our keto classifier
-        recipe_with_diet['keto'] = is_keto(recipe['ingredients'])
-        # Initialize vegan (boolean) value with our vegan classifier
-        recipe_with_diet['vegan'] = is_vegan(recipe['ingredients'])
-
         actions.append({"index": {"_index": "recipes"}})
-        actions.append(recipe_with_diet)
-        ingredients |= {normalize_ingredient(
-            ing) for ing in recipe["ingredients"]}
+        actions.append(recipe)
+        ingredients |= {normalize_ingredient(ing) for ing in recipe["ingredients"]}
+        
         if len(actions) >= batch_size * 2:
             client.bulk(body=actions)
-            # logger.info(f"Indexed {len(actions)//2} recipes")
             actions = []
 
     # Index any remaining recipes
     if actions:
         client.bulk(body=actions)
-        # logger.info(f"Indexed {len(actions)//2} recipes")
 
+    # Index ingredients
     actions = []
     for ing in ingredients:
         actions.append({"index": {"_index": "ingredients"}})
         actions.append({"ingredients": ing})
     client.bulk(body=actions)
-    # logger.info(f"Indexed {len(actions)//2} ingredients")
 
 
 def main(args):
@@ -186,24 +204,28 @@ def main(args):
     # Create the index with mappings
     create_index(client)
 
-    # Read and index the recipes
+    # Read the parquet file
     data_path = Path(args.data_file)
     if not data_path.exists():
         logger.error(f"Could not find {data_path}")
         sys.exit(1)
 
-    logger.info("Starting to index recipes...")
-    # Read the parquet file
+    logger.info("Reading parquet file...")
     df = pd.read_parquet(data_path)
-    # Convert DataFrame to list of dictionaries
-    recipes = df.to_dict('records')
 
     # Process in batches with progress bar
-    with tqdm(total=len(recipes), desc="Indexing recipes") as pbar:
-        for i in range(0, len(recipes), args.batch_size):
-            batch = recipes[i:i + args.batch_size]
-            batch_index_recipes(client, batch)
-            pbar.update(len(batch))
+    processing_mode = "parallel" if SWIFTER_AVAILABLE else "sequential"
+    logger.info(f"Starting to index recipes using {processing_mode} processing...")
+    total_recipes = len(df)
+    
+    with tqdm(total=total_recipes, desc=f"Indexing recipes ({processing_mode})") as pbar:
+        for i in range(0, total_recipes, args.batch_size):
+            batch_df = df.iloc[i:i + args.batch_size].copy()
+            
+            # Index the batch with diet classification
+            batch_index_recipes(client, batch_df, args.batch_size)
+            
+            pbar.update(len(batch_df))
 
     logger.info("Indexing completed successfully")
 
@@ -214,8 +236,6 @@ if __name__ == "__main__":
                         default=1024, help="Batch size for indexing")
     parser.add_argument("--data_file", type=str,
                         default="data/allrecipes.parquet", help="Path to the Parquet file")
-    parser.add_argument("--ingredients_file", type=str,
-                        default="data/ingredients.json", help="Path to the ingredients file")
     parser.add_argument("--opensearch_url", type=str,
                         default="http://localhost:9200", help="OpenSearch URL")
     main(parser.parse_args())

@@ -179,3 +179,5 @@ web/data/*.ipynb
 tmp.py
 internal/*
 .indexed
+docker-hard-rebuild.sh
+re-index-test.sh

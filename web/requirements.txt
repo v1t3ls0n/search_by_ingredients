@@ -4,7 +4,8 @@ python-decouple==3.8
 requests==2.32.3
 pandas==2.2.3
 pyarrow==19.0.1
-tqdm
+tqdm==4.67.1
 scikit-learn==1.6.1
 nltk==3.8.1
 rapidfuzz==3.5.1
+swifter==1.4.0
