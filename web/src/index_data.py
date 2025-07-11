@@ -142,7 +142,7 @@ def batch_index_recipes(client: OpenSearch, recipes: List[Dict], batch_size: int
         recipe_with_diet['vegan'] = is_vegan(recipe['ingredients'])
 
         actions.append({"index": {"_index": "recipes"}})
-        actions.append(recipe)
+        actions.append(recipe_with_diet)
         ingredients |= {normalize_ingredient(
             ing) for ing in recipe["ingredients"]}
         if len(actions) >= batch_size * 2:
