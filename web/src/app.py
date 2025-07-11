@@ -124,8 +124,11 @@ def search_by_ingredients():
             'ingredients': hit['_source']['ingredients'],
             'instructions': hit['_source'].get('instructions', ''),
             'photo_url': hit['_source'].get('photo_url', ''),
-            'keto': is_keto(hit['_source']['ingredients']),
-            'vegan': is_vegan(hit['_source']['ingredients']),
+
+            # Use OpenSearch values if available (should be), otherwise safe fallback to classify on-the-fly
+            'keto': hit['_source'].get('keto', is_keto(hit['_source']['ingredients'])),
+            'vegan': hit['_source'].get('vegan', is_vegan(hit['_source']['ingredients'])),
+
             'score': hit['_score']
         } for hit in hits]
         return jsonify({
