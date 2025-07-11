@@ -18,7 +18,7 @@ logging.getLogger('urllib3').setLevel(logging.ERROR)       # Only show errors
 logging.getLogger('opensearch').setLevel(logging.ERROR)    # Only show errors
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', static_url_path='/static')
 
 
 def wait_for_opensearch(client, max_retries=30, retry_interval=2):
@@ -52,23 +52,21 @@ def init_opensearch():
         logger.error("OpenSearch connection failed")
         sys.exit(1)
 
+    # Just verify the indices exist, don't load everything
     try:
-        # Load all ingredients once OpenSearch is ready
-        response = client.search(index="ingredients", body={
-                                 "query": {"match_all": {}}}, size=10000)
-        ingredients = [hit["_source"]["ingredients"]
-                       for hit in response["hits"]["hits"]]
-        # Simple status message
-        print(f"Successfully loaded {len(ingredients)} ingredients")
-        return client, ingredients
+        if client.indices.exists(index="ingredients"):
+            print("Ingredients index verified")
+        if client.indices.exists(index="recipes"):
+            print("Recipes index verified")
+        return client
     except Exception as e:
-        logger.error(f"Error initializing OpenSearch: {str(e)}")
+        logger.error(f"Error verifying indices: {str(e)}")
         sys.exit(1)
 
 
 logger.info("Starting application initialization...")
-# Initialize OpenSearch and load ingredients
-client, ingredients = init_opensearch()
+# Initialize OpenSearch client only
+client = init_opensearch()
 logger.info("Application initialization completed successfully")
 
 
@@ -79,34 +77,92 @@ def home():
 
 @app.route("/select2", methods=["GET"])
 def select2():
+    """Search ingredients directly from OpenSearch"""
     q = request.args.get("q", "").strip()
-    results = [{"id": id_, "text": txt_}
-               for id_, txt_ in enumerate(ingredients) if q in txt_]
-    results = sorted(results, key=lambda x: len(x["text"]))
-    return jsonify({"results": results})
+    if not q:
+        return jsonify({"results": []})
+    
+    # Use OpenSearch to search ingredients
+    query = {
+        "query": {
+            "match_prefix": {
+                "ingredients": {
+                    "query": q,
+                    "max_expansions": 10
+                }
+            }
+        },
+        "size": 20,
+        "sort": [
+            {"_score": {"order": "desc"}},
+            {"ingredients.keyword": {"order": "asc"}}
+        ]
+    }
+    
+    try:
+        response = client.search(index="ingredients", body=query)
+        results = []
+        for i, hit in enumerate(response["hits"]["hits"]):
+            results.append({
+                "id": hit["_source"]["ingredients"],  # Use ingredient name as ID
+                "text": hit["_source"]["ingredients"]
+            })
+        # Sort by length for better UX
+        results.sort(key=lambda x: len(x["text"]))
+        return jsonify({"results": results})
+    except Exception as e:
+        logger.error(f"Error in select2 search: {str(e)}")
+        return jsonify({"results": []})
 
 
 @app.route('/search', methods=['GET'])
 def search_by_ingredients():
     ingredient = request.args.get('q', '')
-    if not ingredient:
-        return jsonify({'error': 'Please provide an ingredient name'}), 400
-
-    ingredient_ids = [int(id_) for id_ in ingredient.split() if id_.isdigit()]
-    ingredient_ids = [ingredients[id_] for id_ in ingredient_ids]
-    ingredient = " ".join(ingredient_ids)
-
-    # Create the search query
-    query = {
-        "query": {
+    
+    # Get diet filter parameters
+    keto_only = request.args.get('keto', '').lower() == 'true'
+    vegan_only = request.args.get('vegan', '').lower() == 'true'
+    
+    # Check if at least one search criteria is provided
+    if not ingredient and not keto_only and not vegan_only:
+        return jsonify({'error': 'Please provide an ingredient name or select a diet filter'}), 400
+    
+    # Build query conditions
+    must_conditions = []
+    
+    # Add ingredient search if provided
+    # Note: Since we're now using ingredient names as IDs, no need to convert
+    if ingredient:
+        must_conditions.append({
             "match": {
                 "ingredients": {
                     "query": ingredient,
                     "fuzziness": "AUTO"
                 }
             }
+        })
+    
+    # Add diet filters if specified
+    if keto_only:
+        must_conditions.append({"term": {"keto": True}})
+    if vegan_only:
+        must_conditions.append({"term": {"vegan": True}})
+
+    # Build the query
+    if must_conditions:
+        query = {
+            "query": {
+                "bool": {
+                    "must": must_conditions
+                }
+            }
         }
-    }
+    else:
+        query = {
+            "query": {
+                "match_all": {}
+            }
+        }
 
     try:
         # Execute the search
@@ -124,13 +180,11 @@ def search_by_ingredients():
             'ingredients': hit['_source']['ingredients'],
             'instructions': hit['_source'].get('instructions', ''),
             'photo_url': hit['_source'].get('photo_url', ''),
-
-            # Use OpenSearch values if available (should be), otherwise safe fallback to classify on-the-fly
-            'keto': hit['_source'].get('keto', is_keto(hit['_source']['ingredients'])),
-            'vegan': hit['_source'].get('vegan', is_vegan(hit['_source']['ingredients'])),
-
+            'keto': hit['_source'].get('keto', False),
+            'vegan': hit['_source'].get('vegan', False),
             'score': hit['_score']
         } for hit in hits]
+        
         return jsonify({
             'total': response['hits']['total']['value'],
             'results': results
