@@ -200,37 +200,47 @@
         );
       });
 
-      function performSearch() {
+    function performSearch() {
         const selectedIngredients = $("#ingredientSearch").val();
         const ketoOnly = $("#ketoFilter").is(":checked");
         const veganOnly = $("#veganFilter").is(":checked");
 
         // Perform search if either ingredients are selected OR diet filters are active
         if (
-          (selectedIngredients && selectedIngredients.length > 0) ||
-          ketoOnly ||
-          veganOnly
+            (selectedIngredients && selectedIngredients.length > 0) ||
+            ketoOnly ||
+            veganOnly
         ) {
-          searchRecipes(selectedIngredients || []);
+            searchRecipes(selectedIngredients || []);
         } else {
-          $("#resultsContainer").empty();
+            $("#resultsContainer").empty();
         }
-      }
+    }
 
-      function searchRecipes(ingredients) {
-        // Ingredients are now already names, not IDs
-        const query = ingredients.join(" ");
+
+    function searchRecipes(ingredients) {
+        // FIX: Extract actual ingredient names from Select2 values
+        // Select2 returns the actual ingredient names as values since we set "id": ingredient name
+        const query = Array.isArray(ingredients) ? ingredients.join(" ") : "";
         const ketoOnly = $("#ketoFilter").is(":checked");
         const veganOnly = $("#veganFilter").is(":checked");
 
-        // Create cache key
+        // Create proper cache key with actual ingredient names
         const cacheKey = `${query}|${ketoOnly}|${veganOnly}`;
+        
+        // DEBUG: Log cache operations
+        console.log("Cache key:", cacheKey);
+        console.log("Cache has key:", searchCache.has(cacheKey));
+        console.log("Current cache size:", searchCache.size);
 
         // Check cache first
         if (searchCache.has(cacheKey)) {
-          displayResults(searchCache.get(cacheKey));
-          return;
+            console.log("Using cached results");
+            displayResults(searchCache.get(cacheKey));
+            return;
         }
+
+        console.log("Making new API request");
 
         // Build query parameters
         const params = {};
@@ -239,21 +249,22 @@
         if (veganOnly) params.vegan = "true";
 
         $.get("/search", params)
-          .done(function (data) {
-            // Cache the results
-            searchCache.set(cacheKey, data.results);
-            // Limit cache size
-            if (searchCache.size > 50) {
-              const firstKey = searchCache.keys().next().value;
-              searchCache.delete(firstKey);
-            }
-            displayResults(data.results);
-          })
-          .fail(function (error) {
-            console.error("Search failed:", error);
-          });
-      }
-
+            .done(function (data) {
+                console.log("Caching results for key:", cacheKey);
+                // Cache the results
+                searchCache.set(cacheKey, data.results);
+                // Limit cache size (LRU eviction)
+                if (searchCache.size > 50) {
+                    const firstKey = searchCache.keys().next().value;
+                    searchCache.delete(firstKey);
+                    console.log("Evicted oldest cache entry:", firstKey);
+                }
+                displayResults(data.results);
+            })
+            .fail(function (error) {
+                console.error("Search failed:", error);
+            });
+    }
       // Update the displayResults function
       function displayResults(results) {
           const container = $("#resultsContainer");

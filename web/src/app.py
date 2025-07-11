@@ -85,28 +85,54 @@ def select2():
     results = sorted(results, key=lambda x: len(x["text"]))
     return jsonify({"results": results})
 
-
 @app.route('/search', methods=['GET'])
 def search_by_ingredients():
     ingredient = request.args.get('q', '')
-    if not ingredient:
-        return jsonify({'error': 'Please provide an ingredient name'}), 400
-
-    ingredient_ids = [int(id_) for id_ in ingredient.split() if id_.isdigit()]
-    ingredient_ids = [ingredients[id_] for id_ in ingredient_ids]
-    ingredient = " ".join(ingredient_ids)
-
-    # Create the search query
-    query = {
-        "query": {
+    
+    # Get diet filter parameters
+    keto_only = request.args.get('keto', '').lower() == 'true'
+    vegan_only = request.args.get('vegan', '').lower() == 'true'
+    
+    # Check if at least one search criteria is provided
+    if not ingredient and not keto_only and not vegan_only:
+        return jsonify({'error': 'Please provide an ingredient name or select a diet filter'}), 400
+    
+    # Build query conditions
+    must_conditions = []
+    
+    # Add ingredient search if provided
+    # Note: Since we're now using ingredient names as IDs, no need to convert
+    if ingredient:
+        must_conditions.append({
             "match": {
                 "ingredients": {
                     "query": ingredient,
                     "fuzziness": "AUTO"
                 }
             }
+        })
+    
+    # Add diet filters if specified
+    if keto_only:
+        must_conditions.append({"term": {"keto": True}})
+    if vegan_only:
+        must_conditions.append({"term": {"vegan": True}})
+
+    # Build the query
+    if must_conditions:
+        query = {
+            "query": {
+                "bool": {
+                    "must": must_conditions
+                }
+            }
         }
-    }
+    else:
+        query = {
+            "query": {
+                "match_all": {}
+            }
+        }
 
     try:
         # Execute the search
@@ -124,13 +150,11 @@ def search_by_ingredients():
             'ingredients': hit['_source']['ingredients'],
             'instructions': hit['_source'].get('instructions', ''),
             'photo_url': hit['_source'].get('photo_url', ''),
-
-            # Use OpenSearch values if available (should be), otherwise safe fallback to classify on-the-fly
-            'keto': hit['_source'].get('keto', is_keto(hit['_source']['ingredients'])),
-            'vegan': hit['_source'].get('vegan', is_vegan(hit['_source']['ingredients'])),
-
+            'keto': hit['_source'].get('keto', False),
+            'vegan': hit['_source'].get('vegan', False),
             'score': hit['_score']
         } for hit in hits]
+        
         return jsonify({
             'total': response['hits']['total']['value'],
             'results': results
