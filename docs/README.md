@@ -15,7 +15,7 @@
 **What’s new in 2.0?**
 - **Keto/Vegan search filters:** Find recipes by #keto, #vegan, or both.
 - **Optional #diet:threshold search**: Search with diet compliance thresholds (e.g., #keto:0.8).
-- **Visual diet badges**: Results show keto/vegan score badges. 100% scores get a strict vegan/keto badge.
+- **Visual diet badges:** Results show keto/vegan score badges. 100% scores get a strict vegan/keto badge.
 - **Recipe transformation:** Instantly convert non-keto/non-vegan recipes to fully compliant ones with substitution logic.
 - **Ingredient analysis UI:** New element visualizing per-ingredient compliance and suggesting improvements.
 - **Portion-aware diet logic:** Tiny amounts of “forbidden” ingredients allowed if they don’t practically affect diet compliance.
@@ -67,6 +67,7 @@ Recipes display color-coded badges and compliance percentages for each selected 
 ## 🏗️ Architecture & Module Structure
 
 ```
+
 utils/
 ├── classifiers.py      # Core classification logic
 ├── constants.py        # Diet lists & substitutions
@@ -75,6 +76,7 @@ utils/
 ├── substitutions.py    # Dynamic replacements
 ├── query_flags.py      # Search syntax
 └── usda.py             # Nutrition data
+
 ```
 
 - **Unified Classifier:** Shared logic, diet-specific only when needed.
@@ -99,6 +101,8 @@ utils/
 - 100% = strict badge, partials show percentage
 - UI toggles diet info based on search
 
+![Search results with diet badges](screenshots/ui1.png)
+
 ### Dynamic Substitution System
 
 - Single-diet and multi-diet substitutions
@@ -107,19 +111,18 @@ utils/
   - Milk: unsweetened almond milk for both
   - Eggs: flax eggs (with “use sparingly” for keto)
 
-### Recipe Analysis Interface
+![Dynamic substitution modal](screenshots/ui2.png)
+
+### Recipe Analysis & Conversion Interface
 
 - Select diet mode (keto, vegan, both)
 - Input/parse ingredients with quantities
 - Real-time scoring and suggestions
 - Export fully converted recipes
+- Convert any recipe to keto, vegan, or both
 
-### Transformative Recipe Conversion
+![Recipe analysis screen](screenshots/ui3.png)
 
-Convert any recipe to keto, vegan, or both:
-- Input: ["2 cups flour", "1 cup sugar", "3 eggs", "1/2 cup butter"]
-- Output: ["2 cups almond flour", "1 cup erythritol", "3 flax eggs", "1/2 cup coconut oil"]
-- Result: 100% compliant
 
 ---
 
@@ -149,20 +152,26 @@ Convert any recipe to keto, vegan, or both:
 
 ### Find Keto-Vegan Recipes
 ```
+
 Search: "lunch #both"
 → 100% compliant recipes
+
 ```
 
 ### Convert a Recipe
 ```
-Original: ["2 cups flour", "1 cup sugar", "3 eggs", "1/2 cup butter"]
+
+Original: \["2 cups flour", "1 cup sugar", "3 eggs", "1/2 cup butter"]
 Converted: 100% keto-vegan compliant
+
 ```
 
 ### Partial Compliance Search
 ```
+
 Search: "#both:0.7"
 → Results with at least 70% compliance for both diets
+
 ```
 
 ---
@@ -192,4 +201,3 @@ This system empowers users—especially those with multiple dietary needs—to c
 🔗 [Linkedin](https://www.linkedin.com/in/guyvitelson/)  
 🐙 [GitHub](https://github.com/v1t3ls0n)  
 ✉️ [Mail](mailto:guyvitelson@gmail.com)
-
