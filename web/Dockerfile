@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
 RUN mkdir -p /app/data
 
 # Download the parquet file
-RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/allrecipes.parquet -o /app/data/allrecipes.parquet
+RUN curl -L http://argmax.nyc3.digitaloceanspaces.com/recipes/allrecipes.parquet -o /app/data/allrecipes.parquet
 
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .

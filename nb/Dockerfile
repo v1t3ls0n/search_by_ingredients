@@ -15,7 +15,7 @@ RUN mkdir -p /usr/src/data && \
     chown -R $NB_UID:$NB_GID /usr/src/data
 
 USER $NB_UID
-RUN curl -L https://argmax.nyc3.digitaloceanspaces.com/recipes/ground_truth_sample.csv -o /usr/src/data/ground_truth_sample.csv
+RUN curl -L http://argmax.nyc3.digitaloceanspaces.com/recipes/ground_truth_sample.csv -o /usr/src/data/ground_truth_sample.csv
 
 # Install dependencies from requirements.txt
 COPY requirements.txt .
