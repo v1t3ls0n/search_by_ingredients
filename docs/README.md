@@ -90,13 +90,6 @@ utils/
 
 ## ✨ Major Features
 
-### Diet-Aware Search & Filtering
-
-- `"chicken #keto"` — Keto chicken recipes
-- `"pasta #vegan:0.8"` — Pasta ≥80% vegan
-- `"salad #both"` — Both keto & vegan
-- `"soup #keto:0.9 #vegan:0.7"` — Multiple thresholds
-
 ### Visual Diet Indicators
 
 - Badges and pills for each recipe
@@ -115,15 +108,7 @@ Advanced filtering with compliance thresholds allows users to find recipes that 
 
 ![Threshold-based diet filtering](screenshots/ui5.png)
 
-### Dynamic Substitution System
 
-- Single-diet and multi-diet substitutions
-- Example:
-  - Flour: almond/coconut flour for both
-  - Milk: unsweetened almond milk for both
-  - Eggs: flax eggs (with “use sparingly” for keto)
-
-![Dynamic substitution modal](screenshots/ui2.png)
 
 ### Recipe Analysis & Conversion Interface
 
@@ -134,6 +119,18 @@ Advanced filtering with compliance thresholds allows users to find recipes that 
 - Convert any recipe to keto, vegan, or both
 
 ![Recipe analysis screen](screenshots/ui3.png)
+
+
+### Dynamic Substitution System
+
+- Single-diet and multi-diet substitutions
+- Example:
+  - Flour: almond/coconut flour for both
+  - Milk: unsweetened almond milk for both
+  - Eggs: flax eggs (with “use sparingly” for keto)
+
+![Dynamic substitution modal](screenshots/ui2.png)
+
 
 ### Saved Recipe Variations
 
@@ -159,7 +156,7 @@ The system automatically saves all modified recipes to a database with unique ID
 - **Score improvements**: Tracks before/after diet compliance scores
 - **Detailed metadata**: Modification date, diet type, and change count
 
-![Recipe modification details](screenshots/U7.png)
+![Recipe modification details](screenshots/ui7.png)
 
 
 ---
