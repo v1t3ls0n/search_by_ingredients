@@ -11,551 +11,552 @@
 <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 
-    <style>
-        .recipe-card {
-            transition: transform 0.2s;
-            cursor: pointer;
-            position: relative;
-        }
-        .recipe-card:hover {
-            transform: scale(1.02);
-        }
-        .recipe-image {
-            height: 200px;
-            object-fit: cover;
-        }
-        .select2-container {
-            width: 100% !important;
-        }
-        
-        /* Diet score badges */
-        .diet-score-badge {
-            display: inline-flex;
-            align-items: center;
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 500;
-            margin: 2px;
-            position: relative;
-            overflow: hidden;
-            background: #f0f0f0;
-            min-width: 80px;
-            transition: all 0.3s ease;
-        }
-        
-        .diet-score-badge .score-fill {
-            position: absolute;
-            left: 0;
-            top: 0;
-            height: 100%;
-            transition: width 0.3s ease;
-            opacity: 0.3;
-            z-index: 0;
-        }
-        
-        .diet-score-badge .score-text {
-            position: relative;
-            z-index: 1;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-        
-        /* Partial compliance styling */
-        .diet-score-badge.keto .score-fill {
-            background: #ff5722;
-        }
-        
-        .diet-score-badge.keto .score-text {
-            color: #d32f2f;
-        }
-        
-        .diet-score-badge.vegan .score-fill {
-            background: #4CAF50;
-        }
-        
-        .diet-score-badge.vegan .score-text {
-            color: #2e7d32;
-        }
-        
-        /* "Both" diet badge styling */
-        .diet-score-badge.both .score-fill {
-            background: linear-gradient(to right, #ff5722 50%, #4CAF50 50%);
-        }
-        
-        .diet-score-badge.both .score-text {
-            color: #6c757d;
-        }
-        
-        .diet-score-badge.both.high-compliance {
-            border-color: #2196F3;
-            background: #f0f8ff;
-        }
-        
-        .diet-score-badge.both.full-compliance {
-            background: linear-gradient(135deg, #ff5722 0%, #4CAF50 100%);
-            border: none;
-            color: white;
-        }
-        
-        .diet-score-badge.both.full-compliance .score-fill {
-            display: none;
-        }
-        
-        .diet-score-badge.both.full-compliance .score-text {
-            color: white;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        /* High compliance (>= 80%) gets stronger styling */
-        .diet-score-badge.high-compliance {
-            border: 2px solid;
-        }
-        
-        .diet-score-badge.keto.high-compliance {
-            border-color: #ff5722;
-            background: #fff5f5;
-        }
-        
-        .diet-score-badge.vegan.high-compliance {
-            border-color: #4CAF50;
-            background: #f5fff5;
-        }
-        
-        /* 100% COMPLIANT - DRAMATIC STYLING */
-        .diet-score-badge.full-compliance {
-            animation: pulse 2s ease-in-out infinite;
+<style>
+    .recipe-card {
+        transition: transform 0.2s;
+        cursor: pointer;
+        position: relative;
+    }
+    .recipe-card:hover {
+        transform: scale(1.02);
+    }
+    .recipe-image {
+        height: 200px;
+        object-fit: cover;
+    }
+    .select2-container {
+        width: 100% !important;
+    }
+    
+    /* Diet score badges */
+    .diet-score-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        margin: 2px;
+        position: relative;
+        overflow: hidden;
+        background: #f0f0f0;
+        min-width: 80px;
+        transition: all 0.3s ease;
+    }
+    
+    .diet-score-badge .score-fill {
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        transition: width 0.3s ease;
+        opacity: 0.3;
+        z-index: 0;
+    }
+    
+    .diet-score-badge .score-text {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    
+    /* Partial compliance styling */
+    .diet-score-badge.keto .score-fill {
+        background: #ff5722;
+    }
+    
+    .diet-score-badge.keto .score-text {
+        color: #d32f2f;
+    }
+    
+    .diet-score-badge.vegan .score-fill {
+        background: #4CAF50;
+    }
+    
+    .diet-score-badge.vegan .score-text {
+        color: #2e7d32;
+    }
+    
+    /* "Both" diet badge styling */
+    .diet-score-badge.both .score-fill {
+        background: linear-gradient(to right, #ff5722 50%, #4CAF50 50%);
+    }
+    
+    .diet-score-badge.both .score-text {
+        color: #6c757d;
+    }
+    
+    .diet-score-badge.both.high-compliance {
+        border-color: #2196F3;
+        background: #f0f8ff;
+    }
+    
+    .diet-score-badge.both.full-compliance {
+        background: linear-gradient(135deg, #ff5722 0%, #4CAF50 100%);
+        border: none;
+        color: white;
+    }
+    
+    .diet-score-badge.both.full-compliance .score-fill {
+        display: none;
+    }
+    
+    .diet-score-badge.both.full-compliance .score-text {
+        color: white;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    /* High compliance (>= 80%) gets stronger styling */
+    .diet-score-badge.high-compliance {
+        border: 2px solid;
+    }
+    
+    .diet-score-badge.keto.high-compliance {
+        border-color: #ff5722;
+        background: #fff5f5;
+    }
+    
+    .diet-score-badge.vegan.high-compliance {
+        border-color: #4CAF50;
+        background: #f5fff5;
+    }
+    
+    /* 100% COMPLIANT - DRAMATIC STYLING */
+    .diet-score-badge.full-compliance {
+        animation: pulse 2s ease-in-out infinite;
+        box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        transform: scale(1.1);
+    }
+    
+    .diet-score-badge.keto.full-compliance {
+        background: linear-gradient(135deg, #ff5722 0%, #ff7043 100%);
+        border: none;
+        color: white;
+    }
+    
+    .diet-score-badge.keto.full-compliance .score-fill {
+        display: none;
+    }
+    
+    .diet-score-badge.keto.full-compliance .score-text {
+        color: white;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .diet-score-badge.vegan.full-compliance {
+        background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);
+        border: none;
+        color: white;
+    }
+    
+    .diet-score-badge.vegan.full-compliance .score-fill {
+        display: none;
+    }
+    
+    .diet-score-badge.vegan.full-compliance .score-text {
+        color: white;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    /* Checkmark for 100% */
+    .diet-score-badge.full-compliance .score-text::after {
+        content: " ✓";
+        font-size: 1.2em;
+        margin-left: 4px;
+    }
+    
+    /* Pulse animation for 100% badges */
+    @keyframes pulse {
+        0% {
             box-shadow: 0 0 15px rgba(0,0,0,0.2);
-            transform: scale(1.1);
         }
-        
-        .diet-score-badge.keto.full-compliance {
-            background: linear-gradient(135deg, #ff5722 0%, #ff7043 100%);
-            border: none;
-            color: white;
+        50% {
+            box-shadow: 0 0 25px rgba(0,0,0,0.3);
         }
-        
-        .diet-score-badge.keto.full-compliance .score-fill {
-            display: none;
+        100% {
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
         }
-        
-        .diet-score-badge.keto.full-compliance .score-text {
-            color: white;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .diet-score-badge.vegan.full-compliance {
-            background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);
-            border: none;
-            color: white;
-        }
-        
-        .diet-score-badge.vegan.full-compliance .score-fill {
-            display: none;
-        }
-        
-        .diet-score-badge.vegan.full-compliance .score-text {
-            color: white;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        /* Checkmark for 100% */
-        .diet-score-badge.full-compliance .score-text::after {
-            content: " ✓";
-            font-size: 1.2em;
-            margin-left: 4px;
-        }
-        
-        /* Pulse animation for 100% badges */
-        @keyframes pulse {
-            0% {
-                box-shadow: 0 0 15px rgba(0,0,0,0.2);
-            }
-            50% {
-                box-shadow: 0 0 25px rgba(0,0,0,0.3);
-            }
-            100% {
-                box-shadow: 0 0 15px rgba(0,0,0,0.2);
-            }
-        }
-        
-        /* Recipe card with 100% compliance gets special border */
-        .recipe-card.full-keto {
-            border: 3px solid #ff5722 !important;
-            box-shadow: 0 0 20px rgba(255, 87, 34, 0.2);
-        }
-        
-        .recipe-card.full-vegan {
-            border: 3px solid #4CAF50 !important;
-            box-shadow: 0 0 20px rgba(76, 175, 80, 0.2);
-        }
-        
-        .recipe-card.full-both {
-            border: 3px solid #2196F3 !important;
-            box-shadow: 0 0 20px rgba(33, 150, 243, 0.3);
-        }
-        
-        /* Large badge style for full compliance in cards */
-        .diet-badge-large {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: white;
-            padding: 8px 16px;
-            border-radius: 25px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-            z-index: 15;
-            animation: bounce 1s ease-in-out;
-        }
-        
-        .diet-badge-large.keto {
-            color: #ff5722;
-            border: 2px solid #ff5722;
-        }
-        
-        .diet-badge-large.vegan {
-            color: #4CAF50;
-            border: 2px solid #4CAF50;
-        }
-        
-        .diet-badge-large.both {
-            color: #2196F3;
-            border: 2px solid #2196F3;
-            background: linear-gradient(135deg, #fff5f2, #f2fff5);
-        }
-        
-        @keyframes bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-5px); }
-        }
-        
-        /* Score icon */
-        .diet-score-icon {
-            font-size: 1.1em;
-        }
-        
-        /* In recipe cards */
-        .recipe-card .diet-badges {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            z-index: 10;
-        }
-        
-        /* Fix overlapping badges */
-        .recipe-card .diet-badge-large {
-            /* Remove this from top-left since we'll only use diet-badges on right */
-            display: none;
-        }
-        
-        /* In modal */
-        .modal .diet-score-container {
-            display: flex;
-            gap: 8px;
-            margin: 10px 0;
-            flex-wrap: wrap;
-        }
-        
-        /* Existing styles */
-        .substitution-badges-container {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            z-index: 10;
-            max-width: 45%; /* Prevent overlap with buttons */
-        }
-        
-        .substitution-badge {
-            background: rgba(255, 152, 0, 0.9);
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            white-space: nowrap;
-        }
-        
-        .substitution-badge.keto {
-            background: rgba(255, 87, 34, 0.9);
-        }
-        
-        .substitution-badge.vegan {
-            background: rgba(76, 175, 80, 0.9);
-        }
-        
-        .substitution-badge i {
-            font-size: 0.9em;
-        }
-        
-        .make-diet-buttons {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            margin-top: 5px;
-        }
-        
-        .make-diet-btn {
-            background: #2196F3;
-            color: white;
-            border: none;
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-size: 0.85rem;
-            transition: background 0.2s;
-            width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-        }
-        
-        .make-diet-btn .sub-count {
-            font-size: 0.8em;
-            opacity: 0.9;
-        }
-        
-        .make-diet-btn.keto {
-            background: #ff5722;
-        }
-        
-        .make-diet-btn.keto:hover {
-            background: #e64a19;
-        }
-        
-        .make-diet-btn.vegan {
-            background: #4CAF50;
-        }
-        
-        .make-diet-btn.vegan:hover {
-            background: #388E3C;
-        }
-        
-        .make-diet-btn.both {
-            background: #2196F3;
-        }
-        
-        .make-diet-btn.both:hover {
-            background: #1976D2;
-        }
-        
-        .make-diet-btn:hover {
-            background: #1976D2;
-        }
-        
-        .compliance-meter {
-            background: #f0f0f0;
-            border-radius: 4px;
-            height: 24px;
-            position: relative;
-            overflow: hidden;
-            margin: 10px 0;
-        }
-        
-        .progress-bar-diet {
-            background: #4CAF50;
-            height: 100%;
-            transition: width 0.3s ease;
-            display: flex;
-            align-items: center;
-            padding: 0 10px;
-            color: white;
-            font-size: 0.85rem;
-            white-space: nowrap;
-        }
-        
-        .substitution-item {
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            padding: 10px;
-            margin-bottom: 10px;
-            background: #f8f9fa;
-        }
-        
-        .substitution-item .original {
-            font-weight: 500;
-            color: #dc3545;
-        }
-        
-        .suggestion-btn {
-            margin: 5px 5px 0 0;
-            padding: 4px 8px;
-            border: 1px solid #dee2e6;
-            background: white;
-            cursor: pointer;
-            border-radius: 4px;
-            font-size: 0.85rem;
-            transition: all 0.2s;
-        }
-        
-        .suggestion-btn:hover {
-            background: #e9ecef;
-        }
-        
-        .suggestion-btn.selected {
-            background: #4CAF50;
-            color: white;
-            border-color: #4CAF50;
-        }
-        
-        .diet-compliant {
-            border: 2px solid #4CAF50 !important;
-        }
-        
-        .diet-filter-pills {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            justify-content: center;
-        }
-        
-        .diet-pill {
-            padding: 6px 16px;
-            border: 2px solid #dee2e6;
-            border-radius: 20px;
-            background: white;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-size: 0.9rem;
-            user-select: none;
-        }
-        
-        .diet-pill:hover {
-            background: #f8f9fa;
-        }
-        
-        .diet-pill.active {
-            background: #2196F3;
-            color: white;
-            border-color: #2196F3;
-        }
-        
-        .diet-pill.keto.active {
-            background: #ff5722;
-            border-color: #ff5722;
-        }
-        
-        .diet-pill.vegan.active {
-            background: #4CAF50;
-            border-color: #4CAF50;
-        }
-        
-        .diet-pill.both.active {
-            background: #2196F3;
-            border-color: #2196F3;
-        }
-        
-        /* Allow multiple selections */
-        .diet-pill.all {
-            margin-right: 20px;
-            border-color: #6c757d;
-        }
-        
-        .diet-pill.all.active {
-            background: #6c757d;
-            border-color: #6c757d;
-        }
-        
-        /* Tab styles */
-        .nav-tabs .nav-link {
-            color: #495057;
-            border: none;
-            border-bottom: 3px solid transparent;
-            padding: 0.5rem 1rem;
-            margin-bottom: -1px;
-        }
-        
-        .nav-tabs .nav-link:hover {
-            border-color: transparent;
-            color: #2196F3;
-        }
-        
-        .nav-tabs .nav-link.active {
-            color: #2196F3;
-            background-color: transparent;
-            border-color: transparent;
-            border-bottom-color: #2196F3;
-        }
-        
-        .tab-content {
-            padding-top: 20px;
-        }
-        
-        /* Analyzer styles */
-        .analyzer-container {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        
-        .ingredient-textarea {
-            width: 100%;
-            min-height: 150px;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            padding: 10px;
-            font-family: inherit;
-            resize: vertical;
-        }
-        
-        .compliance-preview {
-            padding: 10px;
-            border-radius: 4px;
-            margin-top: 10px;
-            font-size: 0.9rem;
-        }
-        
-        .compliance-preview.compliant {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        
-        .compliance-preview.non-compliant {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        
-        /* Compliance details in modal */
-        .compliance-details {
-            font-size: 0.85rem;
-            color: #6c757d;
-        }
-        
-        /* img.lazy { filter: blur(6px); transition: filter .4s ease; }
-        img.lazy.loaded { filter: none; } */
+    }
+    
+    /* Recipe card with 100% compliance gets special border */
+    .recipe-card.full-keto {
+        border: 3px solid #ff5722 !important;
+        box-shadow: 0 0 20px rgba(255, 87, 34, 0.2);
+    }
+    
+    .recipe-card.full-vegan {
+        border: 3px solid #4CAF50 !important;
+        box-shadow: 0 0 20px rgba(76, 175, 80, 0.2);
+    }
+    
+    .recipe-card.full-both {
+        border: 3px solid #2196F3 !important;
+        box-shadow: 0 0 20px rgba(33, 150, 243, 0.3);
+    }
+    
+    /* Large badge style for full compliance in cards */
+    .diet-badge-large {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: white;
+        padding: 8px 16px;
+        border-radius: 25px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        z-index: 15;
+        animation: bounce 1s ease-in-out;
+    }
+    
+    .diet-badge-large.keto {
+        color: #ff5722;
+        border: 2px solid #ff5722;
+    }
+    
+    .diet-badge-large.vegan {
+        color: #4CAF50;
+        border: 2px solid #4CAF50;
+    }
+    
+    .diet-badge-large.both {
+        color: #2196F3;
+        border: 2px solid #2196F3;
+        background: linear-gradient(135deg, #fff5f2, #f2fff5);
+    }
+    
+    @keyframes bounce {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-5px); }
+    }
+    
+    /* Score icon */
+    .diet-score-icon {
+        font-size: 1.1em;
+    }
+    
+    /* In recipe cards */
+    .recipe-card .diet-badges {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        z-index: 10;
+    }
+    
+    /* Fix overlapping badges */
+    .recipe-card .diet-badge-large {
+        /* Remove this from top-left since we'll only use diet-badges on right */
+        display: none;
+    }
+    
+    /* In modal */
+    .modal .diet-score-container {
+        display: flex;
+        gap: 8px;
+        margin: 10px 0;
+        flex-wrap: wrap;
+    }
+    
+    /* Existing styles */
+    .substitution-badges-container {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        z-index: 10;
+        max-width: 45%; /* Prevent overlap with buttons */
+    }
+    
+    .substitution-badge {
+        background: rgba(255, 152, 0, 0.9);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        white-space: nowrap;
+    }
+    
+    .substitution-badge.keto {
+        background: rgba(255, 87, 34, 0.9);
+    }
+    
+    .substitution-badge.vegan {
+        background: rgba(76, 175, 80, 0.9);
+    }
+    
+    .substitution-badge i {
+        font-size: 0.9em;
+    }
+    
+    .make-diet-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-top: 5px;
+    }
+    
+    .make-diet-btn {
+        background: #2196F3;
+        color: white;
+        border: none;
+        padding: 8px 12px;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        transition: background 0.2s;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+    }
+    
+    .make-diet-btn .sub-count {
+        font-size: 0.8em;
+        opacity: 0.9;
+    }
+    
+    .make-diet-btn.keto {
+        background: #ff5722;
+    }
+    
+    .make-diet-btn.keto:hover {
+        background: #e64a19;
+    }
+    
+    .make-diet-btn.vegan {
+        background: #4CAF50;
+    }
+    
+    .make-diet-btn.vegan:hover {
+        background: #388E3C;
+    }
+    
+    .make-diet-btn.both {
+        background: #2196F3;
+    }
+    
+    .make-diet-btn.both:hover {
+        background: #1976D2;
+    }
+    
+    .make-diet-btn:hover {
+        background: #1976D2;
+    }
+    
+    .compliance-meter {
+        background: #f0f0f0;
+        border-radius: 4px;
+        height: 24px;
+        position: relative;
+        overflow: hidden;
+        margin: 10px 0;
+    }
+    
+    .progress-bar-diet {
+        background: #4CAF50;
+        height: 100%;
+        transition: width 0.3s ease;
+        display: flex;
+        align-items: center;
+        padding: 0 10px;
+        color: white;
+        font-size: 0.85rem;
+        white-space: nowrap;
+    }
+    
+    .substitution-item {
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 10px;
+        margin-bottom: 10px;
+        background: #f8f9fa;
+    }
+    
+    .substitution-item .original {
+        font-weight: 500;
+        color: #dc3545;
+    }
+    
+    .suggestion-btn {
+        margin: 5px 5px 0 0;
+        padding: 4px 8px;
+        border: 1px solid #dee2e6;
+        background: white;
+        cursor: pointer;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        transition: all 0.2s;
+    }
+    
+    .suggestion-btn:hover {
+        background: #e9ecef;
+    }
+    
+    .suggestion-btn.selected {
+        background: #4CAF50;
+        color: white;
+        border-color: #4CAF50;
+    }
+    
+    .diet-compliant {
+        border: 2px solid #4CAF50 !important;
+    }
+    
+    .diet-filter-pills {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        justify-content: center;
+    }
+    
+    .diet-pill {
+        padding: 6px 16px;
+        border: 2px solid #dee2e6;
+        border-radius: 20px;
+        background: white;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.9rem;
+        user-select: none;
+    }
+    
+    .diet-pill:hover {
+        background: #f8f9fa;
+    }
+    
+    .diet-pill.active {
+        background: #2196F3;
+        color: white;
+        border-color: #2196F3;
+    }
+    
+    .diet-pill.keto.active {
+        background: #ff5722;
+        border-color: #ff5722;
+    }
+    
+    .diet-pill.vegan.active {
+        background: #4CAF50;
+        border-color: #4CAF50;
+    }
+    
+    .diet-pill.both.active {
+        background: #2196F3;
+        border-color: #2196F3;
+    }
+    
+    /* Allow multiple selections */
+    .diet-pill.all {
+        margin-right: 20px;
+        border-color: #6c757d;
+    }
+    
+    .diet-pill.all.active {
+        background: #6c757d;
+        border-color: #6c757d;
+    }
+    
+    /* Tab styles */
+    .nav-tabs .nav-link {
+        color: #495057;
+        border: none;
+        border-bottom: 3px solid transparent;
+        padding: 0.5rem 1rem;
+        margin-bottom: -1px;
+    }
+    
+    .nav-tabs .nav-link:hover {
+        border-color: transparent;
+        color: #2196F3;
+    }
+    
+    .nav-tabs .nav-link.active {
+        color: #2196F3;
+        background-color: transparent;
+        border-color: transparent;
+        border-bottom-color: #2196F3;
+    }
+    
+    .tab-content {
+        padding-top: 20px;
+    }
+    
+    /* Analyzer styles */
+    .analyzer-container {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .ingredient-textarea {
+        width: 100%;
+        min-height: 150px;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 10px;
+        font-family: inherit;
+        resize: vertical;
+    }
+    
+    .compliance-preview {
+        padding: 10px;
+        border-radius: 4px;
+        margin-top: 10px;
+        font-size: 0.9rem;
+    }
+    
+    .compliance-preview.compliant {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+    
+    .compliance-preview.non-compliant {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+    
+    /* Compliance details in modal */
+    .compliance-details {
+        font-size: 0.85rem;
+        color: #6c757d;
+    }
+    
+    /* img.lazy { filter: blur(6px); transition: filter .4s ease; }
+    img.lazy.loaded { filter: none; } */
 
-        img.lazy:not(.loaded) {
-            object-fit: contain;      /* show full SVG, don’t stretch */
-            padding: 40px;            /* white space around spinner   */
-        }
+    img.lazy:not(.loaded) {
+        object-fit: contain;      /* show full SVG, don’t stretch */
+        padding: 40px;            /* white space around spinner   */
+    }
 
-        img.lazy.loaded {
-            object-fit: cover;        /* restore full-bleed photo      */
-            padding: 0;               /* remove extra padding          */
-        }
+    img.lazy.loaded {
+        object-fit: cover;        /* restore full-bleed photo      */
+        padding: 0;               /* remove extra padding          */
+    }
 
 
-    </style>
+</style>
+
 </head>
 <body>
     <div class="container py-5">
@@ -799,17 +800,22 @@
 
         let currentDietFilter = 'all';
         let currentDietFilters = []; // Support multiple diet filters
+        let currentDietThresholds = {}; // Track thresholds for each diet: {keto: 0.8, vegan: 0.9, etc}
         let currentRecipe = null;
         let currentSubstitutions = null;
         
-        // Diet score badge creation function
+        // Diet score badge creation function with threshold-aware styling
         function createDietScoreBadge(diet, score, size = 'normal') {
+            const threshold = currentDietThresholds[diet] || 1.0;
+            const thresholdPercent = threshold * 100;
             const isHighCompliance = score >= 80;
             const isFullCompliance = score === 100;
+            const meetsThreshold = score >= thresholdPercent;
             
             let badgeClass = `diet-score-badge ${diet}`;
             if (isHighCompliance) badgeClass += ' high-compliance';
             if (isFullCompliance) badgeClass += ' full-compliance';
+            if (meetsThreshold) badgeClass += ' meets-threshold';
             
             // Handle "both" diet badge
             if (diet === 'both') {
@@ -821,6 +827,7 @@
                         <div class="score-text">
                             <span class="diet-score-icon">${icon}</span>
                             <span>${text}</span>
+                            ${threshold < 1.0 ? `<small style="opacity: 0.7;">≥${thresholdPercent}%</small>` : ''}
                         </div>
                     </div>
                 `;
@@ -837,6 +844,7 @@
                     <div class="score-text">
                         <span class="diet-score-icon">${icon}</span>
                         <span>${text}</span>
+                        ${threshold < 1.0 ? `<small style="opacity: 0.7;">≥${thresholdPercent}%</small>` : ''}
                     </div>
                 </div>
             `;
@@ -891,6 +899,15 @@
                 },
                 templateResult: function(data) {
                     if (data.newTag) {
+                        // Parse the threshold for better display
+                        const match = data.text.match(/^#(keto|vegan|both)(?::([\d.]+))?$/);
+                        if (match) {
+                            const diet = match[1];
+                            const threshold = match[2] ? parseFloat(match[2]) : 1.0;
+                            const thresholdPercent = Math.round(threshold * 100);
+                            const dietDisplay = diet === 'both' ? 'keto & vegan' : diet;
+                            return $('<span><em>' + data.text + '</em> (≥' + thresholdPercent + '% ' + dietDisplay + ')</span>');
+                        }
                         return $('<span><em>' + data.text + '</em> (custom threshold)</span>');
                     }
                     return data.text;
@@ -919,10 +936,17 @@
             if (diet === 'all') {
                 currentDietFilter = 'all';
                 currentDietFilters = [];
+                currentDietThresholds = {}; // Clear thresholds when switching to "all"
                 
                 // Update pill styles
                 document.querySelectorAll('.diet-pill').forEach(pill => {
                     pill.classList.remove('active');
+                    // Restore original text if it was modified
+                    const originalText = pill.getAttribute('data-original-text');
+                    if (originalText) {
+                        pill.innerHTML = originalText;
+                        pill.removeAttribute('data-original-text');
+                    }
                 });
                 document.querySelector('[data-diet="all"]').classList.add('active');
                 
@@ -944,11 +968,21 @@
                 // Remove from active filters
                 pill.classList.remove('active');
                 currentDietFilters = currentDietFilters.filter(d => d !== diet);
+                delete currentDietThresholds[diet]; // Remove threshold for this diet
+                
+                // Restore original pill text
+                const originalText = pill.getAttribute('data-original-text');
+                if (originalText) {
+                    pill.innerHTML = originalText;
+                    pill.removeAttribute('data-original-text');
+                }
             } else {
                 // Add to active filters
                 pill.classList.add('active');
                 if (!currentDietFilters.includes(diet)) {
                     currentDietFilters.push(diet);
+                    // Set default threshold to 1.0 (100%) for pill selections
+                    currentDietThresholds[diet] = 1.0;
                 }
             }
             
@@ -977,13 +1011,17 @@
             const ids = tags ? tags.filter(t => /^\d+$/.test(t)) : [];
             let extras = tags ? tags.filter(t => !/^\d+$/.test(t)) : [];
             
-            // Extract diet filters from tags
+            // Extract diet filters and thresholds from tags
             const tagsFilters = [];
+            const tagsThresholds = {};
             extras.forEach(tag => {
                 if (tag.startsWith('#')) {
                     const match = tag.match(/^#(keto|vegan|both)(?::([\d.]+))?$/);
                     if (match) {
-                        tagsFilters.push(match[1]);
+                        const diet = match[1];
+                        const threshold = match[2] ? parseFloat(match[2]) : 1.0;
+                        tagsFilters.push(diet);
+                        tagsThresholds[diet] = threshold;
                     }
                 }
             });
@@ -1001,12 +1039,15 @@
                 // Add diet filters from pills WITH :0 threshold to get all recipes
                 currentDietFilters.forEach(diet => {
                     if (!extras.some(e => e.includes(`#${diet}`))) {
-                        extras.push(`#${diet}:100`);
+                        const threshold = currentDietThresholds[diet] || 1.0;
+                        extras.push(`#${diet}:${threshold}`);
                     }
                 });
             } else if (tagsFilters.length > 0) {
-                // Tags take precedence, update currentDietFilters
+                // Tags take precedence, update currentDietFilters and thresholds
                 currentDietFilters = tagsFilters;
+                currentDietThresholds = { ...currentDietThresholds, ...tagsThresholds };
+                
                 // Update pill UI to match
                 document.querySelectorAll('.diet-pill').forEach(pill => {
                     pill.classList.remove('active');
@@ -1014,17 +1055,28 @@
                 document.querySelector('[data-diet="all"]').classList.remove('active');
                 tagsFilters.forEach(diet => {
                     const pill = document.querySelector(`[data-diet="${diet}"]`);
-                    if (pill) pill.classList.add('active');
+                    if (pill) {
+                        pill.classList.add('active');
+                        // Update pill text to show threshold if it's not 1.0
+                        const threshold = tagsThresholds[diet] || 1.0;
+                        if (threshold < 1.0) {
+                            const originalText = pill.getAttribute('data-original-text') || pill.textContent;
+                            pill.setAttribute('data-original-text', originalText);
+                            const thresholdPercent = Math.round(threshold * 100);
+                            pill.innerHTML = `${originalText} (≥${thresholdPercent}%)`;
+                        }
+                    }
                 });
             }
             
             const qParam = [...ids, ...extras].join(' ').trim();
 
             // If empty query but diet filters active, search with just the filters
-            const finalQuery = qParam || (currentDietFilters.length > 0 ? currentDietFilters.map(d => `#${d}:0`).join(' ') : '');
+            const finalQuery = qParam || (currentDietFilters.length > 0 ? currentDietFilters.map(d => `#${d}:${currentDietThresholds[d] || 0}`).join(' ') : '');
 
             console.log('Searching with query:', finalQuery);
             console.log('Current diet filters:', currentDietFilters);
+            console.log('Current thresholds:', currentDietThresholds);
 
             if (finalQuery) {
                 $.get('/search', { q: finalQuery })
@@ -1043,9 +1095,11 @@
         function passesFilters(r){
             if(currentDietFilters.length===0) return true;
             return currentDietFilters.every(diet=>{
-                if(diet==='keto')  return r.keto_score===100;
-                if(diet==='vegan') return r.vegan_score===100;
-                if(diet==='both')  return r.keto_score===100 && r.vegan_score===100;
+                const threshold = currentDietThresholds[diet] || 1.0;
+                const thresholdPercent = threshold * 100;
+                if(diet==='keto')  return r.keto_score >= thresholdPercent;
+                if(diet==='vegan') return r.vegan_score >= thresholdPercent;
+                if(diet==='both')  return r.keto_score >= thresholdPercent && r.vegan_score >= thresholdPercent;
                 return true;
             });
         }
