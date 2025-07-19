@@ -759,7 +759,6 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     <button id="makeCompliantBtn" type="button" class="btn btn-primary" style="display: none;">
                         <i class="fas fa-magic"></i> Make It Diet-Compliant
                     </button>
@@ -780,7 +779,6 @@
                     <div id="substitutionContent"></div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-success" onclick="applyAllSubstitutions()">
                         Apply All Substitutions
                     </button>
@@ -1395,8 +1393,60 @@ function displayResults(results) {
                     }
                 });
             } else {
-                // No specific diet selected - hide all diet-specific buttons
+                // No specific diet selected - show all available diet conversion buttons
                 makeCompliantBtn.hide();
+                
+                // Show keto button if recipe is not 100% keto
+                if ((recipe.keto_score ?? 0) < 100) {
+                    const subCount = Math.ceil((recipe.ingredients?.length || 0) * (100 - recipe.keto_score) / 100);
+                    const ketoBtn = $(`
+                        <button type="button" class="btn btn-primary make-diet-btn keto">
+                            <i class="fas fa-magic"></i> Make It Keto
+                            <span class="sub-count">(${subCount} sub${subCount > 1 ? 's' : ''})</span>
+                        </button>
+                    `);
+                    
+                    ketoBtn.on('click', function() {
+                        makeRecipeCompliant(recipe, 'keto');
+                    });
+                    
+                    modalFooter.append(ketoBtn);
+                }
+                
+                // Show vegan button if recipe is not 100% vegan
+                if ((recipe.vegan_score ?? 0) < 100) {
+                    const subCount = Math.ceil((recipe.ingredients?.length || 0) * (100 - recipe.vegan_score) / 100);
+                    const veganBtn = $(`
+                        <button type="button" class="btn btn-primary make-diet-btn vegan">
+                            <i class="fas fa-magic"></i> Make It Vegan
+                            <span class="sub-count">(${subCount} sub${subCount > 1 ? 's' : ''})</span>
+                        </button>
+                    `);
+                    
+                    veganBtn.on('click', function() {
+                        makeRecipeCompliant(recipe, 'vegan');
+                    });
+                    
+                    modalFooter.append(veganBtn);
+                }
+                
+                // Show both button if recipe is not 100% both keto and vegan
+                const bothScore = Math.min(recipe.keto_score ?? 0, recipe.vegan_score ?? 0);
+                if (bothScore < 100) {
+                    const subCount = Math.ceil((recipe.ingredients?.length || 0) * (100 - bothScore) / 100);
+                    const bothBtn = $(`
+                        <button type="button" class="btn btn-primary make-diet-btn both">
+                            <i class="fas fa-magic"></i> Make It Keto & Vegan
+                            <span class="sub-count">(${subCount} sub${subCount > 1 ? 's' : ''})</span>
+                        </button>
+                    `);
+                    
+                    bothBtn.on('click', function() {
+                        makeRecipeCompliant(recipe, 'both');
+                    });
+                    
+                    modalFooter.append(bothBtn);
+                }
             }
             
             // Show modal
