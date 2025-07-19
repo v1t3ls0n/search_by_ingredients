@@ -23,6 +23,8 @@
 - **Dynamic substitution system:** Combines and enhances substitutions for multiple diets (e.g., “unsweetened almond milk” for both keto and vegan).
 - **Real-time diet scoring:** Percentage-based compliance, badge gradients for partial matches.
 - **API and CLI support:** Powerful endpoints and batch tools for search, analyze, and export.
+- **Automatic recipe saving:** All modified recipes automatically saved to database with unique ID management.
+- **Saved variations management:** View, export, and manage all recipe modifications with detailed history.
 
 ---
 
@@ -103,6 +105,16 @@ utils/
 
 ![Search results with diet badges](screenshots/ui1.png)
 
+### Threshold-Based Diet Filtering
+
+Advanced filtering with compliance thresholds allows users to find recipes that meet specific diet requirements:
+
+- `#keto:0.8` — Recipes with at least 80% keto compliance
+- `#vegan:0.9` — Recipes with at least 90% vegan compliance  
+- `#both:0.7` — Recipes compliant with both keto and vegan at 70%+
+
+![Threshold-based diet filtering](screenshots/ui5.png)
+
 ### Dynamic Substitution System
 
 - Single-diet and multi-diet substitutions
@@ -123,6 +135,32 @@ utils/
 
 ![Recipe analysis screen](screenshots/ui3.png)
 
+### Saved Recipe Variations
+
+The system automatically saves all modified recipes to a database with unique ID management to prevent duplicates:
+
+#### Automatic Database Sync
+- **Seamless saving**: All recipe modifications are automatically saved to the database
+- **Unique ID system**: Prevents duplicate recipes between localStorage and database
+- **Automatic cleanup**: Removes localStorage entries after successful database save
+- **Error resilience**: Falls back to localStorage if database save fails
+
+#### Saved Variations Interface
+- **Unified view**: Shows all saved recipes from both localStorage and database
+- **Source indicators**: Visual badges distinguish database (🗄️) vs localStorage (💾) recipes
+- **Clickable cards**: View detailed recipe information and modification history
+- **Export functionality**: Download saved recipe variations
+
+![Saved recipe variations interface](screenshots/ui6.png)
+
+#### Recipe Modification Details
+- **Modification tracking**: Shows original vs modified ingredients
+- **Substitution history**: Displays all changes made for diet compliance
+- **Score improvements**: Tracks before/after diet compliance scores
+- **Detailed metadata**: Modification date, diet type, and change count
+
+![Recipe modification details](screenshots/U7.png)
+
 
 ---
 
@@ -137,6 +175,7 @@ utils/
 
 ## 📚 API Endpoints
 
+### Core Functionality
 1. `GET /` — Main UI
 2. `GET /search` — Recipe search with diet filters
 3. `GET /select2` — Ingredient autocomplete
@@ -145,6 +184,12 @@ utils/
 6. `GET /check-compliance` — Compliance scoring
 7. `GET /export-modified` — Export recipes
 8. `POST /convert-recipes` — Batch conversion
+
+### Database Management
+9. `POST /save-modified-recipe` — Save recipe variation to database
+10. `GET /get-modified-recipes` — Retrieve saved recipes (supports filtering by id, diet, title, unique_id)
+11. `DELETE /delete-modified-recipe/<id>` — Delete specific recipe variation
+12. `DELETE /clear-all-modified-recipes` — Clear all saved recipes
 
 ---
 
@@ -174,6 +219,17 @@ Search: "#both:0.7"
 
 ```
 
+### Save and Manage Recipe Variations
+```
+
+1. Apply diet substitutions to any recipe
+2. Recipe automatically saved to database
+3. View all saved variations in "Saved Variations" tab
+4. Export or delete individual variations
+5. Track modification history and compliance improvements
+
+```
+
 ---
 
 ## 🔮 Future Improvements
@@ -192,8 +248,10 @@ Search By Ingredients 2.0 transforms simple diet classification into a comprehen
 - **Diets intersect intelligently**: Dynamic, maintainable substitution logic.
 - **Context enhances compliance**: “Use sparingly” and “unsweetened” modifiers bridge gaps.
 - **UI follows intent**: Visual cues reduce cognitive load.
+- **Persistent recipe management**: Automatic database saving with unique ID system prevents duplicates.
+- **Complete workflow**: From search to modification to saving and management.
 
-This system empowers users—especially those with multiple dietary needs—to cook and eat with confidence and creativity.
+This system empowers users—especially those with multiple dietary needs—to cook and eat with confidence and creativity, while maintaining a complete history of their recipe modifications.
 
 ---
 

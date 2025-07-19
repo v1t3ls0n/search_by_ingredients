@@ -16,6 +16,8 @@ import sys
 from time import sleep
 from typing import List
 import json
+import sqlite3
+from datetime import datetime
 
 from decouple import config
 from flask import Flask, jsonify, render_template, request, session
@@ -72,6 +74,41 @@ def _bootstrap():
 
 
 client, INGREDIENTS = _bootstrap()
+
+# ── SQLite database for modified recipes -------------------------
+def init_db():
+    """Initialize SQLite database for storing modified recipes."""
+    conn = sqlite3.connect('modified_recipes.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS modified_recipes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recipe_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            original_ingredients TEXT NOT NULL,
+            modified_ingredients TEXT NOT NULL,
+            diet_modification TEXT NOT NULL,
+            substitutions_applied TEXT NOT NULL,
+            changes_made INTEGER NOT NULL,
+            original_keto_score REAL,
+            original_vegan_score REAL,
+            new_keto_score REAL,
+            new_vegan_score REAL,
+            modification_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            description TEXT,
+            instructions TEXT,
+            photo_url TEXT,
+            unique_id TEXT UNIQUE
+        )
+    ''')
+    
+    conn.commit()
+    conn.close()
+    log.info("SQLite database initialized for modified recipes")
+
+# Initialize database
+init_db()
 
 # ── routes --------------------------------------------------------
 
@@ -523,6 +560,213 @@ def recipe_metrics():
         })
 
     return jsonify({"metrics": metrics})
+
+
+@app.route("/save-modified-recipe", methods=["POST"])
+def save_modified_recipe():
+    """
+    Save a modified recipe to the database.
+    
+    Expected JSON body:
+    {
+        "recipe_id": "original_recipe_id",
+        "title": "Recipe Title",
+        "original_ingredients": ["ingredient1", "ingredient2"],
+        "modified_ingredients": ["modified1", "modified2"],
+        "diet_modification": "keto|vegan|both",
+        "substitutions_applied": {"original": "substitution"},
+        "changes_made": 3,
+        "original_keto_score": 50.0,
+        "original_vegan_score": 80.0,
+        "new_keto_score": 100.0,
+        "new_vegan_score": 100.0,
+        "description": "Recipe description",
+        "instructions": ["step1", "step2"],
+        "photo_url": "https://example.com/photo.jpg"
+    }
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No JSON data provided"}), 400
+    
+    try:
+        conn = sqlite3.connect('modified_recipes.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO modified_recipes (
+                recipe_id, title, original_ingredients, modified_ingredients,
+                diet_modification, substitutions_applied, changes_made,
+                original_keto_score, original_vegan_score, new_keto_score, new_vegan_score,
+                description, instructions, photo_url, unique_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            data.get('recipe_id', ''),
+            data.get('title', ''),
+            json.dumps(data.get('original_ingredients', [])),
+            json.dumps(data.get('modified_ingredients', [])),
+            data.get('diet_modification', ''),
+            json.dumps(data.get('substitutions_applied', {})),
+            data.get('changes_made', 0),
+            data.get('original_keto_score', 0.0),
+            data.get('original_vegan_score', 0.0),
+            data.get('new_keto_score', 0.0),
+            data.get('new_vegan_score', 0.0),
+            data.get('description', ''),
+            json.dumps(data.get('instructions', [])),
+            data.get('photo_url', ''),
+            data.get('unique_id', '')
+        ))
+        
+        recipe_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "id": recipe_id,
+            "message": "Recipe variation saved successfully"
+        })
+        
+    except Exception as e:
+        log.error(f"Error saving modified recipe: {e}")
+        return jsonify({"error": "Failed to save recipe variation"}), 500
+
+
+@app.route("/get-modified-recipes")
+def get_modified_recipes():
+    """
+    Retrieve modified recipes from the database.
+    Optional query parameters:
+    - id: get specific recipe by ID
+    - diet: filter by diet modification (keto, vegan, both)
+    - title: filter by recipe title
+    - unique_id: filter by unique identifier
+    - limit: limit number of results (default 50)
+    """
+    try:
+        recipe_id = request.args.get('id')
+        diet_filter = request.args.get('diet')
+        title_filter = request.args.get('title')
+        unique_id_filter = request.args.get('unique_id')
+        limit = int(request.args.get('limit', 50))
+        
+        conn = sqlite3.connect('modified_recipes.db')
+        cursor = conn.cursor()
+        
+        query = '''
+            SELECT * FROM modified_recipes
+        '''
+        params = []
+        
+        # Build WHERE clause
+        conditions = []
+        if recipe_id:
+            conditions.append('id = ?')
+            params.append(int(recipe_id))
+        
+        if diet_filter:
+            conditions.append('diet_modification = ?')
+            params.append(diet_filter)
+        
+        if title_filter:
+            conditions.append('title = ?')
+            params.append(title_filter)
+        
+        if unique_id_filter:
+            conditions.append('unique_id = ?')
+            params.append(unique_id_filter)
+        
+        if conditions:
+            query += ' WHERE ' + ' AND '.join(conditions)
+        
+        # Add ORDER BY and LIMIT (only if not fetching by ID)
+        if not recipe_id:
+            query += ' ORDER BY modification_date DESC LIMIT ?'
+            params.append(limit)
+        
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        
+        # Get column names
+        columns = [description[0] for description in cursor.description]
+        
+        recipes = []
+        for row in rows:
+            recipe = dict(zip(columns, row))
+            
+            # Parse JSON fields
+            recipe['original_ingredients'] = json.loads(recipe['original_ingredients'])
+            recipe['modified_ingredients'] = json.loads(recipe['modified_ingredients'])
+            recipe['substitutions_applied'] = json.loads(recipe['substitutions_applied'])
+            recipe['instructions'] = json.loads(recipe['instructions'])
+            
+            recipes.append(recipe)
+        
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "recipes": recipes,
+            "count": len(recipes)
+        })
+        
+    except Exception as e:
+        log.error(f"Error retrieving modified recipes: {e}")
+        return jsonify({"error": "Failed to retrieve recipe variations"}), 500
+
+
+@app.route("/delete-modified-recipe/<int:recipe_id>", methods=["DELETE"])
+def delete_modified_recipe(recipe_id):
+    """
+    Delete a modified recipe from the database.
+    """
+    try:
+        conn = sqlite3.connect('modified_recipes.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('DELETE FROM modified_recipes WHERE id = ?', (recipe_id,))
+        
+        if cursor.rowcount == 0:
+            conn.close()
+            return jsonify({"error": "Recipe not found"}), 404
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "message": "Recipe variation deleted successfully"
+        })
+        
+    except Exception as e:
+        log.error(f"Error deleting modified recipe: {e}")
+        return jsonify({"error": "Failed to delete recipe variation"}), 500
+
+
+@app.route("/clear-all-modified-recipes", methods=["DELETE"])
+def clear_all_modified_recipes():
+    """
+    Delete all modified recipes from the database.
+    """
+    try:
+        conn = sqlite3.connect('modified_recipes.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('DELETE FROM modified_recipes')
+        deleted_count = cursor.rowcount
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            "success": True,
+            "message": f"All {deleted_count} recipe variations deleted successfully"
+        })
+        
+    except Exception as e:
+        log.error(f"Error clearing all modified recipes: {e}")
+        return jsonify({"error": "Failed to clear all recipe variations"}), 500
 
 
 # ── dev runner ----------------------------------------------------

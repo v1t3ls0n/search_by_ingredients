@@ -202,6 +202,20 @@
         box-shadow: 0 0 20px rgba(33, 150, 243, 0.3);
     }
     
+    /* Saved recipe card styling */
+    .recipe-card[onclick] {
+        transition: all 0.3s ease;
+    }
+    
+    .recipe-card[onclick]:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    
+    .recipe-card[onclick]:active {
+        transform: translateY(-2px);
+    }
+    
     /* Large badge style for full compliance in cards */
     .diet-badge-large {
         position: absolute;
@@ -482,6 +496,8 @@
         margin-bottom: -1px;
     }
     
+
+    
     .nav-tabs .nav-link:hover {
         border-color: transparent;
         color: #2196F3;
@@ -574,6 +590,11 @@
                     <i class="fas fa-chart-pie"></i> Analyze Recipe
                 </button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="saved-tab" data-bs-toggle="tab" data-bs-target="#saved-content" type="button" role="tab">
+                    <i class="fas fa-save"></i> Saved Variations
+                </button>
+            </li>
         </ul>
         
         <!-- Tab Content -->
@@ -648,6 +669,25 @@
                             </div>
                             
                             <div id="analysis-results" class="mt-4"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Saved Variations Tab -->
+            <div class="tab-pane fade" id="saved-content" role="tabpanel">
+                <div class="row justify-content-center">
+                    <div class="col-md-10">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <h4>Saved Recipe Variations</h4>
+                            <div class="d-flex gap-2 align-items-center">
+                                <button class="btn btn-outline-danger" onclick="clearAllSavedRecipes()">
+                                    <i class="fas fa-trash"></i> Clear All
+                                </button>
+                            </div>
+                        </div>
+                        <div id="saved-recipes-container">
+                            <!-- Saved recipes will be loaded here -->
                         </div>
                     </div>
                 </div>
@@ -806,6 +846,11 @@
         
         // Diet score badge creation function with threshold-aware styling
         function createDietScoreBadge(diet, score, size = 'normal') {
+            // Handle null, undefined, or invalid scores
+            if (score === null || score === undefined || isNaN(score)) {
+                score = 0;
+            }
+            
             const threshold = currentDietThresholds[diet] || 1.0;
             const thresholdPercent = threshold * 100;
             const isHighCompliance = score >= 80;
@@ -922,9 +967,14 @@
             });
 
             // Initialize Bootstrap tabs
-            const triggerTabList = document.querySelectorAll('#search-tab, #analyze-tab');
+            const triggerTabList = document.querySelectorAll('#search-tab, #analyze-tab, #saved-tab');
             triggerTabList.forEach(triggerEl => {
                 new bootstrap.Tab(triggerEl);
+            });
+            
+            // Load saved recipes when saved tab is clicked
+            document.getElementById('saved-tab').addEventListener('click', function() {
+                loadSavedRecipes();
             });
             
             // Live preview for analyzer
@@ -1367,14 +1417,21 @@ function displayResults(results) {
             const response = await fetch('/substitutions?' + params.toString());
             const data = await response.json();
             
-            currentSubstitutions = data;
+            // Add original ingredients to the substitutions data
+            currentSubstitutions = {
+                ...data,
+                original_ingredients: recipe.ingredients
+            };
             
             // Show substitution modal
-            showSubstitutionModal(recipe, data, diet);
+            showSubstitutionModal(recipe, currentSubstitutions, diet);
         }
         
         // Show substitution modal with score badge
         function showSubstitutionModal(recipe, substitutions, diet) {
+            // Ensure currentRecipe is set
+            currentRecipe = recipe;
+            
             const dietDisplay = diet === 'both' ? 'keto & vegan' : diet;
             const scoreBadge = createDietScoreBadge(diet, substitutions.compliance_percentage);
             
@@ -1437,6 +1494,12 @@ function displayResults(results) {
         
         // Apply all substitutions
         async function applyAllSubstitutions() {
+            // Check if we have the necessary data
+            if (!currentSubstitutions) {
+                showNotification('Substitution data not available. Please try again.', 'error');
+                return;
+            }
+            
             const selectedSubstitutions = {};
             
             // Get selected substitutions
@@ -1449,12 +1512,20 @@ function displayResults(results) {
             // Get the diet from currentSubstitutions
             const diet = currentSubstitutions.diet === "keto & vegan" ? "both" : currentSubstitutions.diet;
             
+            // Use the original ingredients from the substitution analysis
+            const originalIngredients = currentSubstitutions.original_ingredients;
+            
+            if (!originalIngredients) {
+                showNotification('Original ingredients not available. Please try again.', 'error');
+                return;
+            }
+            
             // Apply substitutions via API
             const response = await fetch('/modify-recipe', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    ingredients: currentRecipe.ingredients,
+                    ingredients: originalIngredients,
                     diet: diet,
                     auto_substitute: true,
                     preserve_quantities: true
@@ -1463,18 +1534,41 @@ function displayResults(results) {
             
             const data = await response.json();
             
-            // Update current recipe
-            currentRecipe.ingredients = data.modified_ingredients;
+            // Create modified recipe variation - handle case where currentRecipe might be null
+            const recipeTitle = currentRecipe ? currentRecipe.title : 'Modified Recipe';
+            const recipeId = currentRecipe ? (currentRecipe.id || currentRecipe.title) : `custom_${Date.now()}`;
+            const originalKetoScore = currentRecipe ? currentRecipe.keto_score : 0;
+            const originalVeganScore = currentRecipe ? currentRecipe.vegan_score : 0;
+            
+            const modifiedRecipe = {
+                title: recipeTitle,
+                ingredients: data.modified_ingredients,
+                instructions: currentRecipe ? currentRecipe.instructions : [],
+                description: currentRecipe ? currentRecipe.description : 'Modified recipe variation',
+                photo_url: currentRecipe ? currentRecipe.photo_url : '',
+                original_recipe_id: recipeId,
+                modification_date: new Date().toISOString(),
+                diet_modification: diet,
+                substitutions_applied: data.substitutions,
+                changes_made: data.changes_made,
+                original_keto_score: originalKetoScore,
+                original_vegan_score: originalVeganScore
+            };
+            
+            // Update scores for the modified recipe
             if (diet === 'both') {
-                // Update both scores
-                if (data.keto_percentage !== undefined) {
-                    currentRecipe.keto_score = data.keto_percentage;
-                }
-                if (data.vegan_percentage !== undefined) {
-                    currentRecipe.vegan_score = data.vegan_percentage;
-                }
+                modifiedRecipe.keto_score = data.keto_percentage !== undefined ? data.keto_percentage : 0;
+                modifiedRecipe.vegan_score = data.vegan_percentage !== undefined ? data.vegan_percentage : 0;
             } else {
-                currentRecipe[`${diet}_score`] = data.new_compliance_percentage;
+                modifiedRecipe[`${diet}_score`] = data.new_compliance_percentage || 0;
+            }
+            
+            // Save to localStorage
+            saveModifiedRecipe(modifiedRecipe);
+            
+            // Update current recipe for display if it exists
+            if (currentRecipe) {
+                Object.assign(currentRecipe, modifiedRecipe);
             }
             
             // Close modal and show success
@@ -1482,10 +1576,12 @@ function displayResults(results) {
             
             // Show success notification
             const dietDisplay = diet === 'both' ? 'keto & vegan' : diet;
-            showNotification(`Recipe is now ${data.new_compliance_percentage}% ${dietDisplay}-compliant! ${data.changes_made} substitutions made.`);
+            showNotification(`Recipe is now ${data.new_compliance_percentage}% ${dietDisplay}-compliant! ${data.changes_made} substitutions made. Recipe variation saved to database!`);
             
-            // Refresh the recipe details
-            showRecipeDetails(currentRecipe);
+            // Refresh the recipe details if currentRecipe exists
+            if (currentRecipe) {
+                showRecipeDetails(currentRecipe);
+            }
         }
         
         // Analyzer functions with score badges
@@ -1556,6 +1652,33 @@ ${data.formatted_text}
             
             const data = await response.json();
             
+            // Create modified recipe for saving
+            const modifiedRecipe = {
+                title: 'Custom Recipe',
+                ingredients: data.modified_ingredients,
+                instructions: [],
+                description: 'Custom recipe modified for diet compliance',
+                photo_url: '',
+                original_recipe_id: 'custom',
+                modification_date: new Date().toISOString(),
+                diet_modification: diet,
+                substitutions_applied: data.substitutions,
+                changes_made: data.changes_made,
+                original_keto_score: 0,
+                original_vegan_score: 0
+            };
+            
+            // Update scores for the modified recipe
+            if (diet === 'both') {
+                modifiedRecipe.keto_score = data.keto_percentage !== undefined ? data.keto_percentage : 0;
+                modifiedRecipe.vegan_score = data.vegan_percentage !== undefined ? data.vegan_percentage : 0;
+            } else {
+                modifiedRecipe[`${diet}_score`] = data.new_compliance_percentage || 0;
+            }
+            
+            // Save to localStorage
+            saveModifiedRecipe(modifiedRecipe);
+            
             // Update ingredient list
             document.getElementById('ingredient-input').value = data.modified_ingredients.join('\n');
             
@@ -1582,11 +1705,16 @@ ${data.formatted_text}
                                 `<li>${orig} → ${sub === 'REMOVED' ? '<em>removed</em>' : sub}</li>`
                             ).join('')}
                         </ul>
+                        <div class="mt-3">
+                            <button class="btn btn-info" onclick="showSavedRecipes()">
+                                <i class="fas fa-save"></i> View Saved Variations
+                            </button>
+                        </div>
                     </div>
                 </div>
             `;
             
-            showNotification(`Recipe successfully modified to be ${dietDisplay}-compliant!`);
+            showNotification(`Recipe successfully modified to be ${dietDisplay}-compliant! Recipe variation saved to database!`);
         }
         
         async function exportCurrentRecipe() {
@@ -1655,6 +1783,498 @@ ${data.formatted_text}
             } catch (error) {
                 console.error('Preview error:', error);
             }
+        }
+        
+        // Storage functions for saving recipe variations
+        function saveModifiedRecipe(recipe) {
+            // Save to both localStorage and database automatically
+            saveToLocalStorage(recipe);
+            saveToDatabase(recipe);
+        }
+        
+        function saveToLocalStorage(recipe) {
+            try {
+                const savedRecipes = getSavedRecipes();
+                
+                // Generate unique ID for this variation (consistent with database format)
+                const uniqueId = `${recipe.original_recipe_id}_${recipe.diet_modification}_${recipe.modification_date}`;
+                const recipeId = uniqueId;
+                recipe.id = recipeId;
+                recipe.unique_id = uniqueId;
+                
+                // Check if recipe with same unique_id already exists
+                const existingIndex = savedRecipes.findIndex(r => r.unique_id === uniqueId);
+                if (existingIndex !== -1) {
+                    // Update existing recipe instead of adding duplicate
+                    savedRecipes[existingIndex] = recipe;
+                } else {
+                    // Add new recipe
+                    savedRecipes.push(recipe);
+                }
+                
+                // Save back to localStorage
+                localStorage.setItem('savedRecipeVariations', JSON.stringify(savedRecipes));
+                
+                console.log('Recipe variation saved to localStorage:', recipeId);
+                return recipeId;
+            } catch (error) {
+                console.error('Error saving recipe to localStorage:', error);
+                showNotification('Failed to save recipe variation to localStorage', 'error');
+            }
+        }
+        
+
+        
+        function getSavedRecipes() {
+            try {
+                const saved = localStorage.getItem('savedRecipeVariations');
+                return saved ? JSON.parse(saved) : [];
+            } catch (error) {
+                console.error('Error loading saved recipes:', error);
+                return [];
+            }
+        }
+        
+        async function deleteSavedRecipe(recipeId) {
+            // Check if it's a database recipe (prefixed with 'db_')
+            if (recipeId.startsWith('db_')) {
+                const dbId = recipeId.replace('db_', '');
+                try {
+                    const response = await fetch(`/delete-modified-recipe/${dbId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        showNotification('Recipe variation deleted from database');
+                        loadSavedRecipes(); // Refresh the display
+                    } else {
+                        showNotification('Failed to delete recipe variation', 'error');
+                    }
+                } catch (error) {
+                    console.error('Error deleting recipe from database:', error);
+                    showNotification('Failed to delete recipe variation from database', 'error');
+                }
+            } else {
+                // localStorage recipe
+                try {
+                    const savedRecipes = getSavedRecipes();
+                    const filteredRecipes = savedRecipes.filter(recipe => recipe.id !== recipeId);
+                    localStorage.setItem('savedRecipeVariations', JSON.stringify(filteredRecipes));
+                    showNotification('Recipe variation deleted from localStorage');
+                    loadSavedRecipes(); // Refresh the display
+                } catch (error) {
+                    console.error('Error deleting recipe from localStorage:', error);
+                    showNotification('Failed to delete recipe variation from localStorage', 'error');
+                }
+            }
+        }
+        
+
+        
+        async function saveToDatabase(recipe) {
+            try {
+                // Create unique identifier
+                const uniqueId = `${recipe.original_recipe_id}_${recipe.diet_modification}_${recipe.modification_date}`;
+                
+                // Prepare data for database
+                const dbData = {
+                    recipe_id: recipe.original_recipe_id,
+                    title: recipe.title,
+                    original_ingredients: recipe.original_ingredients || recipe.ingredients,
+                    modified_ingredients: recipe.ingredients,
+                    diet_modification: recipe.diet_modification,
+                    substitutions_applied: recipe.substitutions_applied,
+                    changes_made: recipe.changes_made,
+                    original_keto_score: recipe.original_keto_score,
+                    original_vegan_score: recipe.original_vegan_score,
+                    new_keto_score: recipe.keto_score,
+                    new_vegan_score: recipe.vegan_score,
+                    description: recipe.description,
+                    instructions: recipe.instructions,
+                    photo_url: recipe.photo_url,
+                    unique_id: uniqueId
+                };
+                
+                const response = await fetch('/save-modified-recipe', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(dbData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    console.log('Recipe variation automatically saved to database:', result.id);
+                    // Remove from localStorage after successful database save
+                    await removeFromLocalStorage(recipe.id);
+                } else {
+                    console.error('Failed to save to database:', result.error);
+                }
+            } catch (error) {
+                console.error('Error saving recipe to database:', error);
+                // Keep in localStorage if database save fails
+            }
+        }
+        
+        async function removeFromLocalStorage(recipeId) {
+            try {
+                const savedRecipes = getSavedRecipes();
+                const filteredRecipes = savedRecipes.filter(recipe => recipe.id !== recipeId);
+                localStorage.setItem('savedRecipeVariations', JSON.stringify(filteredRecipes));
+                return true;
+            } catch (error) {
+                console.error('Error removing recipe from localStorage:', error);
+                return false;
+            }
+        }
+        
+        async function clearAllSavedRecipes() {
+            if (confirm('Are you sure you want to delete all saved recipe variations? This will clear both localStorage and database. This cannot be undone.')) {
+                try {
+                    // Clear localStorage
+                    localStorage.removeItem('savedRecipeVariations');
+                    
+                    // Clear database
+                    const response = await fetch('/clear-all-modified-recipes', {
+                        method: 'DELETE'
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        showNotification(`All saved recipe variations cleared. ${result.message}`);
+                    } else {
+                        showNotification('Cleared localStorage but failed to clear database', 'warning');
+                    }
+                    
+                    loadSavedRecipes(); // Refresh the display
+                } catch (error) {
+                    console.error('Error clearing recipes:', error);
+                    showNotification('Cleared localStorage but failed to clear database', 'warning');
+                    loadSavedRecipes(); // Refresh the display
+                }
+            }
+        }
+        
+        async function loadSavedRecipes() {
+            const container = document.getElementById('saved-recipes-container');
+            
+            let savedRecipes = [];
+            
+            // Load from localStorage
+            const localRecipes = getSavedRecipes();
+            
+            // Load from database
+            try {
+                const response = await fetch('/get-modified-recipes');
+                const result = await response.json();
+                
+                if (result.success) {
+                    const dbRecipes = result.recipes.map(recipe => ({
+                        ...recipe,
+                        id: `db_${recipe.id}`, // Prefix to distinguish from localStorage
+                        ingredients: recipe.modified_ingredients,
+                        original_ingredients: recipe.original_ingredients,
+                        substitutions_applied: recipe.substitutions_applied,
+                        keto_score: recipe.new_keto_score || 0,
+                        vegan_score: recipe.new_vegan_score || 0,
+                        source: 'database'
+                    }));
+                    
+                    // Filter out localStorage recipes that exist in database (by unique_id)
+                    const dbUniqueIds = new Set(dbRecipes.map(r => r.unique_id).filter(id => id));
+                    const filteredLocalRecipes = localRecipes.filter(recipe => {
+                        // Keep if no unique_id or if not in database
+                        return !recipe.unique_id || !dbUniqueIds.has(recipe.unique_id);
+                    });
+                    
+                    // Add source indicators
+                    filteredLocalRecipes.forEach(recipe => {
+                        recipe.source = 'localStorage';
+                    });
+                    
+                    savedRecipes.push(...filteredLocalRecipes, ...dbRecipes);
+                } else {
+                    // If database failed, just use localStorage
+                    localRecipes.forEach(recipe => {
+                        recipe.source = 'localStorage';
+                    });
+                    savedRecipes.push(...localRecipes);
+                }
+            } catch (error) {
+                console.error('Error loading from database:', error);
+                // Continue with localStorage recipes only
+                localRecipes.forEach(recipe => {
+                    recipe.source = 'localStorage';
+                });
+                savedRecipes.push(...localRecipes);
+            }
+            
+            if (savedRecipes.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-5">
+                        <i class="fas fa-save fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No saved recipe variations</h5>
+                        <p class="text-muted">Modified recipes will appear here after you apply diet substitutions.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Sort by modification date (newest first)
+            savedRecipes.sort((a, b) => new Date(b.modification_date) - new Date(a.modification_date));
+            
+            let html = '<div class="row">';
+            
+            savedRecipes.forEach(recipe => {
+                const dietDisplay = recipe.diet_modification === 'both' ? 'Keto & Vegan' : 
+                                  recipe.diet_modification.charAt(0).toUpperCase() + recipe.diet_modification.slice(1);
+                
+                const modificationDate = new Date(recipe.modification_date).toLocaleDateString();
+                
+                // Create diet score badges
+                let badgeHTML = '';
+                if (recipe.keto_score !== undefined && recipe.keto_score !== null) {
+                    badgeHTML += createDietScoreBadge('keto', recipe.keto_score);
+                }
+                if (recipe.vegan_score !== undefined && recipe.vegan_score !== null) {
+                    badgeHTML += createDietScoreBadge('vegan', recipe.vegan_score);
+                }
+                if (recipe.diet_modification === 'both' && 
+                    recipe.keto_score !== undefined && recipe.keto_score !== null && 
+                    recipe.vegan_score !== undefined && recipe.vegan_score !== null) {
+                    const bothScore = Math.min(recipe.keto_score, recipe.vegan_score);
+                    badgeHTML += createDietScoreBadge('both', bothScore);
+                }
+                
+                const sourceBadge = recipe.source === 'database' ? 
+                    '<span class="badge bg-primary ms-1"><i class="fas fa-database"></i></span>' : 
+                    '<span class="badge bg-secondary ms-1"><i class="fas fa-hdd"></i></span>';
+                
+                html += `
+                    <div class="col-md-6 col-lg-4 mb-4">
+                        <div class="card recipe-card" onclick="viewSavedRecipe('${recipe.id}')" style="cursor: pointer;">
+                            <div class="diet-badges">
+                                ${badgeHTML}
+                            </div>
+                            <img class="card-img-top recipe-image lazy" 
+                                 loading="lazy"
+                                 data-src="${recipe.photo_url || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDMwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjZjhmOWZhIi8+Cjx0ZXh0IHg9IjE1MCIgeT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM2Yzc1N2QiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5Nb2RpZmllZCBSZWNpcGU8L3RleHQ+Cjwvc3ZnPgo='}"
+                                 alt="${recipe.title}">
+                            <div class="card-body">
+                                <h6 class="card-title">${recipe.title} ${sourceBadge}</h6>
+                                <p class="card-text small text-muted">
+                                    <i class="fas fa-calendar"></i> ${modificationDate}<br>
+                                    <i class="fas fa-magic"></i> ${dietDisplay} variation<br>
+                                    <i class="fas fa-exchange-alt"></i> ${recipe.changes_made} changes made
+                                </p>
+                                <div class="d-flex gap-2" onclick="event.stopPropagation();">
+                                    <button class="btn btn-sm btn-outline-success" onclick="exportSavedRecipe('${recipe.id}')">
+                                        <i class="fas fa-download"></i> Export
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteSavedRecipe('${recipe.id}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+            
+            // Activate lazy loading for images
+            hookLazyImages();
+        }
+        
+        function viewSavedRecipe(recipeId) {
+            // Check if it's a database recipe (prefixed with 'db_')
+            if (recipeId.startsWith('db_')) {
+                const dbId = recipeId.replace('db_', '');
+                fetchSavedRecipeFromDatabase(dbId);
+            } else {
+                // For localStorage recipes
+                const savedRecipes = getSavedRecipes();
+                const recipe = savedRecipes.find(r => r.id === recipeId);
+                
+                if (!recipe) {
+                    showNotification('Recipe not found', 'error');
+                    return;
+                }
+                
+                // Show recipe in modal with modification details
+                showSavedRecipeDetails(recipe);
+            }
+        }
+        
+        async function fetchSavedRecipeFromDatabase(recipeId) {
+            try {
+                const response = await fetch(`/get-modified-recipes?id=${recipeId}`);
+                const result = await response.json();
+                
+                if (result.success && result.recipes.length > 0) {
+                    const recipe = result.recipes[0];
+                    const enhancedRecipe = {
+                        ...recipe,
+                        id: `db_${recipe.id}`,
+                        ingredients: recipe.modified_ingredients,
+                        original_ingredients: recipe.original_ingredients,
+                        substitutions_applied: recipe.substitutions_applied,
+                        keto_score: recipe.new_keto_score || 0,
+                        vegan_score: recipe.new_vegan_score || 0,
+                        source: 'database'
+                    };
+                    
+                    showSavedRecipeDetails(enhancedRecipe);
+                } else {
+                    showNotification('Recipe not found in database', 'error');
+                }
+            } catch (error) {
+                console.error('Error fetching recipe from database:', error);
+                showNotification('Failed to load recipe from database', 'error');
+            }
+        }
+        
+        function showSavedRecipeDetails(recipe) {
+            currentRecipe = recipe;
+            
+            $('#modalTitle').text(`${recipe.title} (${recipe.diet_modification} variation)`);
+            $('#modalImage').attr('src', recipe.photo_url || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDMwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjZjhmOWZhIi8+Cjx0ZXh0IHg9IjE1MCIgeT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM2Yzc1N2QiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5Nb2RpZmllZCBSZWNpcGU8L3RleHQ+Cjwvc3ZnPgo=');
+            $('#modalDescription').text(recipe.description || 'Modified recipe variation');
+            
+            // Create diet score badges for modal
+            let dietScoreHtml = '<div class="diet-score-container">';
+            
+            if (recipe.keto_score !== undefined && recipe.keto_score !== null) {
+                dietScoreHtml += createDietScoreBadge('keto', recipe.keto_score);
+            }
+            
+            if (recipe.vegan_score !== undefined && recipe.vegan_score !== null) {
+                dietScoreHtml += createDietScoreBadge('vegan', recipe.vegan_score);
+            }
+            
+            if (recipe.diet_modification === 'both' && 
+                recipe.keto_score !== undefined && recipe.keto_score !== null && 
+                recipe.vegan_score !== undefined && recipe.vegan_score !== null) {
+                const bothScore = Math.min(recipe.keto_score, recipe.vegan_score);
+                dietScoreHtml += createDietScoreBadge('both', bothScore);
+            }
+            
+            dietScoreHtml += '</div>';
+            
+            // Add modification info
+            const modificationDate = new Date(recipe.modification_date).toLocaleDateString();
+            const dietDisplay = recipe.diet_modification === 'both' ? 'Keto & Vegan' : 
+                              recipe.diet_modification.charAt(0).toUpperCase() + recipe.diet_modification.slice(1);
+            
+            let modificationInfo = `
+                <div class="alert alert-info mt-2">
+                    <h6><i class="fas fa-info-circle"></i> Modification Details</h6>
+                    <p class="mb-1"><strong>Diet:</strong> ${dietDisplay}</p>
+                    <p class="mb-1"><strong>Modified:</strong> ${modificationDate}</p>
+                    <p class="mb-1"><strong>Changes:</strong> ${recipe.changes_made} substitutions made</p>
+                    ${recipe.original_keto_score !== undefined && recipe.original_keto_score !== null ? `<p class="mb-1"><strong>Original Keto Score:</strong> ${recipe.original_keto_score}% → ${recipe.keto_score || 0}%</p>` : ''}
+                    ${recipe.original_vegan_score !== undefined && recipe.original_vegan_score !== null ? `<p class="mb-1"><strong>Original Vegan Score:</strong> ${recipe.original_vegan_score}% → ${recipe.vegan_score || 0}%</p>` : ''}
+                </div>
+            `;
+            
+            $('#modalDietInfo').html(dietScoreHtml + modificationInfo);
+            
+            // Show original vs modified ingredients
+            const ingredientsList = $('#modalIngredients');
+            ingredientsList.empty();
+            
+            if (recipe.original_ingredients && recipe.original_ingredients.length > 0) {
+                ingredientsList.append('<h6>Modified Ingredients:</h6>');
+                recipe.ingredients.forEach(ingredient => {
+                    ingredientsList.append(`<li>${ingredient}</li>`);
+                });
+                
+                // Show substitutions if available
+                if (recipe.substitutions_applied && Object.keys(recipe.substitutions_applied).length > 0) {
+                    ingredientsList.append('<hr><h6>Substitutions Made:</h6>');
+                    Object.entries(recipe.substitutions_applied).forEach(([original, substitution]) => {
+                        if (substitution === 'REMOVED') {
+                            ingredientsList.append(`<li class="text-danger"><del>${original}</del> <small>(removed)</small></li>`);
+                        } else {
+                            ingredientsList.append(`<li><del class="text-muted">${original}</del> → <strong>${substitution}</strong></li>`);
+                        }
+                    });
+                }
+            } else {
+                recipe.ingredients.forEach(ingredient => {
+                    ingredientsList.append(`<li>${ingredient}</li>`);
+                });
+            }
+            
+            // Instructions
+            const instructionsList = $('#modalInstructions');
+            instructionsList.empty();
+            if (recipe.instructions && recipe.instructions.length > 0) {
+                recipe.instructions.forEach(instruction => {
+                    instructionsList.append(`<li>${instruction}</li>`);
+                });
+            } else {
+                instructionsList.append('<li>No instructions available</li>');
+            }
+            
+            // Hide diet-specific buttons since this is a saved variation
+            $('#makeCompliantBtn').hide();
+            $('.modal-footer .make-diet-btn').remove();
+            
+            // Show modal
+            const recipeModal = new bootstrap.Modal(document.getElementById('recipeModal'));
+            recipeModal.show();
+        }
+        
+        function exportSavedRecipe(recipeId) {
+            const savedRecipes = getSavedRecipes();
+            const recipe = savedRecipes.find(r => r.id === recipeId);
+            
+            if (!recipe) {
+                showNotification('Recipe not found', 'error');
+                return;
+            }
+            
+            // Create export data
+            const exportData = {
+                title: recipe.title,
+                diet: recipe.diet_modification,
+                ingredients: recipe.ingredients,
+                substitutions: recipe.substitutions_applied,
+                instructions: recipe.instructions || [],
+                modification_date: recipe.modification_date,
+                changes_made: recipe.changes_made
+            };
+            
+            // Create and download file
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${recipe.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${recipe.diet_modification}_variation.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showNotification('Recipe variation exported successfully');
+        }
+        
+
+        
+        function showSavedRecipes() {
+            // Switch to saved recipes tab
+            const savedTab = document.getElementById('saved-tab');
+            const tab = new bootstrap.Tab(savedTab);
+            tab.show();
+            
+            // Load saved recipes
+            loadSavedRecipes();
         }
         
         // Utility functions
