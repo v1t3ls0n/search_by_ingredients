@@ -1,7 +1,8 @@
 
-# Solution For Argmax's Search By Ingredients Challenge **By Guy Vitelson**
 
 # 🥑 Search By Ingredients 2.0: Multi-Diet, Portion-Aware, and Transformative Recipe Search
+
+### Solution For Argmax's Search By Ingredients Challenge **By Guy Vitelson**
 
 ---
 
