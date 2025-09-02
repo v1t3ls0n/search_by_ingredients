@@ -1,7 +1,7 @@
 
-# 🥑 Search By Ingredients 2.0: Multi-Diet, Portion-Aware, and Transformative Recipe Search
+# Solution For Argmax's Search By Ingredients Challenge **By Guy Vitelson**
 
-**By Guy Vitelson**
+# 🥑 Search By Ingredients 2.0: Multi-Diet, Portion-Aware, and Transformative Recipe Search
 
 ---
 
@@ -251,6 +251,24 @@ Search By Ingredients 2.0 transforms simple diet classification into a comprehen
 This system empowers users—especially those with multiple dietary needs—to cook and eat with confidence and creativity, while maintaining a complete history of their recipe modifications.
 
 ---
+
+## 🤖 Bonus: Over-Engineered ML Solution (Way Beyond Scope)
+
+**Note: The task only asked to implement two functions. The rule-based solution above completely solves it with 100% accuracy.**
+
+For those curious about "what if we went completely overboard?", I created an entirely optional ML solution on the `ml-overkill-solution` branch. This is a **9000+ line production ML system** organized into **40+ modules** - essentially what you'd build for a Fortune 500 company, not a classification task.
+
+### What's in the ML branch:
+- Complete weak supervision pipeline with silver labeling
+- Multi-modal learning (text + 70K images) 
+- 15+ ML models with 4-level hierarchical ensembles
+- Full production infrastructure (GPU support, memory management, error handling)
+- Modular architecture: `silver_labeling/`, `feature_engineering/`, `models/`, `ensemble/`, etc.
+
+### Why build something so excessive?
+Pure engineering showcase. It demonstrates the ability to architect large-scale ML systems even when a simple solution suffices. The ML system achieves F1-scores up to 0.963 (worse than the 100% rule-based solution!) while being 30x more complex.
+
+**Bottom line**: The rule-based solution is the right answer. The ML branch is there if you want to see what "throwing everything at the problem" looks like.
 
 **Contact:**  
 🔗 [Linkedin](https://www.linkedin.com/in/guyvitelson/)  
