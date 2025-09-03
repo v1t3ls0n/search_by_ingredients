@@ -202,7 +202,7 @@ def _ollama_answer(question: str, context: str) -> str:
     return r.json()["message"]["content"].strip()
 
 
-@app.post("/api/rag_chat")
+@app.route("/api/rag_chat")
 def api_rag_chat():
     data = request.get_json(force=True) or {}
     query = (data.get("query") or "").strip()

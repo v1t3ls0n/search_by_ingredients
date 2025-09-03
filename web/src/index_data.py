@@ -152,16 +152,10 @@ def delete_indices(client: OpenSearch) -> None:
 
 
 def ensure_recipes_knn_index(client: OpenSearch) -> None:
-    """Create recipes_v2 (or RECIPES_INDEX) with knn_vector embedding if missing."""
-    if client.indices.exists(index=RECIPES_INDEX):
-        mapping = client.indices.get_mapping(RECIPES_INDEX)
-        props = mapping.get(RECIPES_INDEX, {}).get(
-            "mappings", {}).get("properties", {})
-        if "embedding" in props and props["embedding"].get("type") == "knn_vector":
-            return
-        client.indices.delete(RECIPES_INDEX)
-        log.info("Recreating %s with KNN mapping", RECIPES_INDEX)
-
+    """
+    Ensure the target recipes index exists with a KNN embedding field,
+    and ensure alias 'recipes' points to it for backward compatibility.
+    """
     body = {
         "settings": {"index": {"knn": True, "refresh_interval": "1s"}},
         "mappings": {"properties": {
@@ -178,16 +172,72 @@ def ensure_recipes_knn_index(client: OpenSearch) -> None:
             "embedding": {
                 "type": "knn_vector",
                 "dimension": 384,
-                "method": {
-                    "name": "hnsw",
-                    "space_type": "cosinesimil"
-                    # No 'engine', no 'parameters' on OpenSearch 3.x
-                }
-            }
-        }}
+                "method": {"name": "hnsw", "space_type": "cosinesimil"}
+            },
+        }},
     }
-    client.indices.create(RECIPES_INDEX, body=body)
-    log.info("Created index %s (KNN enabled)", RECIPES_INDEX)
+
+    # 1) Create index if missing
+    if not client.indices.exists(index=RECIPES_INDEX):
+        client.indices.create(index=RECIPES_INDEX, body=body)
+        log.info("Created index %s (KNN enabled)", RECIPES_INDEX)
+    else:
+        # 2) Ensure mapping has knn_vector 'embedding' (upgrade in-place if needed)
+        mapping = client.indices.get_mapping(index=RECIPES_INDEX)
+        props = mapping.get(RECIPES_INDEX, {}).get(
+            "mappings", {}).get("properties", {}) or {}
+        needs_embedding = props.get(
+            "embedding", {}).get("type") != "knn_vector"
+
+        if needs_embedding:
+            log.info(
+                "Upgrading %s mapping to add knn_vector embedding…", RECIPES_INDEX)
+            # make sure knn is enabled
+            client.indices.close(index=RECIPES_INDEX)
+            client.indices.put_settings(index=RECIPES_INDEX, body={
+                                        "index": {"knn": True}})
+            client.indices.put_mapping(
+                index=RECIPES_INDEX,
+                body={"properties": {
+                    "embedding": {
+                        "type": "knn_vector",
+                        "dimension": 384,
+                        "method": {"name": "hnsw", "space_type": "cosinesimil"},
+                    }
+                }},
+            )
+            client.indices.open(index=RECIPES_INDEX)
+            log.info("Mapping upgraded for %s.", RECIPES_INDEX)
+
+    # 3) Ensure alias 'recipes' -> RECIPES_INDEX
+    #    (so your Flask app that queries index='recipes' keeps working)
+    try:
+        # Does alias exist and where does it point?
+        alias_lookup = client.indices.get_alias(name="recipes", ignore=[404])
+        actions = []
+
+        if isinstance(alias_lookup, dict) and alias_lookup and alias_lookup.get("status") != 404:
+            current_targets = list(alias_lookup.keys())
+            for idx in current_targets:
+                if idx != RECIPES_INDEX:
+                    actions.append(
+                        {"remove": {"index": idx, "alias": "recipes"}})
+            # ensure it's added to the desired index
+            if RECIPES_INDEX not in current_targets:
+                actions.append(
+                    {"add": {"index": RECIPES_INDEX, "alias": "recipes"}})
+            if actions:
+                client.indices.update_aliases({"actions": actions})
+                log.info("Alias 'recipes' moved to -> %s", RECIPES_INDEX)
+        else:
+            client.indices.put_alias(index=RECIPES_INDEX, name="recipes")
+            log.info("Alias 'recipes' -> %s created", RECIPES_INDEX)
+    except Exception as e:
+        # fallback: try simple put_alias
+        log.warning(
+            "Alias management warning: %s; ensuring simple alias add", e)
+        client.indices.put_alias(index=RECIPES_INDEX, name="recipes")
+        log.info("Alias 'recipes' -> %s ensured", RECIPES_INDEX)
 
 
 def ensure_ingredients_index(client: OpenSearch) -> None:
