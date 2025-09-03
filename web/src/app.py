@@ -172,18 +172,32 @@ def hybrid_rrf_search(query: str, topk: int = 5, diet: str | None = None, thresh
 # ── RAG helpers & endpoint ---------------------------------------
 
 
+def _to_str_block(x):
+    if x is None:
+        return ""
+    if isinstance(x, (list, tuple)):
+        return "\n".join(str(i) for i in x)
+    return str(x)
+
+
 def _build_context(hits):
     parts = []
     for i, h in enumerate(hits, 1):
         s = h["_source"]
         title = s.get("title", "")
-        ings = s.get("ingredients", "")
-        instr = s.get("instructions", "")
+        ings = _to_str_block(s.get("ingredients", ""))
+        instr = _to_str_block(s.get("instructions", ""))
         keto = s.get("keto_score")
         vegan = s.get("vegan_score")
-        meta = f"[{i}] {title} (keto:{keto}%, vegan:{vegan}%)"
+        keto_txt = f"{int(keto)}%" if isinstance(keto, (int, float)) else "n/a"
+        vegan_txt = f"{int(vegan)}%" if isinstance(
+            vegan, (int, float)) else "n/a"
+        meta = f"[{i}] {title} (keto:{keto_txt}, vegan:{vegan_txt})"
         snippet = textwrap.shorten(
-            f"Ingredients: {ings}  Instructions: {instr}", width=1000, placeholder=" …")
+            f"Ingredients: {ings}  Instructions: {instr}",
+            width=1000,
+            placeholder=" …"
+        )
         parts.append(meta + "\n" + snippet)
     return "\n\n".join(parts)
 
@@ -202,21 +216,36 @@ def _ollama_answer(question: str, context: str) -> str:
     return r.json()["message"]["content"].strip()
 
 
-@app.route("/api/rag_chat")
+# BEFORE
+# @app.route("/api/rag_chat")
+# def api_rag_chat():
+
+# AFTER
+@app.route("/api/rag_chat", methods=["GET", "POST"])
 def api_rag_chat():
-    data = request.get_json(force=True) or {}
-    query = (data.get("query") or "").strip()
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        query = (data.get("query") or "").strip()
+        client_diet = (data.get("diet") or "auto").strip().lower()
+        threshold = float(data.get("threshold") or 1.0)
+        topk = int(data.get("topk") or 5)
+    else:
+        # GET: read from query params
+        query = (request.args.get("query") or "").strip()
+        client_diet = (request.args.get("diet") or "auto").strip().lower()
+        threshold = float(request.args.get("threshold", 1.0))
+        topk = int(request.args.get("topk", 5))
+
     if not query:
         return jsonify({"error": "query is required"}), 400
 
-    client_diet = (data.get("diet") or "auto").strip().lower()
-    threshold = float(data.get("threshold") or 1.0)
-    topk = int(data.get("topk") or 5)
-
     inferred = infer_diet(query) if client_diet in {
         "auto", "", "none", None} else client_diet
-    hits = hybrid_rrf_search(query, topk=topk, diet=(
-        inferred if inferred != "none" else None), threshold=threshold)
+    hits = hybrid_rrf_search(
+        query, topk=topk,
+        diet=(inferred if inferred != "none" else None),
+        threshold=threshold
+    )
     if not hits:
         return jsonify({"answer": "Not found in the sources.", "sources": [], "diet_inferred": inferred})
 
@@ -245,22 +274,41 @@ def _wait(os_client: OpenSearch, tries: int = 30, delay: int = 2) -> bool:
     return False
 
 
+def _os_ready(os_client: OpenSearch, tries: int = 30, delay: int = 2) -> bool:
+    for _ in range(tries):
+        try:
+            if os_client.ping():
+                return True
+        except Exception:
+            pass
+        sleep(delay)
+    return False
+
+
 def _bootstrap():
     os_client = OpenSearch(
-        hosts=[OPENSEARCH_URL], use_ssl=False, verify_certs=False, ssl_show_warn=False)
+        hosts=[OPENSEARCH_URL],
+        use_ssl=False, verify_certs=False, ssl_show_warn=False
+    )
 
-    # If 'ingredients' is missing, create an empty index so the app can start.
+    # Wait for OS
+    if not _os_ready(os_client):
+        log.error("OpenSearch not reachable at %s", OPENSEARCH_URL)
+        sys.exit(1)
+
+    # Ensure 'ingredients' index exists (empty is fine)
     try:
         if not os_client.indices.exists(index="ingredients"):
-            os_client.indices.create(index="ingredients", body={
-                "mappings": {"properties": {"ingredients": {"type": "text"}}}
-            })
+            os_client.indices.create(
+                index="ingredients",
+                body={"mappings": {"properties": {"ingredients": {"type": "text"}}}}
+            )
             log.info(
                 "Created empty 'ingredients' index (will be filled by indexer).")
     except Exception as e:
         log.warning("Could not ensure 'ingredients' index exists: %s", e)
 
-    # Now query; if still empty, return an empty vocab gracefully.
+    # Load tokens (gracefully handle empty)
     try:
         resp = os_client.search(
             index="ingredients",
@@ -509,7 +557,11 @@ def search():
 
     # 4) run search
     try:
-        resp = client.search(index="recipes", body=body, size=12)
+        # Prefer alias 'recipes' (backwards compatible). If it 404s, fall back.
+        try:
+            resp = client.search(index="recipes", body=body, size=12)
+        except Exception:
+            resp = client.search(index=RECIPES_INDEX, body=body, size=12)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

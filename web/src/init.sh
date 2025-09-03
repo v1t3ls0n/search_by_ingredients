@@ -1,8 +1,13 @@
 #!/bin/bash
+set -euo pipefail
 
-# Download NLTK data if not already present
-echo "Checking NLTK data..."
-python -c "
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*"; }
+
+# -------------------------------
+# 1) NLTK setup (idempotent)
+# -------------------------------
+log "Checking NLTK data..."
+python - <<'PY' || true
 try:
     import nltk
     try:
@@ -17,17 +22,41 @@ try:
 except Exception as e:
     print(f'Warning: Could not setup NLTK: {e}')
     print('Continuing without lemmatization support...')
-" || true
+PY
 
-# Initial indexing (no --opensearch_url; it’s taken from env by index_data.py)
+# -------------------------------
+# 2) Wait for OpenSearch to be ready
+# -------------------------------
+OPENSEARCH_URL="${OPENSEARCH_URL:-http://os:9200}"
+log "Waiting for OpenSearch at ${OPENSEARCH_URL} ..."
+for i in $(seq 1 60); do
+  if curl -fsS "${OPENSEARCH_URL%/}/_cluster/health?wait_for_status=yellow&timeout=1s" >/dev/null; then
+    log "OpenSearch is up."
+    break
+  fi
+  if [ "$i" -eq 60 ]; then
+    log "ERROR: OpenSearch not reachable at ${OPENSEARCH_URL}"
+  fi
+  sleep 1
+done
+
+# -------------------------------
+# 3) Initial indexing (idempotent)
+#    - indexer reads OPENSEARCH_URL and RECIPES_INDEX from env
+#    - optional DATA_FILE override (default parquet path)
+# -------------------------------
 if [ ! -f /app/.indexed ]; then
-  echo "Running initial indexing..."
-  python web/index_data.py --force
+  log "Running initial indexing..."
+  DATA_FILE="${DATA_FILE:-data/allrecipes.parquet}"
+  # Force re-create indices & alias; indexer uses env OPENSEARCH_URL
+  python web/index_data.py --force --data_file "${DATA_FILE}"
   touch /app/.indexed
-  echo "Indexing completed"
+  log "Indexing completed"
 else
-  echo "Indexing already completed, skipping..."
+  log "Indexing already completed, skipping..."
 fi
 
-# Start the Flask application
-python web/app.py
+# -------------------------------
+# 4) Start Flask app
+# -------------------------------
+exec python web/app.py

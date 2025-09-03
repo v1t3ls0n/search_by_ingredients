@@ -54,8 +54,8 @@ services:
       - FLASK_APP=app.py
       - FLASK_ENV=development
       - FLASK_DEBUG=1
-      - OPENSEARCH_URL=http://localhost:9200
-      - OLLAMA_URL=http://localhost:11434
+      - OPENSEARCH_URL: http://os:9200 
+      - OLLAMA_URL= http://ollama:11434
       - OLLAMA_MODEL=llama3.1:8b
       - RECIPES_INDEX=recipes_v2
       - EMBED_MODEL=sentence-transformers/all-MiniLM-L6-v2
@@ -85,8 +85,8 @@ services:
         NB_GT_FILE_ID: "124gxkSCjWP2NFk2YOWIAxAEN6JwAS0oq"
         NB_GT_FILE_NAME: "ground_truth_sample.csv"
     environment:
-      - OPENSEARCH_URL=http://localhost:9200
-      - OLLAMA_URL=http://localhost:11434
+      - OPENSEARCH_URL=http://os:9200
+      - OLLAMA_URL= http://ollama:11434
     ports:
       - "8888:8888"
     volumes:

@@ -240,6 +240,23 @@ def ensure_recipes_knn_index(client: OpenSearch) -> None:
         log.info("Alias 'recipes' -> %s ensured", RECIPES_INDEX)
 
 
+def ensure_alias(client: OpenSearch, alias: str, index: str) -> None:
+    # point alias -> index, creating or moving it atomically
+    try:
+        if client.indices.exists_alias(name=alias):
+            # remove alias from all indices then add to the target
+            indices = list(client.indices.get_alias(name=alias).keys())
+            actions = [{"remove": {"index": i, "alias": alias}}
+                       for i in indices]
+            actions.append({"add": {"index": index, "alias": alias}})
+            client.indices.update_aliases({"actions": actions})
+        else:
+            client.indices.put_alias(index=index, name=alias)
+        log.info("Alias %s -> %s ready", alias, index)
+    except Exception as e:
+        log.warning("Could not ensure alias %s -> %s: %s", alias, index, e)
+
+
 def ensure_ingredients_index(client: OpenSearch) -> None:
     if not client.indices.exists(index="ingredients"):
         client.indices.create(index="ingredients",
@@ -364,6 +381,7 @@ def main(cfg):
 
     ensure_recipes_knn_index(client)
     ensure_ingredients_index(client)
+    ensure_alias(client, "recipes", RECIPES_INDEX)  # <— add this
 
     df = load_table_any(Path(cfg.data_file))
     if df.empty:
