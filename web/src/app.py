@@ -1,27 +1,29 @@
 #!/usr/bin/env python
 """
 Flask API:
-* /select2        – ingredient autocomplete, flag-aware
-* /search         – ingredient search with #keto / #vegan / #both filters
-* /substitutions  – diet-compliant ingredient swaps
-* /modify-recipe  – modify recipe to be diet-compliant
-* /convert-recipes – batch recipe conversion
-* /check-compliance – quick compliance check
-* /export-modified – export modified recipe
+* /select2, /search, /substitutions, /modify-recipe, /convert-recipes,
+  /check-compliance, /export-modified, /save-modified-recipe, /get-modified-recipes, ...
+* /api/rag_chat — RAG Chat over recipes (BM25 + KNN + RRF + diet intent)
 """
 from __future__ import annotations
 
 import logging
 import sys
-from time import sleep
-from typing import List
+import os
+import re
 import json
 import sqlite3
+import textwrap
+import requests
+import numpy as np
+from time import sleep
+from typing import List
 from datetime import datetime
 
 from decouple import config
 from flask import Flask, jsonify, render_template, request, session
 from opensearchpy import OpenSearch
+from sentence_transformers import SentenceTransformer
 
 # ── helpers -------------------------------------------------------
 from diet_classifiers import is_keto, is_vegan, diet_score
@@ -41,46 +43,253 @@ for noisy in ("opensearchpy", "urllib3", "opensearch"):
     logging.getLogger(noisy).setLevel(logging.ERROR)
 log = logging.getLogger(__name__)
 
-# ── Flask & OpenSearch bootstrap ---------------------------------
+# ── Flask & config -----------------------------------------------
 app = Flask(__name__)
-app.secret_key = config("SECRET_KEY", "dev-secret-key-change-in-production")
+app.secret_key = config(
+    "SECRET_KEY", default="dev-secret-key-change-in-production")
+
+OPENSEARCH_URL = config("OPENSEARCH_URL", default="http://localhost:9200")
+OLLAMA_URL = config("OLLAMA_URL",     default="http://localhost:11434")
+OLLAMA_MODEL = config("OLLAMA_MODEL",   default="llama3.1:8b")
+RECIPES_INDEX = config("RECIPES_INDEX",  default="recipes_v2")
+EMBED_MODEL = config(
+    "EMBED_MODEL",    default="sentence-transformers/all-MiniLM-L6-v2")
+
+client = OpenSearch(OPENSEARCH_URL, use_ssl=False,
+                    verify_certs=False, ssl_show_warn=False)
+_embed = SentenceTransformer(EMBED_MODEL)
 
 
-def _wait(client: OpenSearch, tries: int = 30, delay: int = 2) -> bool:
+def _qvec(text: str) -> list[float]:
+    return _embed.encode([text], convert_to_numpy=True, normalize_embeddings=True)[0].tolist()
+
+
+# ── diet intent detection ----------------------------------------
+DIET_PATTERNS = {
+    "both":  re.compile(r"\b(keto\s*(and|&)\s*vegan|vegan\s*(and|&)\s*keto|keto-?vegan)\b", re.I),
+    "keto":  re.compile(r"\b(keto|low[-\s]?carb|ketogenic)\b", re.I),
+    "vegan": re.compile(r"\b(vegan|plant[-\s]?based|no\s*animal\s*products?)\b", re.I),
+}
+
+
+def infer_diet_rule_based(text: str) -> str:
+    if DIET_PATTERNS["both"].search(text):
+        return "both"
+    if DIET_PATTERNS["keto"].search(text):
+        if DIET_PATTERNS["vegan"].search(text):
+            return "both"
+        return "keto"
+    if DIET_PATTERNS["vegan"].search(text):
+        return "vegan"
+    return "none"
+
+
+def infer_diet_via_llm(text: str, timeout=18) -> str:
+    system = ("Classify the user's diet intent for a recipe request. "
+              "Respond with exactly one word: none, keto, vegan, or both.")
+    user = f"Text: {text}\nAnswer with one of: none|keto|vegan|both"
+    payload = {"model": OLLAMA_MODEL, "messages": [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user}
+    ], "stream": False}
+    try:
+        r = requests.post(f"{OLLAMA_URL.rstrip('/')}/api/chat",
+                          json=payload, timeout=timeout)
+        r.raise_for_status()
+        out = r.json()["message"]["content"].strip().lower()
+        if out in {"none", "keto", "vegan", "both"}:
+            return out
+    except Exception:
+        pass
+    return "none"
+
+
+def infer_diet(text: str) -> str:
+    rb = infer_diet_rule_based(text)
+    return rb if rb != "none" else infer_diet_via_llm(text)
+
+# ── retrieval (BM25 + KNN) & RRF ---------------------------------
+
+
+def search_bm25(query: str, topn: int = 20):
+    body = {"size": topn, "query": {"multi_match": {
+        "query": query, "fields": ["title^3", "ingredients^2", "instructions", "description"]
+    }}}
+    res = client.search(index=RECIPES_INDEX, body=body)
+    hits = res["hits"]["hits"]
+    for h in hits:
+        h["_score"] = float(h.get("_score") or 0.0)
+    return hits
+
+
+def search_knn(query: str, topn: int = 20):
+    qv = _qvec(query)
+    body = {"size": topn, "query": {
+        "knn": {"embedding": {"vector": qv, "k": topn}}}}
+    res = client.search(index=RECIPES_INDEX, body=body)
+    hits = res["hits"]["hits"]
+    for h in hits:
+        h["_score"] = float(h.get("_score") or 0.0)
+    return hits
+
+
+def rrf_fuse(bm25_hits, knn_hits, k=60):
+    def ranks(hits): return {h["_id"]: i for i, h in enumerate(hits)}
+    r_b, r_k = ranks(bm25_hits), ranks(knn_hits)
+    ids = set(r_b) | set(r_k)
+    fused = []
+    for _id in ids:
+        rb, rk = r_b.get(_id, 10**6), r_k.get(_id, 10**6)
+        score = 1.0/(k+rb) + 1.0/(k+rk)
+        src = next((h["_source"] for h in bm25_hits if h["_id"] == _id), None) \
+            or next((h["_source"] for h in knn_hits if h["_id"] == _id), None)
+        fused.append({"_id": _id, "_source": src, "_score": score})
+    fused.sort(key=lambda x: x["_score"], reverse=True)
+    return fused
+
+
+def _diet_filter_pred(doc, diet: str, threshold: float) -> bool:
+    thr = int(max(0.0, min(1.0, threshold)) * 100)
+    ks, vs = doc.get("keto_score"), doc.get("vegan_score")
+    if diet == "keto":
+        return ks is None or ks >= thr
+    if diet == "vegan":
+        return vs is None or vs >= thr
+    if diet == "both":
+        return (ks is None or ks >= thr) and (vs is None or vs >= thr)
+    return True
+
+
+def hybrid_rrf_search(query: str, topk: int = 5, diet: str | None = None, threshold: float = 1.0):
+    bm25 = search_bm25(query, topn=max(20, topk*4))
+    knn = search_knn(query,  topn=max(20, topk*4))
+    fused = rrf_fuse(bm25, knn, k=60)
+    if diet and diet != "none":
+        fused = [h for h in fused if _diet_filter_pred(
+            h["_source"], diet, threshold)]
+    return fused[:topk]
+
+# ── RAG helpers & endpoint ---------------------------------------
+
+
+def _build_context(hits):
+    parts = []
+    for i, h in enumerate(hits, 1):
+        s = h["_source"]
+        title = s.get("title", "")
+        ings = s.get("ingredients", "")
+        instr = s.get("instructions", "")
+        keto = s.get("keto_score")
+        vegan = s.get("vegan_score")
+        meta = f"[{i}] {title} (keto:{keto}%, vegan:{vegan}%)"
+        snippet = textwrap.shorten(
+            f"Ingredients: {ings}  Instructions: {instr}", width=1000, placeholder=" …")
+        parts.append(meta + "\n" + snippet)
+    return "\n\n".join(parts)
+
+
+def _ollama_answer(question: str, context: str) -> str:
+    system = ("You are a concise cooking assistant. Use ONLY the provided recipes. "
+              "If information is missing, say 'Not found in the sources.' "
+              "Return a short, clear answer in English and end with sources [n].")
+    payload = {"model": OLLAMA_MODEL, "messages": [
+        {"role": "system", "content": system},
+        {"role": "user", "content": f"Question: {question}\n\nRecipes:\n{context}"}
+    ], "stream": False}
+    r = requests.post(f"{OLLAMA_URL.rstrip('/')}/api/chat",
+                      json=payload, timeout=120)
+    r.raise_for_status()
+    return r.json()["message"]["content"].strip()
+
+
+@app.post("/api/rag_chat")
+def api_rag_chat():
+    data = request.get_json(force=True) or {}
+    query = (data.get("query") or "").strip()
+    if not query:
+        return jsonify({"error": "query is required"}), 400
+
+    client_diet = (data.get("diet") or "auto").strip().lower()
+    threshold = float(data.get("threshold") or 1.0)
+    topk = int(data.get("topk") or 5)
+
+    inferred = infer_diet(query) if client_diet in {
+        "auto", "", "none", None} else client_diet
+    hits = hybrid_rrf_search(query, topk=topk, diet=(
+        inferred if inferred != "none" else None), threshold=threshold)
+    if not hits:
+        return jsonify({"answer": "Not found in the sources.", "sources": [], "diet_inferred": inferred})
+
+    context = _build_context(hits)
+    answer = _ollama_answer(query, context)
+
+    sources = []
+    for i, h in enumerate(hits, 1):
+        s = h["_source"]
+        sources.append({
+            "ref": i,
+            "id": h.get("_id"),
+            "title": s.get("title"),
+            "keto_score": s.get("keto_score"),
+            "vegan_score": s.get("vegan_score")
+        })
+    return jsonify({"answer": answer, "sources": sources, "diet_inferred": inferred})
+
+
+# Utility bootstrap reused by /select2:
+def _wait(os_client: OpenSearch, tries: int = 30, delay: int = 2) -> bool:
     for _ in range(tries):
-        if client.ping():
+        if os_client.ping():
             return True
         sleep(delay)
     return False
 
 
 def _bootstrap():
-    client = OpenSearch(
-        hosts=[config("OPENSEARCH_URL", "http://localhost:9200")],
-        use_ssl=False,
-        verify_certs=False,
-        ssl_show_warn=False,
-    )
-    if not _wait(client):
-        log.error("OpenSearch not reachable")
-        sys.exit(1)
+    os_client = OpenSearch(
+        hosts=[OPENSEARCH_URL], use_ssl=False, verify_certs=False, ssl_show_warn=False)
 
-    resp = client.search(index="ingredients",
-                         body={"query": {"match_all": {}}}, size=10_000)
-    vocab: List[str] = [h["_source"]["ingredients"]
-                        for h in resp["hits"]["hits"]]
+    # If 'ingredients' is missing, create an empty index so the app can start.
+    try:
+        if not os_client.indices.exists(index="ingredients"):
+            os_client.indices.create(index="ingredients", body={
+                "mappings": {"properties": {"ingredients": {"type": "text"}}}
+            })
+            log.info(
+                "Created empty 'ingredients' index (will be filled by indexer).")
+    except Exception as e:
+        log.warning("Could not ensure 'ingredients' index exists: %s", e)
+
+    # Now query; if still empty, return an empty vocab gracefully.
+    try:
+        resp = os_client.search(
+            index="ingredients",
+            body={"query": {"match_all": {}}},
+            size=10_000
+        )
+        vocab: List[str] = [h["_source"]["ingredients"]
+                            for h in resp["hits"]["hits"]]
+    except Exception as e:
+        log.warning(
+            "Ingredients search failed (continuing with empty vocab): %s", e)
+        vocab = []
+
     log.info("Loaded %s ingredient tokens", len(vocab))
-    return client, vocab
+    return os_client, vocab
 
 
+# Initialize ingredients vocabulary (used by /select2)
 client, INGREDIENTS = _bootstrap()
 
+
 # ── SQLite database for modified recipes -------------------------
+
+
 def init_db():
     """Initialize SQLite database for storing modified recipes."""
     conn = sqlite3.connect('modified_recipes.db')
     cursor = conn.cursor()
-    
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS modified_recipes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,10 +311,11 @@ def init_db():
             unique_id TEXT UNIQUE
         )
     ''')
-    
+
     conn.commit()
     conn.close()
     log.info("SQLite database initialized for modified recipes")
+
 
 # Initialize database
 init_db()
@@ -566,7 +776,7 @@ def recipe_metrics():
 def save_modified_recipe():
     """
     Save a modified recipe to the database.
-    
+
     Expected JSON body:
     {
         "recipe_id": "original_recipe_id",
@@ -588,11 +798,11 @@ def save_modified_recipe():
     data = request.get_json()
     if not data:
         return jsonify({"error": "No JSON data provided"}), 400
-    
+
     try:
         conn = sqlite3.connect('modified_recipes.db')
         cursor = conn.cursor()
-        
+
         cursor.execute('''
             INSERT INTO modified_recipes (
                 recipe_id, title, original_ingredients, modified_ingredients,
@@ -617,17 +827,17 @@ def save_modified_recipe():
             data.get('photo_url', ''),
             data.get('unique_id', '')
         ))
-        
+
         recipe_id = cursor.lastrowid
         conn.commit()
         conn.close()
-        
+
         return jsonify({
             "success": True,
             "id": recipe_id,
             "message": "Recipe variation saved successfully"
         })
-        
+
     except Exception as e:
         log.error(f"Error saving modified recipe: {e}")
         return jsonify({"error": "Failed to save recipe variation"}), 500
@@ -650,67 +860,70 @@ def get_modified_recipes():
         title_filter = request.args.get('title')
         unique_id_filter = request.args.get('unique_id')
         limit = int(request.args.get('limit', 50))
-        
+
         conn = sqlite3.connect('modified_recipes.db')
         cursor = conn.cursor()
-        
+
         query = '''
             SELECT * FROM modified_recipes
         '''
         params = []
-        
+
         # Build WHERE clause
         conditions = []
         if recipe_id:
             conditions.append('id = ?')
             params.append(int(recipe_id))
-        
+
         if diet_filter:
             conditions.append('diet_modification = ?')
             params.append(diet_filter)
-        
+
         if title_filter:
             conditions.append('title = ?')
             params.append(title_filter)
-        
+
         if unique_id_filter:
             conditions.append('unique_id = ?')
             params.append(unique_id_filter)
-        
+
         if conditions:
             query += ' WHERE ' + ' AND '.join(conditions)
-        
+
         # Add ORDER BY and LIMIT (only if not fetching by ID)
         if not recipe_id:
             query += ' ORDER BY modification_date DESC LIMIT ?'
             params.append(limit)
-        
+
         cursor.execute(query, params)
         rows = cursor.fetchall()
-        
+
         # Get column names
         columns = [description[0] for description in cursor.description]
-        
+
         recipes = []
         for row in rows:
             recipe = dict(zip(columns, row))
-            
+
             # Parse JSON fields
-            recipe['original_ingredients'] = json.loads(recipe['original_ingredients'])
-            recipe['modified_ingredients'] = json.loads(recipe['modified_ingredients'])
-            recipe['substitutions_applied'] = json.loads(recipe['substitutions_applied'])
+            recipe['original_ingredients'] = json.loads(
+                recipe['original_ingredients'])
+            recipe['modified_ingredients'] = json.loads(
+                recipe['modified_ingredients'])
+            recipe['substitutions_applied'] = json.loads(
+                recipe['substitutions_applied'])
             recipe['instructions'] = json.loads(recipe['instructions'])
-            
+
             recipes.append(recipe)
-        
+
         conn.close()
-        
+
         return jsonify({
             "success": True,
             "recipes": recipes,
             "count": len(recipes)
         })
-        
+
     except Exception as e:
         log.error(f"Error retrieving modified recipes: {e}")
         return jsonify({"error": "Failed to retrieve recipe variations"}), 500
@@ -724,21 +937,22 @@ def delete_modified_recipe(recipe_id):
     try:
         conn = sqlite3.connect('modified_recipes.db')
         cursor = conn.cursor()
-        
-        cursor.execute('DELETE FROM modified_recipes WHERE id = ?', (recipe_id,))
-        
+
+        cursor.execute(
+            'DELETE FROM modified_recipes WHERE id = ?', (recipe_id,))
+
         if cursor.rowcount == 0:
             conn.close()
             return jsonify({"error": "Recipe not found"}), 404
-        
+
         conn.commit()
         conn.close()
-        
+
         return jsonify({
             "success": True,
             "message": "Recipe variation deleted successfully"
         })
-        
+
     except Exception as e:
         log.error(f"Error deleting modified recipe: {e}")
         return jsonify({"error": "Failed to delete recipe variation"}), 500
@@ -752,18 +966,18 @@ def clear_all_modified_recipes():
     try:
         conn = sqlite3.connect('modified_recipes.db')
         cursor = conn.cursor()
-        
+
         cursor.execute('DELETE FROM modified_recipes')
         deleted_count = cursor.rowcount
-        
+
         conn.commit()
         conn.close()
-        
+
         return jsonify({
             "success": True,
             "message": f"All {deleted_count} recipe variations deleted successfully"
         })
-        
+
     except Exception as e:
         log.error(f"Error clearing all modified recipes: {e}")
         return jsonify({"error": "Failed to clear all recipe variations"}), 500
@@ -771,4 +985,6 @@ def clear_all_modified_recipes():
 
 # ── dev runner ----------------------------------------------------
 if __name__ == "__main__":
+    log.info("CFG: %s %s %s %s %s", OPENSEARCH_URL, OLLAMA_URL,
+             OLLAMA_MODEL, RECIPES_INDEX, EMBED_MODEL)
     app.run(host="0.0.0.0", port=8080, debug=True)

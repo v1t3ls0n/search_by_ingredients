@@ -1,35 +1,47 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Recipe Search with Diet Substitutions</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <title>Recipe Search with Diet Substitutions</title>
 
-<!-- ───────────  LIBS  ─────────── -->
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet">
-<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- ───────────  LIBS  ─────────── -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
 
-<style>
-    .recipe-card {
+    <style>
+      .recipe-card {
         transition: transform 0.2s;
         cursor: pointer;
         position: relative;
-    }
-    .recipe-card:hover {
+      }
+      .recipe-card:hover {
         transform: scale(1.02);
-    }
-    .recipe-image {
+      }
+      .recipe-image {
         height: 200px;
         object-fit: cover;
-    }
-    .select2-container {
+      }
+      .select2-container {
         width: 100% !important;
-    }
-    
-    /* Diet score badges */
-    .diet-score-badge {
+      }
+
+      /* Diet score badges */
+      .diet-score-badge {
         display: inline-flex;
         align-items: center;
         padding: 4px 10px;
@@ -42,9 +54,9 @@
         background: #f0f0f0;
         min-width: 80px;
         transition: all 0.3s ease;
-    }
-    
-    .diet-score-badge .score-fill {
+      }
+
+      .diet-score-badge .score-fill {
         position: absolute;
         left: 0;
         top: 0;
@@ -52,172 +64,172 @@
         transition: width 0.3s ease;
         opacity: 0.3;
         z-index: 0;
-    }
-    
-    .diet-score-badge .score-text {
+      }
+
+      .diet-score-badge .score-text {
         position: relative;
         z-index: 1;
         display: flex;
         align-items: center;
         gap: 4px;
-    }
-    
-    /* Partial compliance styling */
-    .diet-score-badge.keto .score-fill {
+      }
+
+      /* Partial compliance styling */
+      .diet-score-badge.keto .score-fill {
         background: #ff5722;
-    }
-    
-    .diet-score-badge.keto .score-text {
+      }
+
+      .diet-score-badge.keto .score-text {
         color: #d32f2f;
-    }
-    
-    .diet-score-badge.vegan .score-fill {
-        background: #4CAF50;
-    }
-    
-    .diet-score-badge.vegan .score-text {
+      }
+
+      .diet-score-badge.vegan .score-fill {
+        background: #4caf50;
+      }
+
+      .diet-score-badge.vegan .score-text {
         color: #2e7d32;
-    }
-    
-    /* "Both" diet badge styling */
-    .diet-score-badge.both .score-fill {
-        background: linear-gradient(to right, #ff5722 50%, #4CAF50 50%);
-    }
-    
-    .diet-score-badge.both .score-text {
+      }
+
+      /* "Both" diet badge styling */
+      .diet-score-badge.both .score-fill {
+        background: linear-gradient(to right, #ff5722 50%, #4caf50 50%);
+      }
+
+      .diet-score-badge.both .score-text {
         color: #6c757d;
-    }
-    
-    .diet-score-badge.both.high-compliance {
-        border-color: #2196F3;
+      }
+
+      .diet-score-badge.both.high-compliance {
+        border-color: #2196f3;
         background: #f0f8ff;
-    }
-    
-    .diet-score-badge.both.full-compliance {
-        background: linear-gradient(135deg, #ff5722 0%, #4CAF50 100%);
+      }
+
+      .diet-score-badge.both.full-compliance {
+        background: linear-gradient(135deg, #ff5722 0%, #4caf50 100%);
         border: none;
         color: white;
-    }
-    
-    .diet-score-badge.both.full-compliance .score-fill {
+      }
+
+      .diet-score-badge.both.full-compliance .score-fill {
         display: none;
-    }
-    
-    .diet-score-badge.both.full-compliance .score-text {
+      }
+
+      .diet-score-badge.both.full-compliance .score-text {
         color: white;
         font-weight: 800;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-    }
-    
-    /* High compliance (>= 80%) gets stronger styling */
-    .diet-score-badge.high-compliance {
+      }
+
+      /* High compliance (>= 80%) gets stronger styling */
+      .diet-score-badge.high-compliance {
         border: 2px solid;
-    }
-    
-    .diet-score-badge.keto.high-compliance {
+      }
+
+      .diet-score-badge.keto.high-compliance {
         border-color: #ff5722;
         background: #fff5f5;
-    }
-    
-    .diet-score-badge.vegan.high-compliance {
-        border-color: #4CAF50;
+      }
+
+      .diet-score-badge.vegan.high-compliance {
+        border-color: #4caf50;
         background: #f5fff5;
-    }
-    
-    /* 100% COMPLIANT - DRAMATIC STYLING */
-    .diet-score-badge.full-compliance {
+      }
+
+      /* 100% COMPLIANT - DRAMATIC STYLING */
+      .diet-score-badge.full-compliance {
         animation: pulse 2s ease-in-out infinite;
-        box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
         transform: scale(1.1);
-    }
-    
-    .diet-score-badge.keto.full-compliance {
+      }
+
+      .diet-score-badge.keto.full-compliance {
         background: linear-gradient(135deg, #ff5722 0%, #ff7043 100%);
         border: none;
         color: white;
-    }
-    
-    .diet-score-badge.keto.full-compliance .score-fill {
+      }
+
+      .diet-score-badge.keto.full-compliance .score-fill {
         display: none;
-    }
-    
-    .diet-score-badge.keto.full-compliance .score-text {
+      }
+
+      .diet-score-badge.keto.full-compliance .score-text {
         color: white;
         font-weight: 800;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-    }
-    
-    .diet-score-badge.vegan.full-compliance {
-        background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);
+      }
+
+      .diet-score-badge.vegan.full-compliance {
+        background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
         border: none;
         color: white;
-    }
-    
-    .diet-score-badge.vegan.full-compliance .score-fill {
+      }
+
+      .diet-score-badge.vegan.full-compliance .score-fill {
         display: none;
-    }
-    
-    .diet-score-badge.vegan.full-compliance .score-text {
+      }
+
+      .diet-score-badge.vegan.full-compliance .score-text {
         color: white;
         font-weight: 800;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-    }
-    
-    /* Checkmark for 100% */
-    .diet-score-badge.full-compliance .score-text::after {
+      }
+
+      /* Checkmark for 100% */
+      .diet-score-badge.full-compliance .score-text::after {
         content: " ✓";
         font-size: 1.2em;
         margin-left: 4px;
-    }
-    
-    /* Pulse animation for 100% badges */
-    @keyframes pulse {
+      }
+
+      /* Pulse animation for 100% badges */
+      @keyframes pulse {
         0% {
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+          box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
         }
         50% {
-            box-shadow: 0 0 25px rgba(0,0,0,0.3);
+          box-shadow: 0 0 25px rgba(0, 0, 0, 0.3);
         }
         100% {
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+          box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
         }
-    }
-    
-    /* Recipe card with 100% compliance gets special border */
-    .recipe-card.full-keto {
+      }
+
+      /* Recipe card with 100% compliance gets special border */
+      .recipe-card.full-keto {
         border: 3px solid #ff5722 !important;
         box-shadow: 0 0 20px rgba(255, 87, 34, 0.2);
-    }
-    
-    .recipe-card.full-vegan {
-        border: 3px solid #4CAF50 !important;
+      }
+
+      .recipe-card.full-vegan {
+        border: 3px solid #4caf50 !important;
         box-shadow: 0 0 20px rgba(76, 175, 80, 0.2);
-    }
-    
-    .recipe-card.full-both {
-        border: 3px solid #2196F3 !important;
+      }
+
+      .recipe-card.full-both {
+        border: 3px solid #2196f3 !important;
         box-shadow: 0 0 20px rgba(33, 150, 243, 0.3);
-    }
-    
-    /* Saved recipe card styling */
-    .recipe-card[onclick] {
+      }
+
+      /* Saved recipe card styling */
+      .recipe-card[onclick] {
         transition: all 0.3s ease;
-    }
-    
-    .recipe-card[onclick]:hover {
+      }
+
+      .recipe-card[onclick]:hover {
         transform: translateY(-5px);
-        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-    }
-    
-    .recipe-card[onclick]:active {
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+      }
+
+      .recipe-card[onclick]:active {
         transform: translateY(-2px);
-    }
-    
-    /* Large badge style for full compliance in cards */
-    .diet-badge-large {
+      }
+
+      /* Large badge style for full compliance in cards */
+      .diet-badge-large {
         position: absolute;
         top: 10px;
         left: 10px;
@@ -227,39 +239,44 @@
         font-weight: 800;
         text-transform: uppercase;
         letter-spacing: 1px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
         z-index: 15;
         animation: bounce 1s ease-in-out;
-    }
-    
-    .diet-badge-large.keto {
+      }
+
+      .diet-badge-large.keto {
         color: #ff5722;
         border: 2px solid #ff5722;
-    }
-    
-    .diet-badge-large.vegan {
-        color: #4CAF50;
-        border: 2px solid #4CAF50;
-    }
-    
-    .diet-badge-large.both {
-        color: #2196F3;
-        border: 2px solid #2196F3;
+      }
+
+      .diet-badge-large.vegan {
+        color: #4caf50;
+        border: 2px solid #4caf50;
+      }
+
+      .diet-badge-large.both {
+        color: #2196f3;
+        border: 2px solid #2196f3;
         background: linear-gradient(135deg, #fff5f2, #f2fff5);
-    }
-    
-    @keyframes bounce {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-5px); }
-    }
-    
-    /* Score icon */
-    .diet-score-icon {
+      }
+
+      @keyframes bounce {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-5px);
+        }
+      }
+
+      /* Score icon */
+      .diet-score-icon {
         font-size: 1.1em;
-    }
-    
-    /* In recipe cards */
-    .recipe-card .diet-badges {
+      }
+
+      /* In recipe cards */
+      .recipe-card .diet-badges {
         position: absolute;
         top: 10px;
         right: 10px;
@@ -267,24 +284,24 @@
         flex-direction: column;
         gap: 4px;
         z-index: 10;
-    }
-    
-    /* Fix overlapping badges */
-    .recipe-card .diet-badge-large {
+      }
+
+      /* Fix overlapping badges */
+      .recipe-card .diet-badge-large {
         /* Remove this from top-left since we'll only use diet-badges on right */
         display: none;
-    }
-    
-    /* In modal */
-    .modal .diet-score-container {
+      }
+
+      /* In modal */
+      .modal .diet-score-container {
         display: flex;
         gap: 8px;
         margin: 10px 0;
         flex-wrap: wrap;
-    }
-    
-    /* Existing styles */
-    .substitution-badges-container {
+      }
+
+      /* Existing styles */
+      .substitution-badges-container {
         position: absolute;
         bottom: 10px;
         left: 10px;
@@ -293,9 +310,9 @@
         gap: 4px;
         z-index: 10;
         max-width: 45%; /* Prevent overlap with buttons */
-    }
-    
-    .substitution-badge {
+      }
+
+      .substitution-badge {
         background: rgba(255, 152, 0, 0.9);
         color: white;
         padding: 4px 8px;
@@ -305,29 +322,29 @@
         align-items: center;
         gap: 4px;
         white-space: nowrap;
-    }
-    
-    .substitution-badge.keto {
+      }
+
+      .substitution-badge.keto {
         background: rgba(255, 87, 34, 0.9);
-    }
-    
-    .substitution-badge.vegan {
+      }
+
+      .substitution-badge.vegan {
         background: rgba(76, 175, 80, 0.9);
-    }
-    
-    .substitution-badge i {
+      }
+
+      .substitution-badge i {
         font-size: 0.9em;
-    }
-    
-    .make-diet-buttons {
+      }
+
+      .make-diet-buttons {
         display: flex;
         flex-direction: column;
         gap: 4px;
         margin-top: 5px;
-    }
-    
-    .make-diet-btn {
-        background: #2196F3;
+      }
+
+      .make-diet-btn {
+        background: #2196f3;
         color: white;
         border: none;
         padding: 8px 12px;
@@ -339,52 +356,52 @@
         align-items: center;
         justify-content: center;
         gap: 6px;
-    }
-    
-    .make-diet-btn .sub-count {
+      }
+
+      .make-diet-btn .sub-count {
         font-size: 0.8em;
         opacity: 0.9;
-    }
-    
-    .make-diet-btn.keto {
+      }
+
+      .make-diet-btn.keto {
         background: #ff5722;
-    }
-    
-    .make-diet-btn.keto:hover {
+      }
+
+      .make-diet-btn.keto:hover {
         background: #e64a19;
-    }
-    
-    .make-diet-btn.vegan {
-        background: #4CAF50;
-    }
-    
-    .make-diet-btn.vegan:hover {
-        background: #388E3C;
-    }
-    
-    .make-diet-btn.both {
-        background: #2196F3;
-    }
-    
-    .make-diet-btn.both:hover {
-        background: #1976D2;
-    }
-    
-    .make-diet-btn:hover {
-        background: #1976D2;
-    }
-    
-    .compliance-meter {
+      }
+
+      .make-diet-btn.vegan {
+        background: #4caf50;
+      }
+
+      .make-diet-btn.vegan:hover {
+        background: #388e3c;
+      }
+
+      .make-diet-btn.both {
+        background: #2196f3;
+      }
+
+      .make-diet-btn.both:hover {
+        background: #1976d2;
+      }
+
+      .make-diet-btn:hover {
+        background: #1976d2;
+      }
+
+      .compliance-meter {
         background: #f0f0f0;
         border-radius: 4px;
         height: 24px;
         position: relative;
         overflow: hidden;
         margin: 10px 0;
-    }
-    
-    .progress-bar-diet {
-        background: #4CAF50;
+      }
+
+      .progress-bar-diet {
+        background: #4caf50;
         height: 100%;
         transition: width 0.3s ease;
         display: flex;
@@ -393,22 +410,22 @@
         color: white;
         font-size: 0.85rem;
         white-space: nowrap;
-    }
-    
-    .substitution-item {
+      }
+
+      .substitution-item {
         border: 1px solid #dee2e6;
         border-radius: 4px;
         padding: 10px;
         margin-bottom: 10px;
         background: #f8f9fa;
-    }
-    
-    .substitution-item .original {
+      }
+
+      .substitution-item .original {
         font-weight: 500;
         color: #dc3545;
-    }
-    
-    .suggestion-btn {
+      }
+
+      .suggestion-btn {
         margin: 5px 5px 0 0;
         padding: 4px 8px;
         border: 1px solid #dee2e6;
@@ -417,30 +434,30 @@
         border-radius: 4px;
         font-size: 0.85rem;
         transition: all 0.2s;
-    }
-    
-    .suggestion-btn:hover {
+      }
+
+      .suggestion-btn:hover {
         background: #e9ecef;
-    }
-    
-    .suggestion-btn.selected {
-        background: #4CAF50;
+      }
+
+      .suggestion-btn.selected {
+        background: #4caf50;
         color: white;
-        border-color: #4CAF50;
-    }
-    
-    .diet-compliant {
-        border: 2px solid #4CAF50 !important;
-    }
-    
-    .diet-filter-pills {
+        border-color: #4caf50;
+      }
+
+      .diet-compliant {
+        border: 2px solid #4caf50 !important;
+      }
+
+      .diet-filter-pills {
         display: flex;
         gap: 10px;
         margin-bottom: 20px;
         justify-content: center;
-    }
-    
-    .diet-pill {
+      }
+
+      .diet-pill {
         padding: 6px 16px;
         border: 2px solid #dee2e6;
         border-radius: 20px;
@@ -449,80 +466,78 @@
         transition: all 0.2s;
         font-size: 0.9rem;
         user-select: none;
-    }
-    
-    .diet-pill:hover {
+      }
+
+      .diet-pill:hover {
         background: #f8f9fa;
-    }
-    
-    .diet-pill.active {
-        background: #2196F3;
+      }
+
+      .diet-pill.active {
+        background: #2196f3;
         color: white;
-        border-color: #2196F3;
-    }
-    
-    .diet-pill.keto.active {
+        border-color: #2196f3;
+      }
+
+      .diet-pill.keto.active {
         background: #ff5722;
         border-color: #ff5722;
-    }
-    
-    .diet-pill.vegan.active {
-        background: #4CAF50;
-        border-color: #4CAF50;
-    }
-    
-    .diet-pill.both.active {
-        background: #2196F3;
-        border-color: #2196F3;
-    }
-    
-    /* Allow multiple selections */
-    .diet-pill.all {
+      }
+
+      .diet-pill.vegan.active {
+        background: #4caf50;
+        border-color: #4caf50;
+      }
+
+      .diet-pill.both.active {
+        background: #2196f3;
+        border-color: #2196f3;
+      }
+
+      /* Allow multiple selections */
+      .diet-pill.all {
         margin-right: 20px;
         border-color: #6c757d;
-    }
-    
-    .diet-pill.all.active {
+      }
+
+      .diet-pill.all.active {
         background: #6c757d;
         border-color: #6c757d;
-    }
-    
-    /* Tab styles */
-    .nav-tabs .nav-link {
+      }
+
+      /* Tab styles */
+      .nav-tabs .nav-link {
         color: #495057;
         border: none;
         border-bottom: 3px solid transparent;
         padding: 0.5rem 1rem;
         margin-bottom: -1px;
-    }
-    
+      }
 
-    
-    .nav-tabs .nav-link:hover {
+      .nav-tabs .nav-link:hover {
         border-color: transparent;
-        color: #2196F3;
-    }
-    
-    .nav-tabs .nav-link.active {
-        color: #2196F3;
+        color: #2196f3;
+      }
+
+      .nav-tabs .nav-link.active {
+        color: #2196f3;
         background-color: transparent;
         border-color: transparent;
-        border-bottom-color: #2196F3;
-    }
-    
-    .tab-content {
+        border-bottom-color: #2196f3;
+      }
+
+      .tab-content {
         padding-top: 20px;
-    }
-    
-    /* Analyzer styles */
-    .analyzer-container {
+      }
+
+      /* Analyzer styles */
+      .analyzer-container {
         background: #f8f9fa;
         border-radius: 8px;
         padding: 20px;
         margin-bottom: 20px;
-    }
-    
-    .ingredient-textarea {
+      }
+
+      .ingredient-textarea {
         width: 100%;
         min-height: 150px;
         border: 1px solid #dee2e6;
@@ -530,718 +545,1109 @@
         padding: 10px;
         font-family: inherit;
         resize: vertical;
-    }
-    
-    .compliance-preview {
+      }
+
+      .compliance-preview {
         padding: 10px;
         border-radius: 4px;
         margin-top: 10px;
         font-size: 0.9rem;
-    }
-    
-    .compliance-preview.compliant {
+      }
+
+      .compliance-preview.compliant {
         background: #d4edda;
         color: #155724;
         border: 1px solid #c3e6cb;
-    }
-    
-    .compliance-preview.non-compliant {
+      }
+
+      .compliance-preview.non-compliant {
         background: #f8d7da;
         color: #721c24;
         border: 1px solid #f5c6cb;
-    }
-    
-    /* Compliance details in modal */
-    .compliance-details {
+      }
+
+      /* Compliance details in modal */
+      .compliance-details {
         font-size: 0.85rem;
         color: #6c757d;
-    }
-    
-    /* img.lazy { filter: blur(6px); transition: filter .4s ease; }
+      }
+
+      /* img.lazy { filter: blur(6px); transition: filter .4s ease; }
     img.lazy.loaded { filter: none; } */
 
-    img.lazy:not(.loaded) {
-        object-fit: contain;      /* show full SVG, don’t stretch */
-        padding: 40px;            /* white space around spinner   */
-    }
+      img.lazy:not(.loaded) {
+        object-fit: contain; /* show full SVG, don’t stretch */
+        padding: 40px; /* white space around spinner   */
+      }
 
-    img.lazy.loaded {
-        object-fit: cover;        /* restore full-bleed photo      */
-        padding: 0;               /* remove extra padding          */
-    }
+      img.lazy.loaded {
+        object-fit: cover; /* restore full-bleed photo      */
+        padding: 0; /* remove extra padding          */
+      }
 
-
-</style>
-
-</head>
-<body>
+      .rag-chat-root {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 12px;
+        height: calc(100vh - 260px);
+      }
+      .rag-chat-toolbar {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        align-items: flex-end;
+      }
+      .rag-chat-controls {
+        min-width: 180px;
+      }
+      .rag-chat-log {
+        overflow: auto;
+        padding: 12px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+      }
+      .msg {
+        display: grid;
+        gap: 8px;
+        margin: 10px 0;
+        max-width: 900px;
+      }
+      .msg.user {
+        justify-items: end;
+      }
+      .msg.assistant {
+        justify-items: start;
+      }
+      .bubble {
+        padding: 12px 14px;
+        border-radius: 16px;
+        line-height: 1.5;
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+      }
+      .user .bubble {
+        background: #e0f2fe;
+        border-color: #bae6fd;
+      }
+      .sources {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .source-pill {
+        font-size: 12px;
+        padding: 6px 8px;
+        border-radius: 999px;
+        background: #eef2ff;
+        border: 1px solid #c7d2fe;
+      }
+      .rag-chat-composer {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+      }
+      .rag-input,
+      .rag-send {
+        height: 44px;
+      }
+      .typing .dot {
+        width: 6px;
+        height: 6px;
+        margin: 0 2px;
+        background: #94a3b8;
+        border-radius: 50%;
+        display: inline-block;
+        animation: blink 1.2s infinite ease-in-out;
+      }
+      .typing .dot:nth-child(2) {
+        animation-delay: 0.15s;
+      }
+      .typing .dot:nth-child(3) {
+        animation-delay: 0.3s;
+      }
+      @keyframes blink {
+        0%,
+        80%,
+        100% {
+          opacity: 0.2;
+        }
+        40% {
+          opacity: 1;
+        }
+      }
+      .badge-mini {
+        font-size: 12px;
+        padding: 2px 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 999px;
+        background: #f1f5f9;
+      }
+    </style>
+  </head>
+  <body>
     <div class="container py-5">
-        <h1 class="text-center mb-4">🍽️ Recipe Search & Diet Analyzer</h1>
-        
-        <!-- Navigation Tabs -->
-        <ul class="nav nav-tabs justify-content-center mb-4" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="search-tab" data-bs-toggle="tab" data-bs-target="#search-content" type="button" role="tab">
-                    <i class="fas fa-search"></i> Search Recipes
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="analyze-tab" data-bs-toggle="tab" data-bs-target="#analyze-content" type="button" role="tab">
-                    <i class="fas fa-chart-pie"></i> Analyze Recipe
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="saved-tab" data-bs-toggle="tab" data-bs-target="#saved-content" type="button" role="tab">
-                    <i class="fas fa-save"></i> Saved Variations
-                </button>
-            </li>
-        </ul>
-        
-        <!-- Tab Content -->
-        <div class="tab-content">
-            <!-- Search Tab -->
-            <div class="tab-pane fade show active" id="search-content" role="tabpanel">
-                <!-- Diet Filter Pills -->
-                <div class="diet-filter-pills">
-                    <div class="diet-pill all active" data-diet="all" onclick="setDietFilter('all')">
-                        <i class="fas fa-utensils"></i> All Recipes
-                    </div>
-                    <div class="diet-pill keto" data-diet="keto" onclick="toggleDietFilter('keto')">
-                        🥑 Keto Friendly
-                    </div>
-                    <div class="diet-pill vegan" data-diet="vegan" onclick="toggleDietFilter('vegan')">
-                        🌱 Vegan
-                    </div>
-                    <div class="diet-pill both" data-diet="both" onclick="toggleDietFilter('both')">
-                        🥑🌱 Keto & Vegan
-                    </div>
-                </div>
-                
-                <!-- Search Bar -->
-                <div class="row justify-content-center mb-4">
-                    <div class="col-md-8">
-                        <select class="form-select" id="ingredientSearch" multiple="multiple">
-                        </select>
-                    </div>
-                </div>
-                
-                <!-- Results Container -->
-                <div class="row" id="resultsContainer">
-                </div>
+      <h1 class="text-center mb-4">🍽️ Recipe Search & Diet Analyzer</h1>
+
+      <!-- Navigation Tabs -->
+      <ul class="nav nav-tabs justify-content-center mb-4" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link active"
+            id="search-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#search-content"
+            type="button"
+            role="tab"
+          >
+            <i class="fas fa-search"></i> Search Recipes
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            id="analyze-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#analyze-content"
+            type="button"
+            role="tab"
+          >
+            <i class="fas fa-chart-pie"></i> Analyze Recipe
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            id="saved-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#saved-content"
+            type="button"
+            role="tab"
+          >
+            <i class="fas fa-save"></i> Saved Variations
+          </button>
+        </li>
+
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            id="rag-chat-tab"
+            data-bs-toggle="tab"
+            data-bs-target="#rag-chat-panel"
+            type="button"
+            role="tab"
+            aria-controls="rag-chat-panel"
+            aria-selected="false"
+          >
+            💬 RAG Chat
+          </button>
+        </li>
+      </ul>
+
+      <!-- Tab Content -->
+      <div class="tab-content">
+        <!-- Search Tab -->
+        <div
+          class="tab-pane fade show active"
+          id="search-content"
+          role="tabpanel"
+        >
+          <!-- Diet Filter Pills -->
+          <div class="diet-filter-pills">
+            <div
+              class="diet-pill all active"
+              data-diet="all"
+              onclick="setDietFilter('all')"
+            >
+              <i class="fas fa-utensils"></i> All Recipes
             </div>
-            
-            <!-- Analyze Tab -->
-            <div class="tab-pane fade" id="analyze-content" role="tabpanel">
-                <div class="row justify-content-center">
-                    <div class="col-md-8">
-                        <div class="analyzer-container">
-                            <h4>Recipe Ingredient Analyzer</h4>
-                            
-                            <div class="btn-group mb-3" role="group">
-                                <input type="radio" class="btn-check" name="diet" id="diet-keto" value="keto" checked>
-                                <label class="btn btn-outline-danger" for="diet-keto">🥑 Keto</label>
-                                
-                                <input type="radio" class="btn-check" name="diet" id="diet-vegan" value="vegan">
-                                <label class="btn btn-outline-success" for="diet-vegan">🌱 Vegan</label>
-                                
-                                <input type="radio" class="btn-check" name="diet" id="diet-both" value="both">
-                                <label class="btn btn-outline-primary" for="diet-both">🥑🌱 Both</label>
-                            </div>
-                            
-                            <textarea 
-                                id="ingredient-input"
-                                class="ingredient-textarea" 
-                                placeholder="Enter ingredients (one per line):&#10;2 cups flour&#10;3 eggs&#10;1 cup sugar&#10;1/2 cup butter&#10;..."
-                            ></textarea>
-                            
-                            <div id="compliance-preview"></div>
-                            
-                            <div class="mt-3">
-                                <button class="btn btn-primary" onclick="analyzeRecipe()">
-                                    <i class="fas fa-chart-pie"></i> Analyze Recipe
-                                </button>
-                                <button class="btn btn-success" onclick="modifyRecipe()">
-                                    <i class="fas fa-magic"></i> Make It Diet-Compliant
-                                </button>
-                                <button class="btn btn-warning" onclick="exportCurrentRecipe()">
-                                    <i class="fas fa-download"></i> Export Modified
-                                </button>
-                            </div>
-                            
-                            <div id="analysis-results" class="mt-4"></div>
-                        </div>
-                    </div>
-                </div>
+            <div
+              class="diet-pill keto"
+              data-diet="keto"
+              onclick="toggleDietFilter('keto')"
+            >
+              🥑 Keto Friendly
             </div>
-            
-            <!-- Saved Variations Tab -->
-            <div class="tab-pane fade" id="saved-content" role="tabpanel">
-                <div class="row justify-content-center">
-                    <div class="col-md-10">
-                        <div class="d-flex justify-content-between align-items-center mb-4">
-                            <h4>Saved Recipe Variations</h4>
-                            <div class="d-flex gap-2 align-items-center">
-                                <button class="btn btn-outline-danger" onclick="clearAllSavedRecipes()">
-                                    <i class="fas fa-trash"></i> Clear All
-                                </button>
-                            </div>
-                        </div>
-                        <div id="saved-recipes-container">
-                            <!-- Saved recipes will be loaded here -->
-                        </div>
-                    </div>
-                </div>
+            <div
+              class="diet-pill vegan"
+              data-diet="vegan"
+              onclick="toggleDietFilter('vegan')"
+            >
+              🌱 Vegan
             </div>
+            <div
+              class="diet-pill both"
+              data-diet="both"
+              onclick="toggleDietFilter('both')"
+            >
+              🥑🌱 Keto & Vegan
+            </div>
+          </div>
+
+          <!-- Search Bar -->
+          <div class="row justify-content-center mb-4">
+            <div class="col-md-8">
+              <select
+                class="form-select"
+                id="ingredientSearch"
+                multiple="multiple"
+              ></select>
+            </div>
+          </div>
+
+          <!-- Results Container -->
+          <div class="row" id="resultsContainer"></div>
         </div>
+
+        <!-- Analyze Tab -->
+        <div class="tab-pane fade" id="analyze-content" role="tabpanel">
+          <div class="row justify-content-center">
+            <div class="col-md-8">
+              <div class="analyzer-container">
+                <h4>Recipe Ingredient Analyzer</h4>
+
+                <div class="btn-group mb-3" role="group">
+                  <input
+                    type="radio"
+                    class="btn-check"
+                    name="diet"
+                    id="diet-keto"
+                    value="keto"
+                    checked
+                  />
+                  <label class="btn btn-outline-danger" for="diet-keto"
+                    >🥑 Keto</label
+                  >
+
+                  <input
+                    type="radio"
+                    class="btn-check"
+                    name="diet"
+                    id="diet-vegan"
+                    value="vegan"
+                  />
+                  <label class="btn btn-outline-success" for="diet-vegan"
+                    >🌱 Vegan</label
+                  >
+
+                  <input
+                    type="radio"
+                    class="btn-check"
+                    name="diet"
+                    id="diet-both"
+                    value="both"
+                  />
+                  <label class="btn btn-outline-primary" for="diet-both"
+                    >🥑🌱 Both</label
+                  >
+                </div>
+
+                <textarea
+                  id="ingredient-input"
+                  class="ingredient-textarea"
+                  placeholder="Enter ingredients (one per line):&#10;2 cups flour&#10;3 eggs&#10;1 cup sugar&#10;1/2 cup butter&#10;..."
+                ></textarea>
+
+                <div id="compliance-preview"></div>
+
+                <div class="mt-3">
+                  <button class="btn btn-primary" onclick="analyzeRecipe()">
+                    <i class="fas fa-chart-pie"></i> Analyze Recipe
+                  </button>
+                  <button class="btn btn-success" onclick="modifyRecipe()">
+                    <i class="fas fa-magic"></i> Make It Diet-Compliant
+                  </button>
+                  <button
+                    class="btn btn-warning"
+                    onclick="exportCurrentRecipe()"
+                  >
+                    <i class="fas fa-download"></i> Export Modified
+                  </button>
+                </div>
+
+                <div id="analysis-results" class="mt-4"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Saved Variations Tab -->
+        <div class="tab-pane fade" id="saved-content" role="tabpanel">
+          <div class="row justify-content-center">
+            <div class="col-md-10">
+              <div
+                class="d-flex justify-content-between align-items-center mb-4"
+              >
+                <h4>Saved Recipe Variations</h4>
+                <div class="d-flex gap-2 align-items-center">
+                  <button
+                    class="btn btn-outline-danger"
+                    onclick="clearAllSavedRecipes()"
+                  >
+                    <i class="fas fa-trash"></i> Clear All
+                  </button>
+                </div>
+              </div>
+              <div id="saved-recipes-container">
+                <!-- Saved recipes will be loaded here -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ==== BEGIN RAG PATCH: Tab panel ==== -->
+        <div
+          class="tab-pane fade"
+          id="rag-chat-panel"
+          role="tabpanel"
+          aria-labelledby="rag-chat-tab"
+        >
+          <div class="rag-chat-root">
+            <div class="rag-chat-toolbar">
+              <div class="rag-chat-controls">
+                <label class="form-label">Diet</label>
+                <select id="ragDiet" class="form-select">
+                  <option value="auto" selected>Auto (from query)</option>
+                  <option value="">All</option>
+                  <option value="keto">Keto</option>
+                  <option value="vegan">Vegan</option>
+                  <option value="both">Keto &amp; Vegan</option>
+                </select>
+              </div>
+              <div class="rag-chat-controls">
+                <label class="form-label">Threshold</label>
+                <div class="d-flex align-items-center gap-2">
+                  <input
+                    id="ragThreshold"
+                    type="range"
+                    class="form-range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value="1"
+                  />
+                  <span id="ragThresholdValue">1.00</span>
+                </div>
+              </div>
+              <div class="rag-chat-controls">
+                <label class="form-label">Top-k</label>
+                <input
+                  id="ragTopK"
+                  type="number"
+                  class="form-control"
+                  min="1"
+                  max="10"
+                  value="5"
+                />
+              </div>
+            </div>
+
+            <div id="ragChatLog" class="rag-chat-log" aria-live="polite"></div>
+
+            <form id="ragChatForm" class="rag-chat-composer" autocomplete="off">
+              <input
+                id="ragInput"
+                class="form-control rag-input"
+                type="text"
+                placeholder='Ask: "vegan banana pancakes for two", "keto chicken dinner", etc.'
+              />
+              <button
+                id="ragSend"
+                class="btn btn-primary rag-send"
+                type="submit"
+              >
+                Send
+              </button>
+            </form>
+          </div>
+        </div>
+        <!-- ==== END RAG PATCH: Tab panel ==== -->
+      </div>
     </div>
 
-
     <template id="img-placeholder">
-        <svg width="40" height="40" viewBox="0 0 40 40" stroke="#6c757d" fill="none"
-            xmlns="http://www.w3.org/2000/svg">
-            <circle cx="20" cy="20" r="18" stroke-opacity=".25" stroke-width="4"/>
-            <path d="M38 20a18 18 0 0 1-18 18" stroke-width="4" stroke-linecap="round">
-                <animateTransform attributeName="transform" type="rotate"
-                                from="0 20 20" to="360 20 20"
-                                dur="1s" repeatCount="indefinite"/>
-            </path>
-        </svg>
+      <svg
+        width="40"
+        height="40"
+        viewBox="0 0 40 40"
+        stroke="#6c757d"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <circle cx="20" cy="20" r="18" stroke-opacity=".25" stroke-width="4" />
+        <path
+          d="M38 20a18 18 0 0 1-18 18"
+          stroke-width="4"
+          stroke-linecap="round"
+        >
+          <animateTransform
+            attributeName="transform"
+            type="rotate"
+            from="0 20 20"
+            to="360 20 20"
+            dur="1s"
+            repeatCount="indefinite"
+          />
+        </path>
+      </svg>
     </template>
 
     <template id="img-error">
-        <svg width="56" height="56" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
-            <!-- soft rounded frame -->
-            <rect x="2" y="2" width="52" height="52" rx="8"
-                fill="#f2f2f2" stroke="#cccccc" stroke-width="2"/>
-            <!-- stylised mountains & sun -->
-            <path d="M14 40 L24 26 L32 34 L38 28 L46 40 Z"
-                fill="#d9d9d9"/>
-            <circle cx="20" cy="20" r="4" fill="#cccccc"/>
-            <!-- X mark -->
-            <line x1="18" y1="18" x2="38" y2="38"
-                stroke="#b5b5b5" stroke-width="3" stroke-linecap="round"/>
-            <line x1="38" y1="18" x2="18" y2="38"
-                stroke="#b5b5b5" stroke-width="3" stroke-linecap="round"/>
-        </svg>
+      <svg
+        width="56"
+        height="56"
+        viewBox="0 0 56 56"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <!-- soft rounded frame -->
+        <rect
+          x="2"
+          y="2"
+          width="52"
+          height="52"
+          rx="8"
+          fill="#f2f2f2"
+          stroke="#cccccc"
+          stroke-width="2"
+        />
+        <!-- stylised mountains & sun -->
+        <path d="M14 40 L24 26 L32 34 L38 28 L46 40 Z" fill="#d9d9d9" />
+        <circle cx="20" cy="20" r="4" fill="#cccccc" />
+        <!-- X mark -->
+        <line
+          x1="18"
+          y1="18"
+          x2="38"
+          y2="38"
+          stroke="#b5b5b5"
+          stroke-width="3"
+          stroke-linecap="round"
+        />
+        <line
+          x1="38"
+          y1="18"
+          x2="18"
+          y2="38"
+          stroke="#b5b5b5"
+          stroke-width="3"
+          stroke-linecap="round"
+        />
+      </svg>
     </template>
-
 
     <!-- Recipe Modal -->
     <div class="modal fade" id="recipeModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="modalTitle"></h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="modalTitle"></h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div class="row">
+              <div class="col-md-4">
+                <img id="modalImage" class="img-fluid rounded" src="" alt="" />
+                <div id="modalDietInfo" class="mt-3"></div>
+              </div>
+              <div class="col-md-8">
+                <h6>Description</h6>
+                <p id="modalDescription"></p>
+
+                <h6>Ingredients</h6>
+                <ul id="modalIngredients"></ul>
+
+                <div id="modalSubstitutions" style="display: none">
+                  <hr />
+                  <h6>Diet Substitutions Available</h6>
+                  <div id="substitutionsList"></div>
                 </div>
-                <div class="modal-body">
-                    <div class="row">
-                        <div class="col-md-4">
-                            <img id="modalImage" class="img-fluid rounded" src="" alt="">
-                            <div id="modalDietInfo" class="mt-3"></div>
-                        </div>
-                        <div class="col-md-8">
-                            <h6>Description</h6>
-                            <p id="modalDescription"></p>
-                            
-                            <h6>Ingredients</h6>
-                            <ul id="modalIngredients"></ul>
-                            
-                            <div id="modalSubstitutions" style="display: none;">
-                                <hr>
-                                <h6>Diet Substitutions Available</h6>
-                                <div id="substitutionsList"></div>
-                            </div>
-                            
-                            <h6>Instructions</h6>
-                            <ol id="modalInstructions"></ol>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button id="makeCompliantBtn" type="button" class="btn btn-primary" style="display: none;">
-                        <i class="fas fa-magic"></i> Make It Diet-Compliant
-                    </button>
-                </div>
+
+                <h6>Instructions</h6>
+                <ol id="modalInstructions"></ol>
+              </div>
             </div>
+          </div>
+          <div class="modal-footer">
+            <button
+              id="makeCompliantBtn"
+              type="button"
+              class="btn btn-primary"
+              style="display: none"
+            >
+              <i class="fas fa-magic"></i> Make It Diet-Compliant
+            </button>
+          </div>
         </div>
+      </div>
     </div>
 
     <!-- Substitution Modal -->
     <div class="modal fade" id="substitutionModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Make Recipe Diet-Compliant</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="substitutionContent"></div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-success" onclick="applyAllSubstitutions()">
-                        Apply All Substitutions
-                    </button>
-                </div>
-            </div>
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Make Recipe Diet-Compliant</h5>
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="modal"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <div id="substitutionContent"></div>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-success"
+              onclick="applyAllSubstitutions()"
+            >
+              Apply All Substitutions
+            </button>
+          </div>
         </div>
+      </div>
     </div>
 
     <!-- Footer -->
     <footer class="footer mt-auto py-3 bg-light">
-        <div class="container text-center">
-            <p class="text-muted mb-0">
-                <small>
-                    This data was collected from publicly available recipes from allrecipes.com for educational purposes only.
-                </small>
-            </p>
-        </div>
+      <div class="container text-center">
+        <p class="text-muted mb-0">
+          <small>
+            This data was collected from publicly available recipes from
+            allrecipes.com for educational purposes only.
+          </small>
+        </p>
+      </div>
     </footer>
 
     <!-- Scripts -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    
+
     <script>
+      /* ─────────────────────  LAZY-IMAGE LOADER  ───────────────────── */
+      (function () {
+        const ph = encodeURIComponent(
+          document.getElementById("img-placeholder").innerHTML.trim()
+        );
+        const err = encodeURIComponent(
+          document.getElementById("img-error").innerHTML.trim()
+        );
+        const phURI = "data:image/svg+xml;utf8," + ph;
+        const errURI = "data:image/svg+xml;utf8," + err;
 
-        /* ─────────────────────  LAZY-IMAGE LOADER  ───────────────────── */
-        (function () {
-            const ph  = encodeURIComponent(document.getElementById('img-placeholder').innerHTML.trim());
-            const err = encodeURIComponent(document.getElementById('img-error').innerHTML.trim());
-            const phURI  = 'data:image/svg+xml;utf8,' + ph;
-            const errURI = 'data:image/svg+xml;utf8,' + err;
+        const io = new IntersectionObserver(
+          (entries, obs) => {
+            entries.forEach((e) => {
+              if (!e.isIntersecting) return;
+              const img = e.target;
+              img.src = img.dataset.src;
+              img.onload = () => img.classList.add("loaded");
+              img.onerror = () => {
+                img.src = errURI;
+                img.classList.add("loaded");
+              };
+              obs.unobserve(img);
+            });
+          },
+          { rootMargin: "200px" }
+        );
 
-            const io = new IntersectionObserver((entries, obs) => {
-                entries.forEach(e => {
-                    if (!e.isIntersecting) return;
-                    const img = e.target;
-                    img.src = img.dataset.src;
-                    img.onload  = () => img.classList.add('loaded');
-                    img.onerror = () => { img.src = errURI; img.classList.add('loaded'); };
-                    obs.unobserve(img);
-                });
-            }, { rootMargin: '200px' });
+        function hookLazyImages(scope = document) {
+          scope
+            .querySelectorAll('img.lazy:not([data-hooked="1"])')
+            .forEach((img) => {
+              img.dataset.hooked = "1";
+              img.src = phURI;
+              io.observe(img);
+            });
+        }
+        window.hookLazyImages = hookLazyImages;
+        document.addEventListener("DOMContentLoaded", () => hookLazyImages());
+      })();
 
-            function hookLazyImages(scope=document){
-                scope.querySelectorAll('img.lazy:not([data-hooked="1"])').forEach(img=>{
-                    img.dataset.hooked='1';
-                    img.src = phURI;
-                    io.observe(img);
-                });
-            }
-            window.hookLazyImages = hookLazyImages;
-            document.addEventListener('DOMContentLoaded', () => hookLazyImages());
-        })();
+      let currentDietFilter = "all";
+      let currentDietFilters = []; // Support multiple diet filters
+      let currentDietThresholds = {}; // Track thresholds for each diet: {keto: 0.8, vegan: 0.9, etc}
+      let currentRecipe = null;
+      let currentSubstitutions = null;
 
+      // Diet score badge creation function with threshold-aware styling
+      function createDietScoreBadge(diet, score, size = "normal") {
+        // Handle null, undefined, or invalid scores
+        if (score === null || score === undefined || isNaN(score)) {
+          score = 0;
+        }
 
+        const threshold = currentDietThresholds[diet] || 1.0;
+        const thresholdPercent = threshold * 100;
+        const isHighCompliance = score >= 80;
+        const isFullCompliance = score === 100;
+        const meetsThreshold = score >= thresholdPercent;
 
-        let currentDietFilter = 'all';
-        let currentDietFilters = []; // Support multiple diet filters
-        let currentDietThresholds = {}; // Track thresholds for each diet: {keto: 0.8, vegan: 0.9, etc}
-        let currentRecipe = null;
-        let currentSubstitutions = null;
-        
-        // Diet score badge creation function with threshold-aware styling
-        function createDietScoreBadge(diet, score, size = 'normal') {
-            // Handle null, undefined, or invalid scores
-            if (score === null || score === undefined || isNaN(score)) {
-                score = 0;
-            }
-            
-            const threshold = currentDietThresholds[diet] || 1.0;
-            const thresholdPercent = threshold * 100;
-            const isHighCompliance = score >= 80;
-            const isFullCompliance = score === 100;
-            const meetsThreshold = score >= thresholdPercent;
-            
-            let badgeClass = `diet-score-badge ${diet}`;
-            if (isHighCompliance) badgeClass += ' high-compliance';
-            if (isFullCompliance) badgeClass += ' full-compliance';
-            if (meetsThreshold) badgeClass += ' meets-threshold';
-            
-            // Handle "both" diet badge
-            if (diet === 'both') {
-                const icon = '🥑🌱';
-                const text = isFullCompliance ? 'KETO & VEGAN' : `${score}% keto & vegan`;
-                return `
+        let badgeClass = `diet-score-badge ${diet}`;
+        if (isHighCompliance) badgeClass += " high-compliance";
+        if (isFullCompliance) badgeClass += " full-compliance";
+        if (meetsThreshold) badgeClass += " meets-threshold";
+
+        // Handle "both" diet badge
+        if (diet === "both") {
+          const icon = "🥑🌱";
+          const text = isFullCompliance
+            ? "KETO & VEGAN"
+            : `${score}% keto & vegan`;
+          return `
                     <div class="${badgeClass}">
-                        ${!isFullCompliance ? `<div class="score-fill" style="width: ${score}%"></div>` : ''}
+                        ${
+                          !isFullCompliance
+                            ? `<div class="score-fill" style="width: ${score}%"></div>`
+                            : ""
+                        }
                         <div class="score-text">
                             <span class="diet-score-icon">${icon}</span>
                             <span>${text}</span>
-                            ${threshold < 1.0 ? `<small style="opacity: 0.7;">≥${thresholdPercent}%</small>` : ''}
+                            ${
+                              threshold < 1.0
+                                ? `<small style="opacity: 0.7;">≥${thresholdPercent}%</small>`
+                                : ""
+                            }
                         </div>
                     </div>
                 `;
-            }
-            
-            const icon = diet === 'keto' ? '🥑' : '🌱';
-            
-            // For 100% compliance, show special text
-            const text = isFullCompliance ? `${diet.toUpperCase()}` : `${score}% ${diet}`;
-            
-            return `
+        }
+
+        const icon = diet === "keto" ? "🥑" : "🌱";
+
+        // For 100% compliance, show special text
+        const text = isFullCompliance
+          ? `${diet.toUpperCase()}`
+          : `${score}% ${diet}`;
+
+        return `
                 <div class="${badgeClass}">
-                    ${!isFullCompliance ? `<div class="score-fill" style="width: ${score}%"></div>` : ''}
+                    ${
+                      !isFullCompliance
+                        ? `<div class="score-fill" style="width: ${score}%"></div>`
+                        : ""
+                    }
                     <div class="score-text">
                         <span class="diet-score-icon">${icon}</span>
                         <span>${text}</span>
-                        ${threshold < 1.0 ? `<small style="opacity: 0.7;">≥${thresholdPercent}%</small>` : ''}
+                        ${
+                          threshold < 1.0
+                            ? `<small style="opacity: 0.7;">≥${thresholdPercent}%</small>`
+                            : ""
+                        }
                     </div>
                 </div>
             `;
-        }
-        
-        // Create large badge for 100% compliant recipes
-        function createLargeDietBadge(diet) {
-            const icon = diet === 'keto' ? '🥑' : (diet === 'vegan' ? '🌱' : '🥑🌱');
-            const text = diet === 'both' ? 'KETO & VEGAN' : diet.toUpperCase();
-            return `
+      }
+
+      // Create large badge for 100% compliant recipes
+      function createLargeDietBadge(diet) {
+        const icon = diet === "keto" ? "🥑" : diet === "vegan" ? "🌱" : "🥑🌱";
+        const text = diet === "both" ? "KETO & VEGAN" : diet.toUpperCase();
+        return `
                 <div class="diet-badge-large ${diet}">
                     ${icon} ${text}
                 </div>
             `;
-        }
-        
-        $(document).ready(function () {
-            // Initialize Select2
-            $('#ingredientSearch').select2({
-                theme: 'bootstrap-5',
-                placeholder: 'Search for ingredients or add diet filters...',
-                allowClear: true,
-                minimumInputLength: 1,
-                tags: true,
-                tokenSeparators: [' '],
-                createTag: function(params) {
-                    var term = params.term.trim();
-                    
-                    if (term.match(/^#(keto|vegan|both)(:\d*\.?\d+)?$/)) {
-                        return {
-                            id: term,
-                            text: term,
-                            newTag: true
-                        };
-                    }
-                    
-                    return null;
-                },
-                ajax: {
-                    url: '/select2',
-                    dataType: 'json',
-                    delay: 250,
-                    data: function(params) {
-                        return {
-                            q: params.term || ''
-                        };
-                    },
-                    processResults: function(data) {
-                        return data;
-                    },
-                    cache: true
-                },
-                templateResult: function(data) {
-                    if (data.newTag) {
-                        // Parse the threshold for better display
-                        const match = data.text.match(/^#(keto|vegan|both)(?::([\d.]+))?$/);
-                        if (match) {
-                            const diet = match[1];
-                            const threshold = match[2] ? parseFloat(match[2]) : 1.0;
-                            const thresholdPercent = Math.round(threshold * 100);
-                            const dietDisplay = diet === 'both' ? 'keto & vegan' : diet;
-                            return $('<span><em>' + data.text + '</em> (≥' + thresholdPercent + '% ' + dietDisplay + ')</span>');
-                        }
-                        return $('<span><em>' + data.text + '</em> (custom threshold)</span>');
-                    }
-                    return data.text;
-                }
-            }).on('change', function() {
-                const selectedValues = $(this).val() || [];
-                if (selectedValues.length > 0) {
-                    searchRecipes(selectedValues);
-                } else {
-                    $('#resultsContainer').empty();
-                }
-            });
+      }
 
-            // Initialize Bootstrap tabs
-            const triggerTabList = document.querySelectorAll('#search-tab, #analyze-tab, #saved-tab');
-            triggerTabList.forEach(triggerEl => {
-                new bootstrap.Tab(triggerEl);
-            });
-            
-            // Load saved recipes when saved tab is clicked
-            document.getElementById('saved-tab').addEventListener('click', function() {
-                loadSavedRecipes();
-            });
-            
-            // Live preview for analyzer
-            $('#ingredient-input').on('input', debounce(updateCompliancePreview, 300));
+      $(document).ready(function () {
+        // Initialize Select2
+        $("#ingredientSearch")
+          .select2({
+            theme: "bootstrap-5",
+            placeholder: "Search for ingredients or add diet filters...",
+            allowClear: true,
+            minimumInputLength: 1,
+            tags: true,
+            tokenSeparators: [" "],
+            createTag: function (params) {
+              var term = params.term.trim();
+
+              if (term.match(/^#(keto|vegan|both)(:\d*\.?\d+)?$/)) {
+                return {
+                  id: term,
+                  text: term,
+                  newTag: true,
+                };
+              }
+
+              return null;
+            },
+            ajax: {
+              url: "/select2",
+              dataType: "json",
+              delay: 250,
+              data: function (params) {
+                return {
+                  q: params.term || "",
+                };
+              },
+              processResults: function (data) {
+                return data;
+              },
+              cache: true,
+            },
+            templateResult: function (data) {
+              if (data.newTag) {
+                // Parse the threshold for better display
+                const match = data.text.match(
+                  /^#(keto|vegan|both)(?::([\d.]+))?$/
+                );
+                if (match) {
+                  const diet = match[1];
+                  const threshold = match[2] ? parseFloat(match[2]) : 1.0;
+                  const thresholdPercent = Math.round(threshold * 100);
+                  const dietDisplay = diet === "both" ? "keto & vegan" : diet;
+                  return $(
+                    "<span><em>" +
+                      data.text +
+                      "</em> (≥" +
+                      thresholdPercent +
+                      "% " +
+                      dietDisplay +
+                      ")</span>"
+                  );
+                }
+                return $(
+                  "<span><em>" + data.text + "</em> (custom threshold)</span>"
+                );
+              }
+              return data.text;
+            },
+          })
+          .on("change", function () {
+            const selectedValues = $(this).val() || [];
+            if (selectedValues.length > 0) {
+              searchRecipes(selectedValues);
+            } else {
+              $("#resultsContainer").empty();
+            }
+          });
+
+        // Initialize Bootstrap tabs
+        const triggerTabList = document.querySelectorAll(
+          "#search-tab, #analyze-tab, #saved-tab"
+        );
+        triggerTabList.forEach((triggerEl) => {
+          new bootstrap.Tab(triggerEl);
         });
-        
-        // Set diet filter (for "All Recipes" button)
-        function setDietFilter(diet) {
-            if (diet === 'all') {
-                currentDietFilter = 'all';
-                currentDietFilters = [];
-                currentDietThresholds = {}; // Clear thresholds when switching to "all"
-                
-                // Update pill styles
-                document.querySelectorAll('.diet-pill').forEach(pill => {
-                    pill.classList.remove('active');
-                    // Restore original text if it was modified
-                    const originalText = pill.getAttribute('data-original-text');
-                    if (originalText) {
-                        pill.innerHTML = originalText;
-                        pill.removeAttribute('data-original-text');
-                    }
-                });
-                document.querySelector('[data-diet="all"]').classList.add('active');
-                
-                // Re-run search
-                const currentTags = $('#ingredientSearch').val() || [];
-                searchRecipes(currentTags);
+
+        // Load saved recipes when saved tab is clicked
+        document
+          .getElementById("saved-tab")
+          .addEventListener("click", function () {
+            loadSavedRecipes();
+          });
+
+        // Live preview for analyzer
+        $("#ingredient-input").on(
+          "input",
+          debounce(updateCompliancePreview, 300)
+        );
+      });
+
+      // Set diet filter (for "All Recipes" button)
+      function setDietFilter(diet) {
+        if (diet === "all") {
+          currentDietFilter = "all";
+          currentDietFilters = [];
+          currentDietThresholds = {}; // Clear thresholds when switching to "all"
+
+          // Update pill styles
+          document.querySelectorAll(".diet-pill").forEach((pill) => {
+            pill.classList.remove("active");
+            // Restore original text if it was modified
+            const originalText = pill.getAttribute("data-original-text");
+            if (originalText) {
+              pill.innerHTML = originalText;
+              pill.removeAttribute("data-original-text");
             }
+          });
+          document.querySelector('[data-diet="all"]').classList.add("active");
+
+          // Re-run search
+          const currentTags = $("#ingredientSearch").val() || [];
+          searchRecipes(currentTags);
         }
-        
-        // Toggle diet filter (for Keto/Vegan/Both buttons - allows multiple selection)
-        function toggleDietFilter(diet) {
-            // Deactivate "All Recipes" when selecting specific diets
-            document.querySelector('[data-diet="all"]').classList.remove('active');
-            
+      }
+
+      // Toggle diet filter (for Keto/Vegan/Both buttons - allows multiple selection)
+      function toggleDietFilter(diet) {
+        // Deactivate "All Recipes" when selecting specific diets
+        document.querySelector('[data-diet="all"]').classList.remove("active");
+
+        const pill = document.querySelector(`[data-diet="${diet}"]`);
+        const isActive = pill.classList.contains("active");
+
+        if (isActive) {
+          // Remove from active filters
+          pill.classList.remove("active");
+          currentDietFilters = currentDietFilters.filter((d) => d !== diet);
+          delete currentDietThresholds[diet]; // Remove threshold for this diet
+
+          // Restore original pill text
+          const originalText = pill.getAttribute("data-original-text");
+          if (originalText) {
+            pill.innerHTML = originalText;
+            pill.removeAttribute("data-original-text");
+          }
+        } else {
+          // Add to active filters
+          pill.classList.add("active");
+          if (!currentDietFilters.includes(diet)) {
+            currentDietFilters.push(diet);
+            // Set default threshold to 1.0 (100%) for pill selections
+            currentDietThresholds[diet] = 1.0;
+          }
+        }
+
+        // If no filters are active, revert to "all"
+        if (currentDietFilters.length === 0) {
+          setDietFilter("all");
+        } else {
+          currentDietFilter = currentDietFilters[0]; // Keep for backward compatibility
+
+          // Re-run search with active filters
+          const currentTags = $("#ingredientSearch").val() || [];
+          searchRecipes(currentTags);
+        }
+      }
+
+      // Search recipes with diet filter
+      function searchRecipes(tags) {
+        if (!tags || tags.length === 0) {
+          // If no search tags but diet filters are active, still search
+          if (currentDietFilters.length === 0 && currentDietFilter === "all") {
+            $("#resultsContainer").empty();
+            return;
+          }
+        }
+
+        const ids = tags ? tags.filter((t) => /^\d+$/.test(t)) : [];
+        let extras = tags ? tags.filter((t) => !/^\d+$/.test(t)) : [];
+
+        // Extract diet filters and thresholds from tags
+        const tagsFilters = [];
+        const tagsThresholds = {};
+        extras.forEach((tag) => {
+          if (tag.startsWith("#")) {
+            const match = tag.match(/^#(keto|vegan|both)(?::([\d.]+))?$/);
+            if (match) {
+              const diet = match[1];
+              const threshold = match[2] ? parseFloat(match[2]) : 1.0;
+              tagsFilters.push(diet);
+              tagsThresholds[diet] = threshold;
+            }
+          }
+        });
+
+        // Convert plain #keto or #vegan to #keto:0 or #vegan:0 to get ALL recipes with substitution info
+        extras = extras.map((tag) => {
+          if (tag === "#keto" || tag === "#vegan" || tag === "#both") {
+            return `${tag}:0`; // Use 0 threshold to get all recipes
+          }
+          return tag;
+        });
+
+        // If no diet filters in tags, use the pill selections
+        if (tagsFilters.length === 0 && currentDietFilters.length > 0) {
+          // Add diet filters from pills WITH :0 threshold to get all recipes
+          currentDietFilters.forEach((diet) => {
+            if (!extras.some((e) => e.includes(`#${diet}`))) {
+              const threshold = currentDietThresholds[diet] || 1.0;
+              extras.push(`#${diet}:${threshold}`);
+            }
+          });
+        } else if (tagsFilters.length > 0) {
+          // Tags take precedence, update currentDietFilters and thresholds
+          currentDietFilters = tagsFilters;
+          currentDietThresholds = {
+            ...currentDietThresholds,
+            ...tagsThresholds,
+          };
+
+          // Update pill UI to match
+          document.querySelectorAll(".diet-pill").forEach((pill) => {
+            pill.classList.remove("active");
+          });
+          document
+            .querySelector('[data-diet="all"]')
+            .classList.remove("active");
+          tagsFilters.forEach((diet) => {
             const pill = document.querySelector(`[data-diet="${diet}"]`);
-            const isActive = pill.classList.contains('active');
-            
-            if (isActive) {
-                // Remove from active filters
-                pill.classList.remove('active');
-                currentDietFilters = currentDietFilters.filter(d => d !== diet);
-                delete currentDietThresholds[diet]; // Remove threshold for this diet
-                
-                // Restore original pill text
-                const originalText = pill.getAttribute('data-original-text');
-                if (originalText) {
-                    pill.innerHTML = originalText;
-                    pill.removeAttribute('data-original-text');
-                }
-            } else {
-                // Add to active filters
-                pill.classList.add('active');
-                if (!currentDietFilters.includes(diet)) {
-                    currentDietFilters.push(diet);
-                    // Set default threshold to 1.0 (100%) for pill selections
-                    currentDietThresholds[diet] = 1.0;
-                }
+            if (pill) {
+              pill.classList.add("active");
+              // Update pill text to show threshold if it's not 1.0
+              const threshold = tagsThresholds[diet] || 1.0;
+              if (threshold < 1.0) {
+                const originalText =
+                  pill.getAttribute("data-original-text") || pill.textContent;
+                pill.setAttribute("data-original-text", originalText);
+                const thresholdPercent = Math.round(threshold * 100);
+                pill.innerHTML = `${originalText} (≥${thresholdPercent}%)`;
+              }
             }
-            
-            // If no filters are active, revert to "all"
-            if (currentDietFilters.length === 0) {
-                setDietFilter('all');
-            } else {
-                currentDietFilter = currentDietFilters[0]; // Keep for backward compatibility
-                
-                // Re-run search with active filters
-                const currentTags = $('#ingredientSearch').val() || [];
-                searchRecipes(currentTags);
-            }
-        }
-        
-        // Search recipes with diet filter
-        function searchRecipes(tags) {
-            if (!tags || tags.length === 0) {
-                // If no search tags but diet filters are active, still search
-                if (currentDietFilters.length === 0 && currentDietFilter === 'all') {
-                    $('#resultsContainer').empty();
-                    return;
-                }
-            }
-
-            const ids = tags ? tags.filter(t => /^\d+$/.test(t)) : [];
-            let extras = tags ? tags.filter(t => !/^\d+$/.test(t)) : [];
-            
-            // Extract diet filters and thresholds from tags
-            const tagsFilters = [];
-            const tagsThresholds = {};
-            extras.forEach(tag => {
-                if (tag.startsWith('#')) {
-                    const match = tag.match(/^#(keto|vegan|both)(?::([\d.]+))?$/);
-                    if (match) {
-                        const diet = match[1];
-                        const threshold = match[2] ? parseFloat(match[2]) : 1.0;
-                        tagsFilters.push(diet);
-                        tagsThresholds[diet] = threshold;
-                    }
-                }
-            });
-            
-            // Convert plain #keto or #vegan to #keto:0 or #vegan:0 to get ALL recipes with substitution info
-            extras = extras.map(tag => {
-                if (tag === '#keto' || tag === '#vegan' || tag === '#both') {
-                    return `${tag}:0`;  // Use 0 threshold to get all recipes
-                }
-                return tag;
-            });
-            
-            // If no diet filters in tags, use the pill selections
-            if (tagsFilters.length === 0 && currentDietFilters.length > 0) {
-                // Add diet filters from pills WITH :0 threshold to get all recipes
-                currentDietFilters.forEach(diet => {
-                    if (!extras.some(e => e.includes(`#${diet}`))) {
-                        const threshold = currentDietThresholds[diet] || 1.0;
-                        extras.push(`#${diet}:${threshold}`);
-                    }
-                });
-            } else if (tagsFilters.length > 0) {
-                // Tags take precedence, update currentDietFilters and thresholds
-                currentDietFilters = tagsFilters;
-                currentDietThresholds = { ...currentDietThresholds, ...tagsThresholds };
-                
-                // Update pill UI to match
-                document.querySelectorAll('.diet-pill').forEach(pill => {
-                    pill.classList.remove('active');
-                });
-                document.querySelector('[data-diet="all"]').classList.remove('active');
-                tagsFilters.forEach(diet => {
-                    const pill = document.querySelector(`[data-diet="${diet}"]`);
-                    if (pill) {
-                        pill.classList.add('active');
-                        // Update pill text to show threshold if it's not 1.0
-                        const threshold = tagsThresholds[diet] || 1.0;
-                        if (threshold < 1.0) {
-                            const originalText = pill.getAttribute('data-original-text') || pill.textContent;
-                            pill.setAttribute('data-original-text', originalText);
-                            const thresholdPercent = Math.round(threshold * 100);
-                            pill.innerHTML = `${originalText} (≥${thresholdPercent}%)`;
-                        }
-                    }
-                });
-            }
-            
-            const qParam = [...ids, ...extras].join(' ').trim();
-
-            // If empty query but diet filters active, search with just the filters
-            const finalQuery = qParam || (currentDietFilters.length > 0 ? currentDietFilters.map(d => `#${d}:${currentDietThresholds[d] || 0}`).join(' ') : '');
-
-            console.log('Searching with query:', finalQuery);
-            console.log('Current diet filters:', currentDietFilters);
-            console.log('Current thresholds:', currentDietThresholds);
-
-            if (finalQuery) {
-                $.get('/search', { q: finalQuery })
-                .done(data => {
-                    console.log('Search results:', data.results.slice(0, 2)); // Log first 2 results
-                    displayResults(data.results);
-                })
-                .fail(err => console.error('Search failed:', err));
-            } else {
-                $('#resultsContainer').empty();
-            }
-        }
-        
-
-        /* DISPLAY RESULTS */
-        function passesFilters(r){
-            if(currentDietFilters.length===0) return true;
-            return currentDietFilters.every(diet=>{
-                const threshold = currentDietThresholds[diet] || 1.0;
-                const thresholdPercent = threshold * 100;
-                if(diet==='keto')  return r.keto_score >= thresholdPercent;
-                if(diet==='vegan') return r.vegan_score >= thresholdPercent;
-                if(diet==='both')  return r.keto_score >= thresholdPercent && r.vegan_score >= thresholdPercent;
-                return true;
-            });
+          });
         }
 
-function displayResults(results) {
-    const container = $('#resultsContainer').empty();
+        const qParam = [...ids, ...extras].join(" ").trim();
 
-    results.forEach(recipe => {
-        /* 1 ─ Keep whatever high-level filter you already use */
-        if (!passesFilters(recipe)) return;
+        // If empty query but diet filters active, search with just the filters
+        const finalQuery =
+          qParam ||
+          (currentDietFilters.length > 0
+            ? currentDietFilters
+                .map((d) => `#${d}:${currentDietThresholds[d] || 0}`)
+                .join(" ")
+            : "");
 
-        /* 2 ─ Compliance helpers */
-        const bothScore = Math.min(recipe.keto_score ?? 0,
-                                   recipe.vegan_score ?? 0);
-        let cardClass   = 'recipe-card';
-        if (recipe.keto_score  === 100 && currentDietFilters.includes('keto'))
-            cardClass += ' full-keto';
-        if (recipe.vegan_score === 100 && currentDietFilters.includes('vegan'))
-            cardClass += ' full-vegan';
-        if (bothScore          === 100 && currentDietFilters.includes('both'))
-            cardClass += ' full-both';
+        console.log("Searching with query:", finalQuery);
+        console.log("Current diet filters:", currentDietFilters);
+        console.log("Current thresholds:", currentDietThresholds);
 
-        /* 3 ─ Badge strip (show whatever the user cares about) */
-        const badgeDiets = currentDietFilters.length
-                          ? currentDietFilters
-                          : (currentDietFilter !== 'all' ? [currentDietFilter] : []);
-        let badgeHTML = '<div class="diet-badges">';
-        if (!badgeDiets.length || badgeDiets.includes('keto'))
-            badgeHTML += createDietScoreBadge('keto',  recipe.keto_score  ?? 0);
-        if (!badgeDiets.length || badgeDiets.includes('vegan'))
-            badgeHTML += createDietScoreBadge('vegan', recipe.vegan_score ?? 0);
-        if (!badgeDiets.length || badgeDiets.includes('both'))
-            badgeHTML += createDietScoreBadge('both',  bothScore);
-        badgeHTML += '</div>';
+        if (finalQuery) {
+          $.get("/search", { q: finalQuery })
+            .done((data) => {
+              console.log("Search results:", data.results.slice(0, 2)); // Log first 2 results
+              displayResults(data.results);
+            })
+            .fail((err) => console.error("Search failed:", err));
+        } else {
+          $("#resultsContainer").empty();
+        }
+      }
 
-        /* 4 ─ Always evaluate ALL three diets for buttons */
-        const btns = [];
+      /* DISPLAY RESULTS */
+      function passesFilters(r) {
+        if (currentDietFilters.length === 0) return true;
+        return currentDietFilters.every((diet) => {
+          const threshold = currentDietThresholds[diet] || 1.0;
+          const thresholdPercent = threshold * 100;
+          if (diet === "keto") return r.keto_score >= thresholdPercent;
+          if (diet === "vegan") return r.vegan_score >= thresholdPercent;
+          if (diet === "both")
+            return (
+              r.keto_score >= thresholdPercent &&
+              r.vegan_score >= thresholdPercent
+            );
+          return true;
+        });
+      }
 
-        /* keto button */
-        if ((recipe.keto_score ?? 0) < 100) {
-            const cnt = Math.ceil((recipe.ingredients?.length || 0) *
-                                   (100 - recipe.keto_score) / 100);
+      function displayResults(results) {
+        const container = $("#resultsContainer").empty();
+
+        results.forEach((recipe) => {
+          /* 1 ─ Keep whatever high-level filter you already use */
+          if (!passesFilters(recipe)) return;
+
+          /* 2 ─ Compliance helpers */
+          const bothScore = Math.min(
+            recipe.keto_score ?? 0,
+            recipe.vegan_score ?? 0
+          );
+          let cardClass = "recipe-card";
+          if (recipe.keto_score === 100 && currentDietFilters.includes("keto"))
+            cardClass += " full-keto";
+          if (
+            recipe.vegan_score === 100 &&
+            currentDietFilters.includes("vegan")
+          )
+            cardClass += " full-vegan";
+          if (bothScore === 100 && currentDietFilters.includes("both"))
+            cardClass += " full-both";
+
+          /* 3 ─ Badge strip (show whatever the user cares about) */
+          const badgeDiets = currentDietFilters.length
+            ? currentDietFilters
+            : currentDietFilter !== "all"
+            ? [currentDietFilter]
+            : [];
+          let badgeHTML = '<div class="diet-badges">';
+          if (!badgeDiets.length || badgeDiets.includes("keto"))
+            badgeHTML += createDietScoreBadge("keto", recipe.keto_score ?? 0);
+          if (!badgeDiets.length || badgeDiets.includes("vegan"))
+            badgeHTML += createDietScoreBadge("vegan", recipe.vegan_score ?? 0);
+          if (!badgeDiets.length || badgeDiets.includes("both"))
+            badgeHTML += createDietScoreBadge("both", bothScore);
+          badgeHTML += "</div>";
+
+          /* 4 ─ Always evaluate ALL three diets for buttons */
+          const btns = [];
+
+          /* keto button */
+          if ((recipe.keto_score ?? 0) < 100) {
+            const cnt = Math.ceil(
+              ((recipe.ingredients?.length || 0) * (100 - recipe.keto_score)) /
+                100
+            );
             btns.push(`
                 <button class="make-diet-btn keto"
                         onclick="event.stopPropagation();
-                                 makeRecipeCompliant(${JSON
-                                    .stringify(recipe)
-                                    .replace(/"/g,'&quot;')}, 'keto')">
+                                 makeRecipeCompliant(${JSON.stringify(
+                                   recipe
+                                 ).replace(/"/g, "&quot;")}, 'keto')">
                     <i class="fas fa-magic"></i> Make it Keto
                     <span class="sub-count">(${cnt})</span>
                 </button>`);
-        }
+          }
 
-        /* vegan button */
-        if ((recipe.vegan_score ?? 0) < 100) {
-            const cnt = Math.ceil((recipe.ingredients?.length || 0) *
-                                   (100 - recipe.vegan_score) / 100);
+          /* vegan button */
+          if ((recipe.vegan_score ?? 0) < 100) {
+            const cnt = Math.ceil(
+              ((recipe.ingredients?.length || 0) * (100 - recipe.vegan_score)) /
+                100
+            );
             btns.push(`
                 <button class="make-diet-btn vegan"
                         onclick="event.stopPropagation();
-                                 makeRecipeCompliant(${JSON
-                                    .stringify(recipe)
-                                    .replace(/"/g,'&quot;')}, 'vegan')">
+                                 makeRecipeCompliant(${JSON.stringify(
+                                   recipe
+                                 ).replace(/"/g, "&quot;")}, 'vegan')">
                     <i class="fas fa-magic"></i> Make it Vegan
                     <span class="sub-count">(${cnt})</span>
                 </button>`);
-        }
+          }
 
-        /* both (keto & vegan) button */
-        if (bothScore < 100) {
-            const cnt = Math.ceil((recipe.ingredients?.length || 0) *
-                                   (100 - bothScore) / 100);
+          /* both (keto & vegan) button */
+          if (bothScore < 100) {
+            const cnt = Math.ceil(
+              ((recipe.ingredients?.length || 0) * (100 - bothScore)) / 100
+            );
             btns.push(`
                 <button class="make-diet-btn both"
                         onclick="event.stopPropagation();
-                                 makeRecipeCompliant(${JSON
-                                    .stringify(recipe)
-                                    .replace(/"/g,'&quot;')}, 'both')">
+                                 makeRecipeCompliant(${JSON.stringify(
+                                   recipe
+                                 ).replace(/"/g, "&quot;")}, 'both')">
                     <i class="fas fa-magic"></i> Make it Keto&nbsp;&amp;&nbsp;Vegan
                     <span class="sub-count">(${cnt})</span>
                 </button>`);
-        }
+          }
 
-        const makeButtons = btns.length
-            ? `<div class="make-diet-buttons">${btns.join('')}</div>`
-            : '';
+          const makeButtons = btns.length
+            ? `<div class="make-diet-buttons">${btns.join("")}</div>`
+            : "";
 
-        /* 5 ─ Build the card */
-        container.append(`
+          /* 5 ─ Build the card */
+          container.append(`
             <div class="col-md-4 mb-4">
               <div class="card ${cardClass}"
-                   onclick="showRecipeDetails(${JSON
-                       .stringify(recipe)
-                       .replace(/"/g,'&quot;')})">
+                   onclick="showRecipeDetails(${JSON.stringify(recipe).replace(
+                     /"/g,
+                     "&quot;"
+                   )})">
                 ${badgeHTML}
                 <img class="card-img-top recipe-image lazy"
                      loading="lazy"
@@ -1253,418 +1659,519 @@ function displayResults(results) {
                 </div>
               </div>
             </div>`);
-    });
+        });
 
-    /* 6 ─ Activate IntersectionObserver for new images */
-    hookLazyImages();
-}
+        /* 6 ─ Activate IntersectionObserver for new images */
+        hookLazyImages();
+      }
 
+      // Show recipe details with diet score badges
+      function showRecipeDetails(recipe) {
+        currentRecipe = recipe;
 
-        
-        // Show recipe details with diet score badges
-        function showRecipeDetails(recipe) {
-            currentRecipe = recipe;
-            
-            $('#modalTitle').text(recipe.title);
-            $('#modalImage').attr('src', recipe.photo_url);
-            $('#modalDescription').text(recipe.description);
-            
-            // Create diet score badges for modal - only show for active filters
-            let dietScoreHtml = '<div class="diet-score-container">';
-            
-            const dietsToShow = currentDietFilters.length > 0 ? currentDietFilters : [];
-            
-            if (dietsToShow.length > 0) {
-                // Show keto badge if keto is selected
-                if (dietsToShow.includes('keto') && recipe.keto_score !== undefined) {
-                    dietScoreHtml += createDietScoreBadge('keto', recipe.keto_score);
-                }
-                
-                // Show vegan badge if vegan is selected
-                if (dietsToShow.includes('vegan') && recipe.vegan_score !== undefined) {
-                    dietScoreHtml += createDietScoreBadge('vegan', recipe.vegan_score);
-                }
-                
-                // Show both badge if both is selected
-                if (dietsToShow.includes('both') && recipe.keto_score !== undefined && recipe.vegan_score !== undefined) {
-                    const bothScore = Math.min(recipe.keto_score, recipe.vegan_score);
-                    dietScoreHtml += createDietScoreBadge('both', bothScore);
-                }
-            } else {
-                // If no specific diet is selected, show all badges
-                if (recipe.keto_score !== undefined) {
-                    dietScoreHtml += createDietScoreBadge('keto', recipe.keto_score);
-                }
-                
-                if (recipe.vegan_score !== undefined) {
-                    dietScoreHtml += createDietScoreBadge('vegan', recipe.vegan_score);
-                }
-                
-                // Add "both" badge if applicable
-                if (recipe.keto_score !== undefined && recipe.vegan_score !== undefined) {
-                    const bothScore = Math.min(recipe.keto_score, recipe.vegan_score);
-                    dietScoreHtml += createDietScoreBadge('both', bothScore);
-                }
-            }
-            
-            dietScoreHtml += '</div>';
-            
-            // Additional compliance info
-            let complianceInfo = '<div class="compliance-details mt-2">';
-            
-            if (recipe.keto_score < 100) {
-                const nonKetoCount = Math.round(recipe.ingredients.length * (100 - recipe.keto_score) / 100);
-                complianceInfo += `<small class="text-muted">
-                    <i class="fas fa-info-circle"></i> ${nonKetoCount} non-keto ingredient${nonKetoCount > 1 ? 's' : ''}
+        $("#modalTitle").text(recipe.title);
+        $("#modalImage").attr("src", recipe.photo_url);
+        $("#modalDescription").text(recipe.description);
+
+        // Create diet score badges for modal - only show for active filters
+        let dietScoreHtml = '<div class="diet-score-container">';
+
+        const dietsToShow =
+          currentDietFilters.length > 0 ? currentDietFilters : [];
+
+        if (dietsToShow.length > 0) {
+          // Show keto badge if keto is selected
+          if (dietsToShow.includes("keto") && recipe.keto_score !== undefined) {
+            dietScoreHtml += createDietScoreBadge("keto", recipe.keto_score);
+          }
+
+          // Show vegan badge if vegan is selected
+          if (
+            dietsToShow.includes("vegan") &&
+            recipe.vegan_score !== undefined
+          ) {
+            dietScoreHtml += createDietScoreBadge("vegan", recipe.vegan_score);
+          }
+
+          // Show both badge if both is selected
+          if (
+            dietsToShow.includes("both") &&
+            recipe.keto_score !== undefined &&
+            recipe.vegan_score !== undefined
+          ) {
+            const bothScore = Math.min(recipe.keto_score, recipe.vegan_score);
+            dietScoreHtml += createDietScoreBadge("both", bothScore);
+          }
+        } else {
+          // If no specific diet is selected, show all badges
+          if (recipe.keto_score !== undefined) {
+            dietScoreHtml += createDietScoreBadge("keto", recipe.keto_score);
+          }
+
+          if (recipe.vegan_score !== undefined) {
+            dietScoreHtml += createDietScoreBadge("vegan", recipe.vegan_score);
+          }
+
+          // Add "both" badge if applicable
+          if (
+            recipe.keto_score !== undefined &&
+            recipe.vegan_score !== undefined
+          ) {
+            const bothScore = Math.min(recipe.keto_score, recipe.vegan_score);
+            dietScoreHtml += createDietScoreBadge("both", bothScore);
+          }
+        }
+
+        dietScoreHtml += "</div>";
+
+        // Additional compliance info
+        let complianceInfo = '<div class="compliance-details mt-2">';
+
+        if (recipe.keto_score < 100) {
+          const nonKetoCount = Math.round(
+            (recipe.ingredients.length * (100 - recipe.keto_score)) / 100
+          );
+          complianceInfo += `<small class="text-muted">
+                    <i class="fas fa-info-circle"></i> ${nonKetoCount} non-keto ingredient${
+            nonKetoCount > 1 ? "s" : ""
+          }
                 </small><br>`;
-            }
-            
-            if (recipe.vegan_score < 100) {
-                const nonVeganCount = Math.round(recipe.ingredients.length * (100 - recipe.vegan_score) / 100);
-                complianceInfo += `<small class="text-muted">
-                    <i class="fas fa-info-circle"></i> ${nonVeganCount} non-vegan ingredient${nonVeganCount > 1 ? 's' : ''}
+        }
+
+        if (recipe.vegan_score < 100) {
+          const nonVeganCount = Math.round(
+            (recipe.ingredients.length * (100 - recipe.vegan_score)) / 100
+          );
+          complianceInfo += `<small class="text-muted">
+                    <i class="fas fa-info-circle"></i> ${nonVeganCount} non-vegan ingredient${
+            nonVeganCount > 1 ? "s" : ""
+          }
                 </small>`;
+        }
+
+        complianceInfo += "</div>";
+
+        $("#modalDietInfo").html(dietScoreHtml + complianceInfo);
+
+        // Ingredients
+        const ingredientsList = $("#modalIngredients");
+        ingredientsList.empty();
+        recipe.ingredients.forEach((ingredient) => {
+          ingredientsList.append(`<li>${ingredient}</li>`);
+        });
+
+        // Instructions
+        const instructionsList = $("#modalInstructions");
+        instructionsList.empty();
+        recipe.instructions.forEach((instruction) => {
+          instructionsList.append(`<li>${instruction}</li>`);
+        });
+
+        // Show make compliant button(s) if needed - only for active diet filters
+        const makeCompliantBtn = $("#makeCompliantBtn");
+        const modalFooter = $(".modal-footer");
+
+        // Remove any existing diet-specific buttons
+        modalFooter.find(".make-diet-btn").remove();
+
+        const dietsToCheck =
+          currentDietFilters.length > 0 ? currentDietFilters : [];
+
+        if (dietsToCheck.length > 0) {
+          // Show buttons only for selected diets
+          makeCompliantBtn.hide();
+
+          dietsToCheck.forEach((diet) => {
+            let needsWork = false;
+            let subCount = 0;
+
+            if (diet === "both") {
+              const bothScore = Math.min(recipe.keto_score, recipe.vegan_score);
+              needsWork = bothScore < 100;
+              if (needsWork) {
+                const totalIngredients = recipe.ingredients
+                  ? recipe.ingredients.length
+                  : 0;
+                subCount = Math.ceil(
+                  (totalIngredients * (100 - bothScore)) / 100
+                );
+              }
+            } else {
+              needsWork = recipe[`${diet}_score`] < 100;
+              if (needsWork) {
+                const totalIngredients = recipe.ingredients
+                  ? recipe.ingredients.length
+                  : 0;
+                subCount = Math.ceil(
+                  (totalIngredients * (100 - recipe[`${diet}_score`])) / 100
+                );
+              }
             }
-            
-            complianceInfo += '</div>';
-            
-            $('#modalDietInfo').html(dietScoreHtml + complianceInfo);
-            
-            // Ingredients
-            const ingredientsList = $('#modalIngredients');
-            ingredientsList.empty();
-            recipe.ingredients.forEach(ingredient => {
-                ingredientsList.append(`<li>${ingredient}</li>`);
-            });
-            
-            // Instructions
-            const instructionsList = $('#modalInstructions');
-            instructionsList.empty();
-            recipe.instructions.forEach(instruction => {
-                instructionsList.append(`<li>${instruction}</li>`);
-            });
-            
-            // Show make compliant button(s) if needed - only for active diet filters
-            const makeCompliantBtn = $('#makeCompliantBtn');
-            const modalFooter = $('.modal-footer');
-            
-            // Remove any existing diet-specific buttons
-            modalFooter.find('.make-diet-btn').remove();
-            
-            const dietsToCheck = currentDietFilters.length > 0 ? currentDietFilters : [];
-            
-            if (dietsToCheck.length > 0) {
-                // Show buttons only for selected diets
-                makeCompliantBtn.hide();
-                
-                dietsToCheck.forEach(diet => {
-                    let needsWork = false;
-                    let subCount = 0;
-                    
-                    if (diet === 'both') {
-                        const bothScore = Math.min(recipe.keto_score, recipe.vegan_score);
-                        needsWork = bothScore < 100;
-                        if (needsWork) {
-                            const totalIngredients = recipe.ingredients ? recipe.ingredients.length : 0;
-                            subCount = Math.ceil(totalIngredients * (100 - bothScore) / 100);
-                        }
-                    } else {
-                        needsWork = recipe[`${diet}_score`] < 100;
-                        if (needsWork) {
-                            const totalIngredients = recipe.ingredients ? recipe.ingredients.length : 0;
-                            subCount = Math.ceil(totalIngredients * (100 - recipe[`${diet}_score`]) / 100);
-                        }
-                    }
-                    
-                    if (needsWork) {
-                        const dietDisplay = diet === 'both' ? 'Keto & Vegan' : diet.charAt(0).toUpperCase() + diet.slice(1);
-                        const dietBtn = $(`
+
+            if (needsWork) {
+              const dietDisplay =
+                diet === "both"
+                  ? "Keto & Vegan"
+                  : diet.charAt(0).toUpperCase() + diet.slice(1);
+              const dietBtn = $(`
                             <button type="button" class="btn btn-primary make-diet-btn ${diet}">
                                 <i class="fas fa-magic"></i> Make It ${dietDisplay}
-                                <span class="sub-count">(${subCount} sub${subCount > 1 ? 's' : ''})</span>
+                                <span class="sub-count">(${subCount} sub${
+                subCount > 1 ? "s" : ""
+              })</span>
                             </button>
                         `);
-                        
-                        dietBtn.on('click', function() {
-                            makeRecipeCompliant(recipe, diet);
-                        });
-                        
-                        modalFooter.append(dietBtn);
-                    }
-                });
-            } else {
-                // No specific diet selected - show all available diet conversion buttons
-                makeCompliantBtn.hide();
-                
-                // Show keto button if recipe is not 100% keto
-                if ((recipe.keto_score ?? 0) < 100) {
-                    const subCount = Math.ceil((recipe.ingredients?.length || 0) * (100 - recipe.keto_score) / 100);
-                    const ketoBtn = $(`
+
+              dietBtn.on("click", function () {
+                makeRecipeCompliant(recipe, diet);
+              });
+
+              modalFooter.append(dietBtn);
+            }
+          });
+        } else {
+          // No specific diet selected - show all available diet conversion buttons
+          makeCompliantBtn.hide();
+
+          // Show keto button if recipe is not 100% keto
+          if ((recipe.keto_score ?? 0) < 100) {
+            const subCount = Math.ceil(
+              ((recipe.ingredients?.length || 0) * (100 - recipe.keto_score)) /
+                100
+            );
+            const ketoBtn = $(`
                         <button type="button" class="btn btn-primary make-diet-btn keto">
                             <i class="fas fa-magic"></i> Make It Keto
-                            <span class="sub-count">(${subCount} sub${subCount > 1 ? 's' : ''})</span>
+                            <span class="sub-count">(${subCount} sub${
+              subCount > 1 ? "s" : ""
+            })</span>
                         </button>
                     `);
-                    
-                    ketoBtn.on('click', function() {
-                        makeRecipeCompliant(recipe, 'keto');
-                    });
-                    
-                    modalFooter.append(ketoBtn);
-                }
-                
-                // Show vegan button if recipe is not 100% vegan
-                if ((recipe.vegan_score ?? 0) < 100) {
-                    const subCount = Math.ceil((recipe.ingredients?.length || 0) * (100 - recipe.vegan_score) / 100);
-                    const veganBtn = $(`
+
+            ketoBtn.on("click", function () {
+              makeRecipeCompliant(recipe, "keto");
+            });
+
+            modalFooter.append(ketoBtn);
+          }
+
+          // Show vegan button if recipe is not 100% vegan
+          if ((recipe.vegan_score ?? 0) < 100) {
+            const subCount = Math.ceil(
+              ((recipe.ingredients?.length || 0) * (100 - recipe.vegan_score)) /
+                100
+            );
+            const veganBtn = $(`
                         <button type="button" class="btn btn-primary make-diet-btn vegan">
                             <i class="fas fa-magic"></i> Make It Vegan
-                            <span class="sub-count">(${subCount} sub${subCount > 1 ? 's' : ''})</span>
+                            <span class="sub-count">(${subCount} sub${
+              subCount > 1 ? "s" : ""
+            })</span>
                         </button>
                     `);
-                    
-                    veganBtn.on('click', function() {
-                        makeRecipeCompliant(recipe, 'vegan');
-                    });
-                    
-                    modalFooter.append(veganBtn);
-                }
-                
-                // Show both button if recipe is not 100% both keto and vegan
-                const bothScore = Math.min(recipe.keto_score ?? 0, recipe.vegan_score ?? 0);
-                if (bothScore < 100) {
-                    const subCount = Math.ceil((recipe.ingredients?.length || 0) * (100 - bothScore) / 100);
-                    const bothBtn = $(`
+
+            veganBtn.on("click", function () {
+              makeRecipeCompliant(recipe, "vegan");
+            });
+
+            modalFooter.append(veganBtn);
+          }
+
+          // Show both button if recipe is not 100% both keto and vegan
+          const bothScore = Math.min(
+            recipe.keto_score ?? 0,
+            recipe.vegan_score ?? 0
+          );
+          if (bothScore < 100) {
+            const subCount = Math.ceil(
+              ((recipe.ingredients?.length || 0) * (100 - bothScore)) / 100
+            );
+            const bothBtn = $(`
                         <button type="button" class="btn btn-primary make-diet-btn both">
                             <i class="fas fa-magic"></i> Make It Keto & Vegan
-                            <span class="sub-count">(${subCount} sub${subCount > 1 ? 's' : ''})</span>
+                            <span class="sub-count">(${subCount} sub${
+              subCount > 1 ? "s" : ""
+            })</span>
                         </button>
                     `);
-                    
-                    bothBtn.on('click', function() {
-                        makeRecipeCompliant(recipe, 'both');
-                    });
-                    
-                    modalFooter.append(bothBtn);
-                }
-            }
-            
-            // Show modal
-            const recipeModal = new bootstrap.Modal(document.getElementById('recipeModal'));
-            recipeModal.show();
+
+            bothBtn.on("click", function () {
+              makeRecipeCompliant(recipe, "both");
+            });
+
+            modalFooter.append(bothBtn);
+          }
         }
-        
-        // Make recipe compliant
-        async function makeRecipeCompliant(recipe, diet) {
-            // Close recipe modal if open
-            bootstrap.Modal.getInstance(document.getElementById('recipeModal'))?.hide();
-            
-            // Get substitutions
-            const params = new URLSearchParams();
-            params.append('diet', diet);
-            recipe.ingredients.forEach(ing => params.append('ingredient', ing));
-            
-            const response = await fetch('/substitutions?' + params.toString());
-            const data = await response.json();
-            
-            // Add original ingredients to the substitutions data
-            currentSubstitutions = {
-                ...data,
-                original_ingredients: recipe.ingredients
-            };
-            
-            // Show substitution modal
-            showSubstitutionModal(recipe, currentSubstitutions, diet);
-        }
-        
-        // Show substitution modal with score badge
-        function showSubstitutionModal(recipe, substitutions, diet) {
-            // Ensure currentRecipe is set
-            currentRecipe = recipe;
-            
-            const dietDisplay = diet === 'both' ? 'keto & vegan' : diet;
-            const scoreBadge = createDietScoreBadge(diet, substitutions.compliance_percentage);
-            
-            let complianceDetails = '';
-            if (diet === 'both' && substitutions.keto_percentage !== undefined) {
-                complianceDetails = `
+
+        // Show modal
+        const recipeModal = new bootstrap.Modal(
+          document.getElementById("recipeModal")
+        );
+        recipeModal.show();
+      }
+
+      // Make recipe compliant
+      async function makeRecipeCompliant(recipe, diet) {
+        // Close recipe modal if open
+        bootstrap.Modal.getInstance(
+          document.getElementById("recipeModal")
+        )?.hide();
+
+        // Get substitutions
+        const params = new URLSearchParams();
+        params.append("diet", diet);
+        recipe.ingredients.forEach((ing) => params.append("ingredient", ing));
+
+        const response = await fetch("/substitutions?" + params.toString());
+        const data = await response.json();
+
+        // Add original ingredients to the substitutions data
+        currentSubstitutions = {
+          ...data,
+          original_ingredients: recipe.ingredients,
+        };
+
+        // Show substitution modal
+        showSubstitutionModal(recipe, currentSubstitutions, diet);
+      }
+
+      // Show substitution modal with score badge
+      function showSubstitutionModal(recipe, substitutions, diet) {
+        // Ensure currentRecipe is set
+        currentRecipe = recipe;
+
+        const dietDisplay = diet === "both" ? "keto & vegan" : diet;
+        const scoreBadge = createDietScoreBadge(
+          diet,
+          substitutions.compliance_percentage
+        );
+
+        let complianceDetails = "";
+        if (diet === "both" && substitutions.keto_percentage !== undefined) {
+          complianceDetails = `
                     <p class="mt-2 mb-0">
                         <small>Keto compliance: ${substitutions.keto_percentage}% | 
                         Vegan compliance: ${substitutions.vegan_percentage}%</small>
                     </p>
                 `;
-            }
-            
-            const content = `
+        }
+
+        const content = `
                 <h5>${recipe.title}</h5>
                 ${scoreBadge}
                 ${complianceDetails}
                 
                 <p class="mt-3">
-                    ${substitutions.total_ingredients - substitutions.non_compliant_count} of ${substitutions.total_ingredients} 
+                    ${
+                      substitutions.total_ingredients -
+                      substitutions.non_compliant_count
+                    } of ${substitutions.total_ingredients} 
                     ingredients are ${dietDisplay}-friendly. 
-                    ${substitutions.easily_adaptable ? '<span class="badge bg-success">Easily Adaptable!</span>' : ''}
+                    ${
+                      substitutions.easily_adaptable
+                        ? '<span class="badge bg-success">Easily Adaptable!</span>'
+                        : ""
+                    }
                 </p>
                 
                 <h6>Suggested Substitutions:</h6>
                 <div id="substitutionItems">
-                    ${substitutions.substitutions.map((sub, idx) => `
+                    ${substitutions.substitutions
+                      .map(
+                        (sub, idx) => `
                         <div class="substitution-item">
                             <div class="original">❌ ${sub.ingredient}</div>
                             <div class="suggestions mt-2">
-                                ${sub.suggestions.map((sug, sidx) => `
+                                ${sub.suggestions
+                                  .map(
+                                    (sug, sidx) => `
                                     <button class="suggestion-btn" 
                                             data-idx="${idx}"
                                             data-sidx="${sidx}"
                                             onclick="selectSubstitution(${idx}, ${sidx})">
                                         ${sug}
                                     </button>
-                                `).join('')}
+                                `
+                                  )
+                                  .join("")}
                             </div>
                         </div>
-                    `).join('')}
+                    `
+                      )
+                      .join("")}
                 </div>
             `;
-            
-            $('#substitutionContent').html(content);
-            
-            const substitutionModal = new bootstrap.Modal(document.getElementById('substitutionModal'));
-            substitutionModal.show();
+
+        $("#substitutionContent").html(content);
+
+        const substitutionModal = new bootstrap.Modal(
+          document.getElementById("substitutionModal")
+        );
+        substitutionModal.show();
+      }
+
+      // Select substitution
+      function selectSubstitution(idx, sidx) {
+        // Toggle selection
+        const btn = document.querySelector(
+          `[data-idx="${idx}"][data-sidx="${sidx}"]`
+        );
+        const allBtns = document.querySelectorAll(`[data-idx="${idx}"]`);
+
+        allBtns.forEach((b) => b.classList.remove("selected"));
+        btn.classList.add("selected");
+      }
+
+      // Apply all substitutions
+      async function applyAllSubstitutions() {
+        // Check if we have the necessary data
+        if (!currentSubstitutions) {
+          showNotification(
+            "Substitution data not available. Please try again.",
+            "error"
+          );
+          return;
         }
-        
-        // Select substitution
-        function selectSubstitution(idx, sidx) {
-            // Toggle selection
-            const btn = document.querySelector(`[data-idx="${idx}"][data-sidx="${sidx}"]`);
-            const allBtns = document.querySelectorAll(`[data-idx="${idx}"]`);
-            
-            allBtns.forEach(b => b.classList.remove('selected'));
-            btn.classList.add('selected');
+
+        const selectedSubstitutions = {};
+
+        // Get selected substitutions
+        document.querySelectorAll(".suggestion-btn.selected").forEach((btn) => {
+          const idx = parseInt(btn.dataset.idx);
+          const sub = currentSubstitutions.substitutions[idx];
+          selectedSubstitutions[sub.ingredient] = btn.textContent.trim();
+        });
+
+        // Get the diet from currentSubstitutions
+        const diet =
+          currentSubstitutions.diet === "keto & vegan"
+            ? "both"
+            : currentSubstitutions.diet;
+
+        // Use the original ingredients from the substitution analysis
+        const originalIngredients = currentSubstitutions.original_ingredients;
+
+        if (!originalIngredients) {
+          showNotification(
+            "Original ingredients not available. Please try again.",
+            "error"
+          );
+          return;
         }
-        
-        // Apply all substitutions
-        async function applyAllSubstitutions() {
-            // Check if we have the necessary data
-            if (!currentSubstitutions) {
-                showNotification('Substitution data not available. Please try again.', 'error');
-                return;
-            }
-            
-            const selectedSubstitutions = {};
-            
-            // Get selected substitutions
-            document.querySelectorAll('.suggestion-btn.selected').forEach(btn => {
-                const idx = parseInt(btn.dataset.idx);
-                const sub = currentSubstitutions.substitutions[idx];
-                selectedSubstitutions[sub.ingredient] = btn.textContent.trim();
-            });
-            
-            // Get the diet from currentSubstitutions
-            const diet = currentSubstitutions.diet === "keto & vegan" ? "both" : currentSubstitutions.diet;
-            
-            // Use the original ingredients from the substitution analysis
-            const originalIngredients = currentSubstitutions.original_ingredients;
-            
-            if (!originalIngredients) {
-                showNotification('Original ingredients not available. Please try again.', 'error');
-                return;
-            }
-            
-            // Apply substitutions via API
-            const response = await fetch('/modify-recipe', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    ingredients: originalIngredients,
-                    diet: diet,
-                    auto_substitute: true,
-                    preserve_quantities: true
-                })
-            });
-            
-            const data = await response.json();
-            
-            // Create modified recipe variation - handle case where currentRecipe might be null
-            const recipeTitle = currentRecipe ? currentRecipe.title : 'Modified Recipe';
-            const recipeId = currentRecipe ? (currentRecipe.id || currentRecipe.title) : `custom_${Date.now()}`;
-            const originalKetoScore = currentRecipe ? currentRecipe.keto_score : 0;
-            const originalVeganScore = currentRecipe ? currentRecipe.vegan_score : 0;
-            
-            const modifiedRecipe = {
-                title: recipeTitle,
-                ingredients: data.modified_ingredients,
-                instructions: currentRecipe ? currentRecipe.instructions : [],
-                description: currentRecipe ? currentRecipe.description : 'Modified recipe variation',
-                photo_url: currentRecipe ? currentRecipe.photo_url : '',
-                original_recipe_id: recipeId,
-                modification_date: new Date().toISOString(),
-                diet_modification: diet,
-                substitutions_applied: data.substitutions,
-                changes_made: data.changes_made,
-                original_keto_score: originalKetoScore,
-                original_vegan_score: originalVeganScore
-            };
-            
-            // Update scores for the modified recipe
-            if (diet === 'both') {
-                modifiedRecipe.keto_score = data.keto_percentage !== undefined ? data.keto_percentage : 0;
-                modifiedRecipe.vegan_score = data.vegan_percentage !== undefined ? data.vegan_percentage : 0;
-            } else {
-                modifiedRecipe[`${diet}_score`] = data.new_compliance_percentage || 0;
-            }
-            
-            // Save to localStorage
-            saveModifiedRecipe(modifiedRecipe);
-            
-            // Update current recipe for display if it exists
-            if (currentRecipe) {
-                Object.assign(currentRecipe, modifiedRecipe);
-            }
-            
-            // Close modal and show success
-            bootstrap.Modal.getInstance(document.getElementById('substitutionModal')).hide();
-            
-            // Show success notification
-            const dietDisplay = diet === 'both' ? 'keto & vegan' : diet;
-            showNotification(`Recipe is now ${data.new_compliance_percentage}% ${dietDisplay}-compliant! ${data.changes_made} substitutions made. Recipe variation saved to database!`);
-            
-            // Refresh the recipe details if currentRecipe exists
-            if (currentRecipe) {
-                showRecipeDetails(currentRecipe);
-            }
+
+        // Apply substitutions via API
+        const response = await fetch("/modify-recipe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ingredients: originalIngredients,
+            diet: diet,
+            auto_substitute: true,
+            preserve_quantities: true,
+          }),
+        });
+
+        const data = await response.json();
+
+        // Create modified recipe variation - handle case where currentRecipe might be null
+        const recipeTitle = currentRecipe
+          ? currentRecipe.title
+          : "Modified Recipe";
+        const recipeId = currentRecipe
+          ? currentRecipe.id || currentRecipe.title
+          : `custom_${Date.now()}`;
+        const originalKetoScore = currentRecipe ? currentRecipe.keto_score : 0;
+        const originalVeganScore = currentRecipe
+          ? currentRecipe.vegan_score
+          : 0;
+
+        const modifiedRecipe = {
+          title: recipeTitle,
+          ingredients: data.modified_ingredients,
+          instructions: currentRecipe ? currentRecipe.instructions : [],
+          description: currentRecipe
+            ? currentRecipe.description
+            : "Modified recipe variation",
+          photo_url: currentRecipe ? currentRecipe.photo_url : "",
+          original_recipe_id: recipeId,
+          modification_date: new Date().toISOString(),
+          diet_modification: diet,
+          substitutions_applied: data.substitutions,
+          changes_made: data.changes_made,
+          original_keto_score: originalKetoScore,
+          original_vegan_score: originalVeganScore,
+        };
+
+        // Update scores for the modified recipe
+        if (diet === "both") {
+          modifiedRecipe.keto_score =
+            data.keto_percentage !== undefined ? data.keto_percentage : 0;
+          modifiedRecipe.vegan_score =
+            data.vegan_percentage !== undefined ? data.vegan_percentage : 0;
+        } else {
+          modifiedRecipe[`${diet}_score`] = data.new_compliance_percentage || 0;
         }
-        
-        // Analyzer functions with score badges
-        async function analyzeRecipe() {
-            const ingredients = document.getElementById('ingredient-input').value
-                .split('\n')
-                .filter(i => i.trim());
-            const diet = document.querySelector('input[name="diet"]:checked').value;
-            
-            if (ingredients.length === 0) {
-                showNotification('Please enter some ingredients', 'error');
-                return;
-            }
-            
-            const params = new URLSearchParams();
-            params.append('diet', diet);
-            ingredients.forEach(ing => params.append('ingredient', ing));
-            
-            const response = await fetch('/substitutions?' + params.toString());
-            const data = await response.json();
-            
-            const scoreBadge = createDietScoreBadge(diet, data.compliance_percentage);
-            
-            let additionalDetails = '';
-            if (diet === 'both' && data.keto_percentage !== undefined) {
-                additionalDetails = `
+
+        // Save to localStorage
+        saveModifiedRecipe(modifiedRecipe);
+
+        // Update current recipe for display if it exists
+        if (currentRecipe) {
+          Object.assign(currentRecipe, modifiedRecipe);
+        }
+
+        // Close modal and show success
+        bootstrap.Modal.getInstance(
+          document.getElementById("substitutionModal")
+        ).hide();
+
+        // Show success notification
+        const dietDisplay = diet === "both" ? "keto & vegan" : diet;
+        showNotification(
+          `Recipe is now ${data.new_compliance_percentage}% ${dietDisplay}-compliant! ${data.changes_made} substitutions made. Recipe variation saved to database!`
+        );
+
+        // Refresh the recipe details if currentRecipe exists
+        if (currentRecipe) {
+          showRecipeDetails(currentRecipe);
+        }
+      }
+
+      // Analyzer functions with score badges
+      async function analyzeRecipe() {
+        const ingredients = document
+          .getElementById("ingredient-input")
+          .value.split("\n")
+          .filter((i) => i.trim());
+        const diet = document.querySelector('input[name="diet"]:checked').value;
+
+        if (ingredients.length === 0) {
+          showNotification("Please enter some ingredients", "error");
+          return;
+        }
+
+        const params = new URLSearchParams();
+        params.append("diet", diet);
+        ingredients.forEach((ing) => params.append("ingredient", ing));
+
+        const response = await fetch("/substitutions?" + params.toString());
+        const data = await response.json();
+
+        const scoreBadge = createDietScoreBadge(
+          diet,
+          data.compliance_percentage
+        );
+
+        let additionalDetails = "";
+        if (diet === "both" && data.keto_percentage !== undefined) {
+          additionalDetails = `
                     <p class="mt-2">
                         Individual compliance: Keto ${data.keto_percentage}% | Vegan ${data.vegan_percentage}%
                     </p>
                 `;
-            }
-            
-            document.getElementById('analysis-results').innerHTML = `
+        }
+
+        document.getElementById("analysis-results").innerHTML = `
                 <div class="card">
                     <div class="card-body">
                         <h5 class="card-title">Analysis Results</h5>
@@ -1676,84 +2183,98 @@ ${data.formatted_text}
                     </div>
                 </div>
             `;
+      }
+
+      async function modifyRecipe() {
+        const ingredients = document
+          .getElementById("ingredient-input")
+          .value.split("\n")
+          .filter((i) => i.trim());
+        const diet = document.querySelector('input[name="diet"]:checked').value;
+
+        if (ingredients.length === 0) {
+          showNotification("Please enter some ingredients", "error");
+          return;
         }
-        
-        async function modifyRecipe() {
-            const ingredients = document.getElementById('ingredient-input').value
-                .split('\n')
-                .filter(i => i.trim());
-            const diet = document.querySelector('input[name="diet"]:checked').value;
-            
-            if (ingredients.length === 0) {
-                showNotification('Please enter some ingredients', 'error');
-                return;
-            }
-            
-            const response = await fetch('/modify-recipe', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    ingredients: ingredients,
-                    diet: diet,
-                    auto_substitute: true,
-                    preserve_quantities: true
-                })
-            });
-            
-            const data = await response.json();
-            
-            // Create modified recipe for saving
-            const modifiedRecipe = {
-                title: 'Custom Recipe',
-                ingredients: data.modified_ingredients,
-                instructions: [],
-                description: 'Custom recipe modified for diet compliance',
-                photo_url: '',
-                original_recipe_id: 'custom',
-                modification_date: new Date().toISOString(),
-                diet_modification: diet,
-                substitutions_applied: data.substitutions,
-                changes_made: data.changes_made,
-                original_keto_score: 0,
-                original_vegan_score: 0
-            };
-            
-            // Update scores for the modified recipe
-            if (diet === 'both') {
-                modifiedRecipe.keto_score = data.keto_percentage !== undefined ? data.keto_percentage : 0;
-                modifiedRecipe.vegan_score = data.vegan_percentage !== undefined ? data.vegan_percentage : 0;
-            } else {
-                modifiedRecipe[`${diet}_score`] = data.new_compliance_percentage || 0;
-            }
-            
-            // Save to localStorage
-            saveModifiedRecipe(modifiedRecipe);
-            
-            // Update ingredient list
-            document.getElementById('ingredient-input').value = data.modified_ingredients.join('\n');
-            
-            const dietDisplay = diet === 'both' ? 'keto & vegan' : diet;
-            const newScoreBadge = createDietScoreBadge(diet, data.new_compliance_percentage);
-            
-            let additionalInfo = '';
-            if (diet === 'both' && data.keto_percentage !== undefined) {
-                additionalInfo = `
+
+        const response = await fetch("/modify-recipe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ingredients: ingredients,
+            diet: diet,
+            auto_substitute: true,
+            preserve_quantities: true,
+          }),
+        });
+
+        const data = await response.json();
+
+        // Create modified recipe for saving
+        const modifiedRecipe = {
+          title: "Custom Recipe",
+          ingredients: data.modified_ingredients,
+          instructions: [],
+          description: "Custom recipe modified for diet compliance",
+          photo_url: "",
+          original_recipe_id: "custom",
+          modification_date: new Date().toISOString(),
+          diet_modification: diet,
+          substitutions_applied: data.substitutions,
+          changes_made: data.changes_made,
+          original_keto_score: 0,
+          original_vegan_score: 0,
+        };
+
+        // Update scores for the modified recipe
+        if (diet === "both") {
+          modifiedRecipe.keto_score =
+            data.keto_percentage !== undefined ? data.keto_percentage : 0;
+          modifiedRecipe.vegan_score =
+            data.vegan_percentage !== undefined ? data.vegan_percentage : 0;
+        } else {
+          modifiedRecipe[`${diet}_score`] = data.new_compliance_percentage || 0;
+        }
+
+        // Save to localStorage
+        saveModifiedRecipe(modifiedRecipe);
+
+        // Update ingredient list
+        document.getElementById("ingredient-input").value =
+          data.modified_ingredients.join("\n");
+
+        const dietDisplay = diet === "both" ? "keto & vegan" : diet;
+        const newScoreBadge = createDietScoreBadge(
+          diet,
+          data.new_compliance_percentage
+        );
+
+        let additionalInfo = "";
+        if (diet === "both" && data.keto_percentage !== undefined) {
+          additionalInfo = `
                     <p>Final compliance: Keto ${data.keto_percentage}% | Vegan ${data.vegan_percentage}%</p>
                 `;
-            }
-            
-            // Show results
-            document.getElementById('analysis-results').innerHTML = `
+        }
+
+        // Show results
+        document.getElementById("analysis-results").innerHTML = `
                 <div class="card">
                     <div class="card-body">
                         <h5 class="card-title">✅ Recipe Modified!</h5>
                         ${newScoreBadge}
                         ${additionalInfo}
-                        <p class="mt-2">${data.changes_made} substitutions were made:</p>
+                        <p class="mt-2">${
+                          data.changes_made
+                        } substitutions were made:</p>
                         <ul>
-                            ${Object.entries(data.substitutions).map(([orig, sub]) => 
-                                `<li>${orig} → ${sub === 'REMOVED' ? '<em>removed</em>' : sub}</li>`
-                            ).join('')}
+                            ${Object.entries(data.substitutions)
+                              .map(
+                                ([orig, sub]) =>
+                                  `<li>${orig} → ${
+                                    sub === "REMOVED" ? "<em>removed</em>" : sub
+                                  }</li>`
+                              )
+                              .join("")}
                         </ul>
                         <div class="mt-3">
                             <button class="btn btn-info" onclick="showSavedRecipes()">
@@ -1763,65 +2284,82 @@ ${data.formatted_text}
                     </div>
                 </div>
             `;
-            
-            showNotification(`Recipe successfully modified to be ${dietDisplay}-compliant! Recipe variation saved to database!`);
+
+        showNotification(
+          `Recipe successfully modified to be ${dietDisplay}-compliant! Recipe variation saved to database!`
+        );
+      }
+
+      async function exportCurrentRecipe() {
+        const ingredients = document
+          .getElementById("ingredient-input")
+          .value.split("\n")
+          .filter((i) => i.trim());
+        const diet = document.querySelector('input[name="diet"]:checked').value;
+
+        if (ingredients.length === 0) {
+          showNotification("Please enter some ingredients", "error");
+          return;
         }
-        
-        async function exportCurrentRecipe() {
-            const ingredients = document.getElementById('ingredient-input').value
-                .split('\n')
-                .filter(i => i.trim());
-            const diet = document.querySelector('input[name="diet"]:checked').value;
-            
-            if (ingredients.length === 0) {
-                showNotification('Please enter some ingredients', 'error');
-                return;
-            }
-            
-            const params = new URLSearchParams({
-                diet: diet,
-                format: 'markdown',
-                title: 'My Recipe'
-            });
-            
-            ingredients.forEach(ing => params.append('ingredient', ing));
-            
-            window.location.href = `/export-modified?${params.toString()}`;
+
+        const params = new URLSearchParams({
+          diet: diet,
+          format: "markdown",
+          title: "My Recipe",
+        });
+
+        ingredients.forEach((ing) => params.append("ingredient", ing));
+
+        window.location.href = `/export-modified?${params.toString()}`;
+      }
+
+      // Live compliance preview with score badge
+      async function updateCompliancePreview() {
+        const ingredients = document
+          .getElementById("ingredient-input")
+          .value.split("\n")
+          .filter((i) => i.trim());
+        const diet = document.querySelector(
+          'input[name="diet"]:checked'
+        )?.value;
+
+        if (!diet || ingredients.length === 0) {
+          document.getElementById("compliance-preview").innerHTML = "";
+          return;
         }
-        
-        // Live compliance preview with score badge
-        async function updateCompliancePreview() {
-            const ingredients = document.getElementById('ingredient-input').value
-                .split('\n')
-                .filter(i => i.trim());
-            const diet = document.querySelector('input[name="diet"]:checked')?.value;
-            
-            if (!diet || ingredients.length === 0) {
-                document.getElementById('compliance-preview').innerHTML = '';
-                return;
-            }
-            
-            const params = new URLSearchParams();
-            params.append('diet', diet);
-            ingredients.forEach(ing => params.append('ingredient', ing));
-            
-            try {
-                const response = await fetch('/check-compliance?' + params.toString());
-                const data = await response.json();
-                
-                const scoreBadge = createDietScoreBadge(diet, data.compliance_percentage);
-                const complianceClass = data.is_compliant ? 'compliant' : 'non-compliant';
-                
-                let additionalInfo = '';
-                if (diet === 'both' && data.keto_percentage !== undefined && data.vegan_percentage !== undefined) {
-                    additionalInfo = `
+
+        const params = new URLSearchParams();
+        params.append("diet", diet);
+        ingredients.forEach((ing) => params.append("ingredient", ing));
+
+        try {
+          const response = await fetch(
+            "/check-compliance?" + params.toString()
+          );
+          const data = await response.json();
+
+          const scoreBadge = createDietScoreBadge(
+            diet,
+            data.compliance_percentage
+          );
+          const complianceClass = data.is_compliant
+            ? "compliant"
+            : "non-compliant";
+
+          let additionalInfo = "";
+          if (
+            diet === "both" &&
+            data.keto_percentage !== undefined &&
+            data.vegan_percentage !== undefined
+          ) {
+            additionalInfo = `
                         <div class="mt-1 small">
                             Keto: ${data.keto_percentage}% | Vegan: ${data.vegan_percentage}%
                         </div>
                     `;
-                }
-                
-                document.getElementById('compliance-preview').innerHTML = `
+          }
+
+          document.getElementById("compliance-preview").innerHTML = `
                     <div class="compliance-preview ${complianceClass}">
                         ${scoreBadge}
                         <div class="mt-2">
@@ -1830,301 +2368,365 @@ ${data.formatted_text}
                         </div>
                     </div>
                 `;
-            } catch (error) {
-                console.error('Preview error:', error);
-            }
+        } catch (error) {
+          console.error("Preview error:", error);
         }
-        
-        // Storage functions for saving recipe variations
-        function saveModifiedRecipe(recipe) {
-            // Save to both localStorage and database automatically
-            saveToLocalStorage(recipe);
-            saveToDatabase(recipe);
-        }
-        
-        function saveToLocalStorage(recipe) {
-            try {
-                const savedRecipes = getSavedRecipes();
-                
-                // Generate unique ID for this variation (consistent with database format)
-                const uniqueId = `${recipe.original_recipe_id}_${recipe.diet_modification}_${recipe.modification_date}`;
-                const recipeId = uniqueId;
-                recipe.id = recipeId;
-                recipe.unique_id = uniqueId;
-                
-                // Check if recipe with same unique_id already exists
-                const existingIndex = savedRecipes.findIndex(r => r.unique_id === uniqueId);
-                if (existingIndex !== -1) {
-                    // Update existing recipe instead of adding duplicate
-                    savedRecipes[existingIndex] = recipe;
-                } else {
-                    // Add new recipe
-                    savedRecipes.push(recipe);
-                }
-                
-                // Save back to localStorage
-                localStorage.setItem('savedRecipeVariations', JSON.stringify(savedRecipes));
-                
-                console.log('Recipe variation saved to localStorage:', recipeId);
-                return recipeId;
-            } catch (error) {
-                console.error('Error saving recipe to localStorage:', error);
-                showNotification('Failed to save recipe variation to localStorage', 'error');
-            }
-        }
-        
+      }
 
-        
-        function getSavedRecipes() {
-            try {
-                const saved = localStorage.getItem('savedRecipeVariations');
-                return saved ? JSON.parse(saved) : [];
-            } catch (error) {
-                console.error('Error loading saved recipes:', error);
-                return [];
-            }
+      // Storage functions for saving recipe variations
+      function saveModifiedRecipe(recipe) {
+        // Save to both localStorage and database automatically
+        saveToLocalStorage(recipe);
+        saveToDatabase(recipe);
+      }
+
+      function saveToLocalStorage(recipe) {
+        try {
+          const savedRecipes = getSavedRecipes();
+
+          // Generate unique ID for this variation (consistent with database format)
+          const uniqueId = `${recipe.original_recipe_id}_${recipe.diet_modification}_${recipe.modification_date}`;
+          const recipeId = uniqueId;
+          recipe.id = recipeId;
+          recipe.unique_id = uniqueId;
+
+          // Check if recipe with same unique_id already exists
+          const existingIndex = savedRecipes.findIndex(
+            (r) => r.unique_id === uniqueId
+          );
+          if (existingIndex !== -1) {
+            // Update existing recipe instead of adding duplicate
+            savedRecipes[existingIndex] = recipe;
+          } else {
+            // Add new recipe
+            savedRecipes.push(recipe);
+          }
+
+          // Save back to localStorage
+          localStorage.setItem(
+            "savedRecipeVariations",
+            JSON.stringify(savedRecipes)
+          );
+
+          console.log("Recipe variation saved to localStorage:", recipeId);
+          return recipeId;
+        } catch (error) {
+          console.error("Error saving recipe to localStorage:", error);
+          showNotification(
+            "Failed to save recipe variation to localStorage",
+            "error"
+          );
         }
-        
-        async function deleteSavedRecipe(recipeId) {
-            // Check if it's a database recipe (prefixed with 'db_')
-            if (recipeId.startsWith('db_')) {
-                const dbId = recipeId.replace('db_', '');
-                try {
-                    const response = await fetch(`/delete-modified-recipe/${dbId}`, {
-                        method: 'DELETE'
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        showNotification('Recipe variation deleted from database');
-                        loadSavedRecipes(); // Refresh the display
-                    } else {
-                        showNotification('Failed to delete recipe variation', 'error');
-                    }
-                } catch (error) {
-                    console.error('Error deleting recipe from database:', error);
-                    showNotification('Failed to delete recipe variation from database', 'error');
-                }
+      }
+
+      function getSavedRecipes() {
+        try {
+          const saved = localStorage.getItem("savedRecipeVariations");
+          return saved ? JSON.parse(saved) : [];
+        } catch (error) {
+          console.error("Error loading saved recipes:", error);
+          return [];
+        }
+      }
+
+      async function deleteSavedRecipe(recipeId) {
+        // Check if it's a database recipe (prefixed with 'db_')
+        if (recipeId.startsWith("db_")) {
+          const dbId = recipeId.replace("db_", "");
+          try {
+            const response = await fetch(`/delete-modified-recipe/${dbId}`, {
+              method: "DELETE",
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+              showNotification("Recipe variation deleted from database");
+              loadSavedRecipes(); // Refresh the display
             } else {
-                // localStorage recipe
-                try {
-                    const savedRecipes = getSavedRecipes();
-                    const filteredRecipes = savedRecipes.filter(recipe => recipe.id !== recipeId);
-                    localStorage.setItem('savedRecipeVariations', JSON.stringify(filteredRecipes));
-                    showNotification('Recipe variation deleted from localStorage');
-                    loadSavedRecipes(); // Refresh the display
-                } catch (error) {
-                    console.error('Error deleting recipe from localStorage:', error);
-                    showNotification('Failed to delete recipe variation from localStorage', 'error');
-                }
+              showNotification("Failed to delete recipe variation", "error");
             }
+          } catch (error) {
+            console.error("Error deleting recipe from database:", error);
+            showNotification(
+              "Failed to delete recipe variation from database",
+              "error"
+            );
+          }
+        } else {
+          // localStorage recipe
+          try {
+            const savedRecipes = getSavedRecipes();
+            const filteredRecipes = savedRecipes.filter(
+              (recipe) => recipe.id !== recipeId
+            );
+            localStorage.setItem(
+              "savedRecipeVariations",
+              JSON.stringify(filteredRecipes)
+            );
+            showNotification("Recipe variation deleted from localStorage");
+            loadSavedRecipes(); // Refresh the display
+          } catch (error) {
+            console.error("Error deleting recipe from localStorage:", error);
+            showNotification(
+              "Failed to delete recipe variation from localStorage",
+              "error"
+            );
+          }
         }
-        
+      }
 
-        
-        async function saveToDatabase(recipe) {
-            try {
-                // Create unique identifier
-                const uniqueId = `${recipe.original_recipe_id}_${recipe.diet_modification}_${recipe.modification_date}`;
-                
-                // Prepare data for database
-                const dbData = {
-                    recipe_id: recipe.original_recipe_id,
-                    title: recipe.title,
-                    original_ingredients: recipe.original_ingredients || recipe.ingredients,
-                    modified_ingredients: recipe.ingredients,
-                    diet_modification: recipe.diet_modification,
-                    substitutions_applied: recipe.substitutions_applied,
-                    changes_made: recipe.changes_made,
-                    original_keto_score: recipe.original_keto_score,
-                    original_vegan_score: recipe.original_vegan_score,
-                    new_keto_score: recipe.keto_score,
-                    new_vegan_score: recipe.vegan_score,
-                    description: recipe.description,
-                    instructions: recipe.instructions,
-                    photo_url: recipe.photo_url,
-                    unique_id: uniqueId
-                };
-                
-                const response = await fetch('/save-modified-recipe', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(dbData)
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    console.log('Recipe variation automatically saved to database:', result.id);
-                    // Remove from localStorage after successful database save
-                    await removeFromLocalStorage(recipe.id);
-                } else {
-                    console.error('Failed to save to database:', result.error);
-                }
-            } catch (error) {
-                console.error('Error saving recipe to database:', error);
-                // Keep in localStorage if database save fails
-            }
+      async function saveToDatabase(recipe) {
+        try {
+          // Create unique identifier
+          const uniqueId = `${recipe.original_recipe_id}_${recipe.diet_modification}_${recipe.modification_date}`;
+
+          // Prepare data for database
+          const dbData = {
+            recipe_id: recipe.original_recipe_id,
+            title: recipe.title,
+            original_ingredients:
+              recipe.original_ingredients || recipe.ingredients,
+            modified_ingredients: recipe.ingredients,
+            diet_modification: recipe.diet_modification,
+            substitutions_applied: recipe.substitutions_applied,
+            changes_made: recipe.changes_made,
+            original_keto_score: recipe.original_keto_score,
+            original_vegan_score: recipe.original_vegan_score,
+            new_keto_score: recipe.keto_score,
+            new_vegan_score: recipe.vegan_score,
+            description: recipe.description,
+            instructions: recipe.instructions,
+            photo_url: recipe.photo_url,
+            unique_id: uniqueId,
+          };
+
+          const response = await fetch("/save-modified-recipe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(dbData),
+          });
+
+          const result = await response.json();
+
+          if (result.success) {
+            console.log(
+              "Recipe variation automatically saved to database:",
+              result.id
+            );
+            // Remove from localStorage after successful database save
+            await removeFromLocalStorage(recipe.id);
+          } else {
+            console.error("Failed to save to database:", result.error);
+          }
+        } catch (error) {
+          console.error("Error saving recipe to database:", error);
+          // Keep in localStorage if database save fails
         }
-        
-        async function removeFromLocalStorage(recipeId) {
-            try {
-                const savedRecipes = getSavedRecipes();
-                const filteredRecipes = savedRecipes.filter(recipe => recipe.id !== recipeId);
-                localStorage.setItem('savedRecipeVariations', JSON.stringify(filteredRecipes));
-                return true;
-            } catch (error) {
-                console.error('Error removing recipe from localStorage:', error);
-                return false;
-            }
+      }
+
+      async function removeFromLocalStorage(recipeId) {
+        try {
+          const savedRecipes = getSavedRecipes();
+          const filteredRecipes = savedRecipes.filter(
+            (recipe) => recipe.id !== recipeId
+          );
+          localStorage.setItem(
+            "savedRecipeVariations",
+            JSON.stringify(filteredRecipes)
+          );
+          return true;
+        } catch (error) {
+          console.error("Error removing recipe from localStorage:", error);
+          return false;
         }
-        
-        async function clearAllSavedRecipes() {
-            if (confirm('Are you sure you want to delete all saved recipe variations? This will clear both localStorage and database. This cannot be undone.')) {
-                try {
-                    // Clear localStorage
-                    localStorage.removeItem('savedRecipeVariations');
-                    
-                    // Clear database
-                    const response = await fetch('/clear-all-modified-recipes', {
-                        method: 'DELETE'
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        showNotification(`All saved recipe variations cleared. ${result.message}`);
-                    } else {
-                        showNotification('Cleared localStorage but failed to clear database', 'warning');
-                    }
-                    
-                    loadSavedRecipes(); // Refresh the display
-                } catch (error) {
-                    console.error('Error clearing recipes:', error);
-                    showNotification('Cleared localStorage but failed to clear database', 'warning');
-                    loadSavedRecipes(); // Refresh the display
-                }
+      }
+
+      async function clearAllSavedRecipes() {
+        if (
+          confirm(
+            "Are you sure you want to delete all saved recipe variations? This will clear both localStorage and database. This cannot be undone."
+          )
+        ) {
+          try {
+            // Clear localStorage
+            localStorage.removeItem("savedRecipeVariations");
+
+            // Clear database
+            const response = await fetch("/clear-all-modified-recipes", {
+              method: "DELETE",
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+              showNotification(
+                `All saved recipe variations cleared. ${result.message}`
+              );
+            } else {
+              showNotification(
+                "Cleared localStorage but failed to clear database",
+                "warning"
+              );
             }
+
+            loadSavedRecipes(); // Refresh the display
+          } catch (error) {
+            console.error("Error clearing recipes:", error);
+            showNotification(
+              "Cleared localStorage but failed to clear database",
+              "warning"
+            );
+            loadSavedRecipes(); // Refresh the display
+          }
         }
-        
-        async function loadSavedRecipes() {
-            const container = document.getElementById('saved-recipes-container');
-            
-            let savedRecipes = [];
-            
-            // Load from localStorage
-            const localRecipes = getSavedRecipes();
-            
-            // Load from database
-            try {
-                const response = await fetch('/get-modified-recipes');
-                const result = await response.json();
-                
-                if (result.success) {
-                    const dbRecipes = result.recipes.map(recipe => ({
-                        ...recipe,
-                        id: `db_${recipe.id}`, // Prefix to distinguish from localStorage
-                        ingredients: recipe.modified_ingredients,
-                        original_ingredients: recipe.original_ingredients,
-                        substitutions_applied: recipe.substitutions_applied,
-                        keto_score: recipe.new_keto_score || 0,
-                        vegan_score: recipe.new_vegan_score || 0,
-                        source: 'database'
-                    }));
-                    
-                    // Filter out localStorage recipes that exist in database (by unique_id)
-                    const dbUniqueIds = new Set(dbRecipes.map(r => r.unique_id).filter(id => id));
-                    const filteredLocalRecipes = localRecipes.filter(recipe => {
-                        // Keep if no unique_id or if not in database
-                        return !recipe.unique_id || !dbUniqueIds.has(recipe.unique_id);
-                    });
-                    
-                    // Add source indicators
-                    filteredLocalRecipes.forEach(recipe => {
-                        recipe.source = 'localStorage';
-                    });
-                    
-                    savedRecipes.push(...filteredLocalRecipes, ...dbRecipes);
-                } else {
-                    // If database failed, just use localStorage
-                    localRecipes.forEach(recipe => {
-                        recipe.source = 'localStorage';
-                    });
-                    savedRecipes.push(...localRecipes);
-                }
-            } catch (error) {
-                console.error('Error loading from database:', error);
-                // Continue with localStorage recipes only
-                localRecipes.forEach(recipe => {
-                    recipe.source = 'localStorage';
-                });
-                savedRecipes.push(...localRecipes);
-            }
-            
-            if (savedRecipes.length === 0) {
-                container.innerHTML = `
+      }
+
+      async function loadSavedRecipes() {
+        const container = document.getElementById("saved-recipes-container");
+
+        let savedRecipes = [];
+
+        // Load from localStorage
+        const localRecipes = getSavedRecipes();
+
+        // Load from database
+        try {
+          const response = await fetch("/get-modified-recipes");
+          const result = await response.json();
+
+          if (result.success) {
+            const dbRecipes = result.recipes.map((recipe) => ({
+              ...recipe,
+              id: `db_${recipe.id}`, // Prefix to distinguish from localStorage
+              ingredients: recipe.modified_ingredients,
+              original_ingredients: recipe.original_ingredients,
+              substitutions_applied: recipe.substitutions_applied,
+              keto_score: recipe.new_keto_score || 0,
+              vegan_score: recipe.new_vegan_score || 0,
+              source: "database",
+            }));
+
+            // Filter out localStorage recipes that exist in database (by unique_id)
+            const dbUniqueIds = new Set(
+              dbRecipes.map((r) => r.unique_id).filter((id) => id)
+            );
+            const filteredLocalRecipes = localRecipes.filter((recipe) => {
+              // Keep if no unique_id or if not in database
+              return !recipe.unique_id || !dbUniqueIds.has(recipe.unique_id);
+            });
+
+            // Add source indicators
+            filteredLocalRecipes.forEach((recipe) => {
+              recipe.source = "localStorage";
+            });
+
+            savedRecipes.push(...filteredLocalRecipes, ...dbRecipes);
+          } else {
+            // If database failed, just use localStorage
+            localRecipes.forEach((recipe) => {
+              recipe.source = "localStorage";
+            });
+            savedRecipes.push(...localRecipes);
+          }
+        } catch (error) {
+          console.error("Error loading from database:", error);
+          // Continue with localStorage recipes only
+          localRecipes.forEach((recipe) => {
+            recipe.source = "localStorage";
+          });
+          savedRecipes.push(...localRecipes);
+        }
+
+        if (savedRecipes.length === 0) {
+          container.innerHTML = `
                     <div class="text-center py-5">
                         <i class="fas fa-save fa-3x text-muted mb-3"></i>
                         <h5 class="text-muted">No saved recipe variations</h5>
                         <p class="text-muted">Modified recipes will appear here after you apply diet substitutions.</p>
                     </div>
                 `;
-                return;
-            }
-            
-            // Sort by modification date (newest first)
-            savedRecipes.sort((a, b) => new Date(b.modification_date) - new Date(a.modification_date));
-            
-            let html = '<div class="row">';
-            
-            savedRecipes.forEach(recipe => {
-                const dietDisplay = recipe.diet_modification === 'both' ? 'Keto & Vegan' : 
-                                  recipe.diet_modification.charAt(0).toUpperCase() + recipe.diet_modification.slice(1);
-                
-                const modificationDate = new Date(recipe.modification_date).toLocaleDateString();
-                
-                // Create diet score badges
-                let badgeHTML = '';
-                if (recipe.keto_score !== undefined && recipe.keto_score !== null) {
-                    badgeHTML += createDietScoreBadge('keto', recipe.keto_score);
-                }
-                if (recipe.vegan_score !== undefined && recipe.vegan_score !== null) {
-                    badgeHTML += createDietScoreBadge('vegan', recipe.vegan_score);
-                }
-                if (recipe.diet_modification === 'both' && 
-                    recipe.keto_score !== undefined && recipe.keto_score !== null && 
-                    recipe.vegan_score !== undefined && recipe.vegan_score !== null) {
-                    const bothScore = Math.min(recipe.keto_score, recipe.vegan_score);
-                    badgeHTML += createDietScoreBadge('both', bothScore);
-                }
-                
-                const sourceBadge = recipe.source === 'database' ? 
-                    '<span class="badge bg-primary ms-1"><i class="fas fa-database"></i></span>' : 
-                    '<span class="badge bg-secondary ms-1"><i class="fas fa-hdd"></i></span>';
-                
-                html += `
+          return;
+        }
+
+        // Sort by modification date (newest first)
+        savedRecipes.sort(
+          (a, b) =>
+            new Date(b.modification_date) - new Date(a.modification_date)
+        );
+
+        let html = '<div class="row">';
+
+        savedRecipes.forEach((recipe) => {
+          const dietDisplay =
+            recipe.diet_modification === "both"
+              ? "Keto & Vegan"
+              : recipe.diet_modification.charAt(0).toUpperCase() +
+                recipe.diet_modification.slice(1);
+
+          const modificationDate = new Date(
+            recipe.modification_date
+          ).toLocaleDateString();
+
+          // Create diet score badges
+          let badgeHTML = "";
+          if (recipe.keto_score !== undefined && recipe.keto_score !== null) {
+            badgeHTML += createDietScoreBadge("keto", recipe.keto_score);
+          }
+          if (recipe.vegan_score !== undefined && recipe.vegan_score !== null) {
+            badgeHTML += createDietScoreBadge("vegan", recipe.vegan_score);
+          }
+          if (
+            recipe.diet_modification === "both" &&
+            recipe.keto_score !== undefined &&
+            recipe.keto_score !== null &&
+            recipe.vegan_score !== undefined &&
+            recipe.vegan_score !== null
+          ) {
+            const bothScore = Math.min(recipe.keto_score, recipe.vegan_score);
+            badgeHTML += createDietScoreBadge("both", bothScore);
+          }
+
+          const sourceBadge =
+            recipe.source === "database"
+              ? '<span class="badge bg-primary ms-1"><i class="fas fa-database"></i></span>'
+              : '<span class="badge bg-secondary ms-1"><i class="fas fa-hdd"></i></span>';
+
+          html += `
                     <div class="col-md-6 col-lg-4 mb-4">
-                        <div class="card recipe-card" onclick="viewSavedRecipe('${recipe.id}')" style="cursor: pointer;">
+                        <div class="card recipe-card" onclick="viewSavedRecipe('${
+                          recipe.id
+                        }')" style="cursor: pointer;">
                             <div class="diet-badges">
                                 ${badgeHTML}
                             </div>
                             <img class="card-img-top recipe-image lazy" 
                                  loading="lazy"
-                                 data-src="${recipe.photo_url || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDMwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjZjhmOWZhIi8+Cjx0ZXh0IHg9IjE1MCIgeT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM2Yzc1N2QiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5Nb2RpZmllZCBSZWNpcGU8L3RleHQ+Cjwvc3ZnPgo='}"
+                                 data-src="${
+                                   recipe.photo_url ||
+                                   "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDMwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjZjhmOWZhIi8+Cjx0ZXh0IHg9IjE1MCIgeT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM2Yzc1N2QiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5Nb2RpZmllZCBSZWNpcGU8L3RleHQ+Cjwvc3ZnPgo="
+                                 }"
                                  alt="${recipe.title}">
                             <div class="card-body">
-                                <h6 class="card-title">${recipe.title} ${sourceBadge}</h6>
+                                <h6 class="card-title">${
+                                  recipe.title
+                                } ${sourceBadge}</h6>
                                 <p class="card-text small text-muted">
                                     <i class="fas fa-calendar"></i> ${modificationDate}<br>
                                     <i class="fas fa-magic"></i> ${dietDisplay} variation<br>
-                                    <i class="fas fa-exchange-alt"></i> ${recipe.changes_made} changes made
+                                    <i class="fas fa-exchange-alt"></i> ${
+                                      recipe.changes_made
+                                    } changes made
                                 </p>
                                 <div class="d-flex gap-2" onclick="event.stopPropagation();">
-                                    <button class="btn btn-sm btn-outline-success" onclick="exportSavedRecipe('${recipe.id}')">
+                                    <button class="btn btn-sm btn-outline-success" onclick="exportSavedRecipe('${
+                                      recipe.id
+                                    }')">
                                         <i class="fas fa-download"></i> Export
                                     </button>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteSavedRecipe('${recipe.id}')">
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteSavedRecipe('${
+                                      recipe.id
+                                    }')">
                                         <i class="fas fa-trash"></i>
                                     </button>
                                 </div>
@@ -2132,230 +2734,399 @@ ${data.formatted_text}
                         </div>
                     </div>
                 `;
-            });
-            
-            html += '</div>';
-            container.innerHTML = html;
-            
-            // Activate lazy loading for images
-            hookLazyImages();
+        });
+
+        html += "</div>";
+        container.innerHTML = html;
+
+        // Activate lazy loading for images
+        hookLazyImages();
+      }
+
+      function viewSavedRecipe(recipeId) {
+        // Check if it's a database recipe (prefixed with 'db_')
+        if (recipeId.startsWith("db_")) {
+          const dbId = recipeId.replace("db_", "");
+          fetchSavedRecipeFromDatabase(dbId);
+        } else {
+          // For localStorage recipes
+          const savedRecipes = getSavedRecipes();
+          const recipe = savedRecipes.find((r) => r.id === recipeId);
+
+          if (!recipe) {
+            showNotification("Recipe not found", "error");
+            return;
+          }
+
+          // Show recipe in modal with modification details
+          showSavedRecipeDetails(recipe);
         }
-        
-        function viewSavedRecipe(recipeId) {
-            // Check if it's a database recipe (prefixed with 'db_')
-            if (recipeId.startsWith('db_')) {
-                const dbId = recipeId.replace('db_', '');
-                fetchSavedRecipeFromDatabase(dbId);
-            } else {
-                // For localStorage recipes
-                const savedRecipes = getSavedRecipes();
-                const recipe = savedRecipes.find(r => r.id === recipeId);
-                
-                if (!recipe) {
-                    showNotification('Recipe not found', 'error');
-                    return;
-                }
-                
-                // Show recipe in modal with modification details
-                showSavedRecipeDetails(recipe);
-            }
+      }
+
+      async function fetchSavedRecipeFromDatabase(recipeId) {
+        try {
+          const response = await fetch(`/get-modified-recipes?id=${recipeId}`);
+          const result = await response.json();
+
+          if (result.success && result.recipes.length > 0) {
+            const recipe = result.recipes[0];
+            const enhancedRecipe = {
+              ...recipe,
+              id: `db_${recipe.id}`,
+              ingredients: recipe.modified_ingredients,
+              original_ingredients: recipe.original_ingredients,
+              substitutions_applied: recipe.substitutions_applied,
+              keto_score: recipe.new_keto_score || 0,
+              vegan_score: recipe.new_vegan_score || 0,
+              source: "database",
+            };
+
+            showSavedRecipeDetails(enhancedRecipe);
+          } else {
+            showNotification("Recipe not found in database", "error");
+          }
+        } catch (error) {
+          console.error("Error fetching recipe from database:", error);
+          showNotification("Failed to load recipe from database", "error");
         }
-        
-        async function fetchSavedRecipeFromDatabase(recipeId) {
-            try {
-                const response = await fetch(`/get-modified-recipes?id=${recipeId}`);
-                const result = await response.json();
-                
-                if (result.success && result.recipes.length > 0) {
-                    const recipe = result.recipes[0];
-                    const enhancedRecipe = {
-                        ...recipe,
-                        id: `db_${recipe.id}`,
-                        ingredients: recipe.modified_ingredients,
-                        original_ingredients: recipe.original_ingredients,
-                        substitutions_applied: recipe.substitutions_applied,
-                        keto_score: recipe.new_keto_score || 0,
-                        vegan_score: recipe.new_vegan_score || 0,
-                        source: 'database'
-                    };
-                    
-                    showSavedRecipeDetails(enhancedRecipe);
-                } else {
-                    showNotification('Recipe not found in database', 'error');
-                }
-            } catch (error) {
-                console.error('Error fetching recipe from database:', error);
-                showNotification('Failed to load recipe from database', 'error');
-            }
+      }
+
+      function showSavedRecipeDetails(recipe) {
+        currentRecipe = recipe;
+
+        $("#modalTitle").text(
+          `${recipe.title} (${recipe.diet_modification} variation)`
+        );
+        $("#modalImage").attr(
+          "src",
+          recipe.photo_url ||
+            "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDMwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjZjhmOWZhIi8+Cjx0ZXh0IHg9IjE1MCIgeT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM2Yzc1N2QiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5Nb2RpZmllZCBSZWNpcGU8L3RleHQ+Cjwvc3ZnPgo="
+        );
+        $("#modalDescription").text(
+          recipe.description || "Modified recipe variation"
+        );
+
+        // Create diet score badges for modal
+        let dietScoreHtml = '<div class="diet-score-container">';
+
+        if (recipe.keto_score !== undefined && recipe.keto_score !== null) {
+          dietScoreHtml += createDietScoreBadge("keto", recipe.keto_score);
         }
-        
-        function showSavedRecipeDetails(recipe) {
-            currentRecipe = recipe;
-            
-            $('#modalTitle').text(`${recipe.title} (${recipe.diet_modification} variation)`);
-            $('#modalImage').attr('src', recipe.photo_url || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDMwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIzMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjZjhmOWZhIi8+Cjx0ZXh0IHg9IjE1MCIgeT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM2Yzc1N2QiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5Nb2RpZmllZCBSZWNpcGU8L3RleHQ+Cjwvc3ZnPgo=');
-            $('#modalDescription').text(recipe.description || 'Modified recipe variation');
-            
-            // Create diet score badges for modal
-            let dietScoreHtml = '<div class="diet-score-container">';
-            
-            if (recipe.keto_score !== undefined && recipe.keto_score !== null) {
-                dietScoreHtml += createDietScoreBadge('keto', recipe.keto_score);
-            }
-            
-            if (recipe.vegan_score !== undefined && recipe.vegan_score !== null) {
-                dietScoreHtml += createDietScoreBadge('vegan', recipe.vegan_score);
-            }
-            
-            if (recipe.diet_modification === 'both' && 
-                recipe.keto_score !== undefined && recipe.keto_score !== null && 
-                recipe.vegan_score !== undefined && recipe.vegan_score !== null) {
-                const bothScore = Math.min(recipe.keto_score, recipe.vegan_score);
-                dietScoreHtml += createDietScoreBadge('both', bothScore);
-            }
-            
-            dietScoreHtml += '</div>';
-            
-            // Add modification info
-            const modificationDate = new Date(recipe.modification_date).toLocaleDateString();
-            const dietDisplay = recipe.diet_modification === 'both' ? 'Keto & Vegan' : 
-                              recipe.diet_modification.charAt(0).toUpperCase() + recipe.diet_modification.slice(1);
-            
-            let modificationInfo = `
+
+        if (recipe.vegan_score !== undefined && recipe.vegan_score !== null) {
+          dietScoreHtml += createDietScoreBadge("vegan", recipe.vegan_score);
+        }
+
+        if (
+          recipe.diet_modification === "both" &&
+          recipe.keto_score !== undefined &&
+          recipe.keto_score !== null &&
+          recipe.vegan_score !== undefined &&
+          recipe.vegan_score !== null
+        ) {
+          const bothScore = Math.min(recipe.keto_score, recipe.vegan_score);
+          dietScoreHtml += createDietScoreBadge("both", bothScore);
+        }
+
+        dietScoreHtml += "</div>";
+
+        // Add modification info
+        const modificationDate = new Date(
+          recipe.modification_date
+        ).toLocaleDateString();
+        const dietDisplay =
+          recipe.diet_modification === "both"
+            ? "Keto & Vegan"
+            : recipe.diet_modification.charAt(0).toUpperCase() +
+              recipe.diet_modification.slice(1);
+
+        let modificationInfo = `
                 <div class="alert alert-info mt-2">
                     <h6><i class="fas fa-info-circle"></i> Modification Details</h6>
                     <p class="mb-1"><strong>Diet:</strong> ${dietDisplay}</p>
                     <p class="mb-1"><strong>Modified:</strong> ${modificationDate}</p>
-                    <p class="mb-1"><strong>Changes:</strong> ${recipe.changes_made} substitutions made</p>
-                    ${recipe.original_keto_score !== undefined && recipe.original_keto_score !== null ? `<p class="mb-1"><strong>Original Keto Score:</strong> ${recipe.original_keto_score}% → ${recipe.keto_score || 0}%</p>` : ''}
-                    ${recipe.original_vegan_score !== undefined && recipe.original_vegan_score !== null ? `<p class="mb-1"><strong>Original Vegan Score:</strong> ${recipe.original_vegan_score}% → ${recipe.vegan_score || 0}%</p>` : ''}
+                    <p class="mb-1"><strong>Changes:</strong> ${
+                      recipe.changes_made
+                    } substitutions made</p>
+                    ${
+                      recipe.original_keto_score !== undefined &&
+                      recipe.original_keto_score !== null
+                        ? `<p class="mb-1"><strong>Original Keto Score:</strong> ${
+                            recipe.original_keto_score
+                          }% → ${recipe.keto_score || 0}%</p>`
+                        : ""
+                    }
+                    ${
+                      recipe.original_vegan_score !== undefined &&
+                      recipe.original_vegan_score !== null
+                        ? `<p class="mb-1"><strong>Original Vegan Score:</strong> ${
+                            recipe.original_vegan_score
+                          }% → ${recipe.vegan_score || 0}%</p>`
+                        : ""
+                    }
                 </div>
             `;
-            
-            $('#modalDietInfo').html(dietScoreHtml + modificationInfo);
-            
-            // Show original vs modified ingredients
-            const ingredientsList = $('#modalIngredients');
-            ingredientsList.empty();
-            
-            if (recipe.original_ingredients && recipe.original_ingredients.length > 0) {
-                ingredientsList.append('<h6>Modified Ingredients:</h6>');
-                recipe.ingredients.forEach(ingredient => {
-                    ingredientsList.append(`<li>${ingredient}</li>`);
-                });
-                
-                // Show substitutions if available
-                if (recipe.substitutions_applied && Object.keys(recipe.substitutions_applied).length > 0) {
-                    ingredientsList.append('<hr><h6>Substitutions Made:</h6>');
-                    Object.entries(recipe.substitutions_applied).forEach(([original, substitution]) => {
-                        if (substitution === 'REMOVED') {
-                            ingredientsList.append(`<li class="text-danger"><del>${original}</del> <small>(removed)</small></li>`);
-                        } else {
-                            ingredientsList.append(`<li><del class="text-muted">${original}</del> → <strong>${substitution}</strong></li>`);
-                        }
-                    });
-                }
-            } else {
-                recipe.ingredients.forEach(ingredient => {
-                    ingredientsList.append(`<li>${ingredient}</li>`);
-                });
-            }
-            
-            // Instructions
-            const instructionsList = $('#modalInstructions');
-            instructionsList.empty();
-            if (recipe.instructions && recipe.instructions.length > 0) {
-                recipe.instructions.forEach(instruction => {
-                    instructionsList.append(`<li>${instruction}</li>`);
-                });
-            } else {
-                instructionsList.append('<li>No instructions available</li>');
-            }
-            
-            // Hide diet-specific buttons since this is a saved variation
-            $('#makeCompliantBtn').hide();
-            $('.modal-footer .make-diet-btn').remove();
-            
-            // Show modal
-            const recipeModal = new bootstrap.Modal(document.getElementById('recipeModal'));
-            recipeModal.show();
-        }
-        
-        function exportSavedRecipe(recipeId) {
-            const savedRecipes = getSavedRecipes();
-            const recipe = savedRecipes.find(r => r.id === recipeId);
-            
-            if (!recipe) {
-                showNotification('Recipe not found', 'error');
-                return;
-            }
-            
-            // Create export data
-            const exportData = {
-                title: recipe.title,
-                diet: recipe.diet_modification,
-                ingredients: recipe.ingredients,
-                substitutions: recipe.substitutions_applied,
-                instructions: recipe.instructions || [],
-                modification_date: recipe.modification_date,
-                changes_made: recipe.changes_made
-            };
-            
-            // Create and download file
-            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${recipe.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${recipe.diet_modification}_variation.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            
-            showNotification('Recipe variation exported successfully');
-        }
-        
 
-        
-        function showSavedRecipes() {
-            // Switch to saved recipes tab
-            const savedTab = document.getElementById('saved-tab');
-            const tab = new bootstrap.Tab(savedTab);
-            tab.show();
-            
-            // Load saved recipes
-            loadSavedRecipes();
+        $("#modalDietInfo").html(dietScoreHtml + modificationInfo);
+
+        // Show original vs modified ingredients
+        const ingredientsList = $("#modalIngredients");
+        ingredientsList.empty();
+
+        if (
+          recipe.original_ingredients &&
+          recipe.original_ingredients.length > 0
+        ) {
+          ingredientsList.append("<h6>Modified Ingredients:</h6>");
+          recipe.ingredients.forEach((ingredient) => {
+            ingredientsList.append(`<li>${ingredient}</li>`);
+          });
+
+          // Show substitutions if available
+          if (
+            recipe.substitutions_applied &&
+            Object.keys(recipe.substitutions_applied).length > 0
+          ) {
+            ingredientsList.append("<hr><h6>Substitutions Made:</h6>");
+            Object.entries(recipe.substitutions_applied).forEach(
+              ([original, substitution]) => {
+                if (substitution === "REMOVED") {
+                  ingredientsList.append(
+                    `<li class="text-danger"><del>${original}</del> <small>(removed)</small></li>`
+                  );
+                } else {
+                  ingredientsList.append(
+                    `<li><del class="text-muted">${original}</del> → <strong>${substitution}</strong></li>`
+                  );
+                }
+              }
+            );
+          }
+        } else {
+          recipe.ingredients.forEach((ingredient) => {
+            ingredientsList.append(`<li>${ingredient}</li>`);
+          });
         }
-        
-        // Utility functions
-        function showNotification(message, type = 'success') {
-            const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
-            const notification = $(`
+
+        // Instructions
+        const instructionsList = $("#modalInstructions");
+        instructionsList.empty();
+        if (recipe.instructions && recipe.instructions.length > 0) {
+          recipe.instructions.forEach((instruction) => {
+            instructionsList.append(`<li>${instruction}</li>`);
+          });
+        } else {
+          instructionsList.append("<li>No instructions available</li>");
+        }
+
+        // Hide diet-specific buttons since this is a saved variation
+        $("#makeCompliantBtn").hide();
+        $(".modal-footer .make-diet-btn").remove();
+
+        // Show modal
+        const recipeModal = new bootstrap.Modal(
+          document.getElementById("recipeModal")
+        );
+        recipeModal.show();
+      }
+
+      function exportSavedRecipe(recipeId) {
+        const savedRecipes = getSavedRecipes();
+        const recipe = savedRecipes.find((r) => r.id === recipeId);
+
+        if (!recipe) {
+          showNotification("Recipe not found", "error");
+          return;
+        }
+
+        // Create export data
+        const exportData = {
+          title: recipe.title,
+          diet: recipe.diet_modification,
+          ingredients: recipe.ingredients,
+          substitutions: recipe.substitutions_applied,
+          instructions: recipe.instructions || [],
+          modification_date: recipe.modification_date,
+          changes_made: recipe.changes_made,
+        };
+
+        // Create and download file
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+          type: "application/json",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${recipe.title
+          .replace(/[^a-z0-9]/gi, "_")
+          .toLowerCase()}_${recipe.diet_modification}_variation.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showNotification("Recipe variation exported successfully");
+      }
+
+      function showSavedRecipes() {
+        // Switch to saved recipes tab
+        const savedTab = document.getElementById("saved-tab");
+        const tab = new bootstrap.Tab(savedTab);
+        tab.show();
+
+        // Load saved recipes
+        loadSavedRecipes();
+      }
+
+      // Utility functions
+      function showNotification(message, type = "success") {
+        const alertClass =
+          type === "success" ? "alert-success" : "alert-danger";
+        const notification = $(`
                 <div class="alert ${alertClass} alert-dismissible fade show position-fixed top-0 end-0 m-3" 
                      role="alert" style="z-index: 9999;">
                     ${message}
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
             `);
-            
-            $('body').append(notification);
-            
-            setTimeout(() => {
-                notification.alert('close');
-            }, 3000);
-        }
-        
-        function debounce(func, wait) {
-            let timeout;
-            return function executedFunction(...args) {
-                const later = () => {
-                    clearTimeout(timeout);
-                    func(...args);
-                };
-                clearTimeout(timeout);
-                timeout = setTimeout(later, wait);
-            };
-        }
+
+        $("body").append(notification);
+
+        setTimeout(() => {
+          notification.alert("close");
+        }, 3000);
+      }
+
+      function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+          const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+          };
+          clearTimeout(timeout);
+          timeout = setTimeout(later, wait);
+        };
+      }
     </script>
-</body>
+
+    <!-- ==== BEGIN RAG PATCH: Script ==== -->
+    <script>
+      (function () {
+        const logEl = document.getElementById("ragChatLog");
+        const formEl = document.getElementById("ragChatForm");
+        const inputEl = document.getElementById("ragInput");
+        const sendEl = document.getElementById("ragSend");
+        const dietEl = document.getElementById("ragDiet");
+        const thrEl = document.getElementById("ragThreshold");
+        const thrValEl = document.getElementById("ragThresholdValue");
+        const topkEl = document.getElementById("ragTopK");
+
+        thrEl.addEventListener(
+          "input",
+          () => (thrValEl.textContent = Number(thrEl.value).toFixed(2))
+        );
+        const esc = (s) =>
+          s.replace(
+            /[&<>"']/g,
+            (c) =>
+              ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;",
+              }[c])
+          );
+        const md = (s) =>
+          esc(s)
+            .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+            .replace(/\*(.+?)\*/g, "<em>$1</em>")
+            .replace(/`(.+?)`/g, "<code>$1</code>")
+            .replace(/\n/g, "<br>");
+        const toBottom = () => {
+          logEl.scrollTop = logEl.scrollHeight;
+        };
+
+        function bubbleUser(text) {
+          const n = document.createElement("div");
+          n.className = "msg user";
+          n.innerHTML = `<div class="bubble">${esc(text)}</div>`;
+          logEl.appendChild(n);
+          toBottom();
+        }
+        function bubbleTyping() {
+          const n = document.createElement("div");
+          n.className = "msg assistant";
+          n.dataset.typing = "1";
+          n.innerHTML = `<div class="bubble"><span class="typing"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span></div>`;
+          logEl.appendChild(n);
+          toBottom();
+          return n;
+        }
+        function bubbleAnswer(node, answer, sources, diet) {
+          node.innerHTML =
+            `<div class="bubble">${md(answer || "")}</div>
+      <div class="sources">${(sources || [])
+        .map((s) => {
+          const k = s.keto_score != null ? `${s.keto_score}%` : "?";
+          const v = s.vegan_score != null ? `${s.vegan_score}%` : "?";
+          const t = esc(s.title || s.id || "recipe");
+          return `<span class="source-pill">[${s.ref}] ${t} · k:${k} v:${v}</span>`;
+        })
+        .join("")}</div>` +
+            (diet && diet !== "none"
+              ? `<div class="mt-2"><span class="badge-mini">Detected diet: ${esc(
+                  diet
+                )}</span></div>`
+              : "");
+          toBottom();
+        }
+
+        async function callAPI(payload) {
+          const res = await fetch("/api/rag_chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return await res.json();
+        }
+
+        formEl.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const q = (inputEl.value || "").trim();
+          if (!q) return;
+          bubbleUser(q);
+          inputEl.value = "";
+          inputEl.focus();
+          sendEl.disabled = true;
+          const typing = bubbleTyping();
+          try {
+            const payload = {
+              query: q,
+              diet: dietEl.value || "auto",
+              threshold: Number(thrEl.value || "1"),
+              topk: Math.max(
+                1,
+                Math.min(10, parseInt(topkEl.value || "5", 10))
+              ),
+            };
+            const data = await callAPI(payload);
+            bubbleAnswer(
+              typing,
+              data.answer || "Not found in the sources.",
+              data.sources || [],
+              data.diet_inferred
+            );
+          } catch (err) {
+            bubbleAnswer(typing, `Error: ${err.message}`, [], null);
+          } finally {
+            sendEl.disabled = false;
+          }
+        });
+      })();
+    </script>
+    <!-- ==== END RAG PATCH: Script ==== -->
+  </body>
 </html>

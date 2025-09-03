@@ -1,68 +1,95 @@
 services:
+  ollama:
+    image: ollama/ollama:latest
+    networks: [argmax]
+    ports: ["11434:11434"]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   os:
     image: opensearchproject/opensearch:latest
     environment:
       - discovery.type=single-node
+      - plugins.security.disabled=true
       - bootstrap.memory_lock=true
-      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
-      - DISABLE_SECURITY_PLUGIN=true
-      - DISABLE_INSTALL_DEMO_CONFIG=true
-      - "OPENSEARCH_INITIAL_ADMIN_PASSWORD=Argmax123!"
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
     ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-      nofile:
-        soft: 65536
-        hard: 65536
+      memlock: { soft: -1, hard: -1 }
+      nofile:  { soft: 65536, hard: 65536 }
     volumes:
       - opensearch-data:/usr/share/opensearch/data
     ports:
       - "9200:9200"
       - "9600:9600"
-    networks:
-      - argmax
+    networks: [argmax]
     healthcheck:
       test: ["CMD-SHELL", "curl -s -f http://localhost:9200/_cluster/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 20s
+    restart: unless-stopped
 
   web:
     build:
-      context: web
+      context: ./web
       dockerfile: Dockerfile
+      args:
+        DATA_FILE_ID: ${DATA_FILE_ID}
+        DATA_FILE_NAME: ${DATA_FILE_NAME}
+        GT_FILE_ID: ${GT_FILE_ID}
+        GT_FILE_NAME: ${GT_FILE_NAME}
+    env_file:
+      - ./.env
     environment:
       - FLASK_APP=app.py
       - FLASK_ENV=development
       - FLASK_DEBUG=1
       - OPENSEARCH_URL=http://os:9200
+      # falls back to the sidecar if OLLAMA_URL isn't set in .env
+      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
     ports:
       - "8080:8080"
+    # mount entire web folder so /app/init.sh and /app/web/init.sh exist as you expect
     volumes:
-      - ./web/src:/app/web
-    networks:
-      - argmax
+      - ./web:/app
+    networks: [argmax]
     depends_on:
       os:
         condition: service_healthy
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
 
   nb:
     build:
-      context: nb
+      context: ./nb
       dockerfile: Dockerfile
+      args:
+        NB_DATA_FILE_ID: ${DATA_FILE_ID}
+        NB_DATA_FILE_NAME: ${DATA_FILE_NAME}
+        NB_GT_FILE_ID: ${GT_FILE_ID}
+        NB_GT_FILE_NAME: ${GT_FILE_NAME}
+    env_file:
+      - ./.env
     environment:
       - OPENSEARCH_URL=http://os:9200
+      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
     ports:
       - "8888:8888"
     volumes:
       - ./nb/src:/usr/src/app
-    networks:
-      - argmax
+    networks: [argmax]
     depends_on:
       os:
         condition: service_healthy
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   opensearch-data:

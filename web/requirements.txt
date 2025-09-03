@@ -9,3 +9,10 @@ scikit-learn==1.6.1
 nltk==3.8.1
 rapidfuzz==3.5.1
 swifter==1.4.0
+
+# --- Added for KNN + embeddings + chat ---
+sentence-transformers==2.7.0
+torch>=2.2.0
+sentencepiece>=0.1.99
+numpy>=1.26,<3.0
+tabulate==0.9.0

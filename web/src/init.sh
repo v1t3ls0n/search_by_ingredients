@@ -22,8 +22,7 @@ except Exception as e:
 # Check if indexing has been done
 if [ ! -f /app/.indexed ]; then
     echo "Running initial indexing..."
-    python web/index_data.py --opensearch_url "$OPENSEARCH_URL"
-    # Create a marker file to indicate indexing is done
+    python web/index_data.py --force --data_file "${DATA_FILE:-data/allrecipes.parquet}"
     touch /app/.indexed
     echo "Indexing completed"
 else
