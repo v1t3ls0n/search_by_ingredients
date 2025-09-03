@@ -54,7 +54,7 @@ services:
       - FLASK_APP=app.py
       - FLASK_ENV=development
       - FLASK_DEBUG=1
-      - OPENSEARCH_URL: http://os:9200 
+      - OPENSEARCH_URL= http://os:9200 
       - OLLAMA_URL= http://ollama:11434
       - OLLAMA_MODEL=llama3.1:8b
       - RECIPES_INDEX=recipes_v2
@@ -67,6 +67,7 @@ services:
     volumes:
       # keep your "good old" mapping — init.sh must be at ./web/src/init.sh
       - ./web/src:/app/web
+      - ./data:/app/data
     networks: [argmax]
     depends_on:
       os:

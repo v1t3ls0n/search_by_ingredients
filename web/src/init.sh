@@ -47,9 +47,13 @@ done
 # -------------------------------
 if [ ! -f /app/.indexed ]; then
   log "Running initial indexing..."
-  DATA_FILE="${DATA_FILE:-data/allrecipes.parquet}"
+  # Index Allrecipes parquet
+  python web/index_data.py --force --data_file data/allrecipes.parquet
+  # Index Allrecipes GROUND TRUTH sample CSV
+  python web/index_data.py --force --data_file data/ground_truth_sample.csv
+  # Index new Kaggle dataset
+  python web/index_data.py --data_file data/food-ingredients-and-recipe-dataset-with-image/dataset.csv
   # Force re-create indices & alias; indexer uses env OPENSEARCH_URL
-  python web/index_data.py --force --data_file "${DATA_FILE}"
   touch /app/.indexed
   log "Indexing completed"
 else
