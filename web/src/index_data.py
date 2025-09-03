@@ -21,7 +21,6 @@ from typing import Dict, List, Set
 import pandas as pd
 from decouple import config
 from opensearchpy import OpenSearch
-from opensearchpy.helpers import bulk
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
@@ -34,6 +33,35 @@ except ImportError:
 
 # ── local helpers (diet classification) ───────────────────────────
 from diet_classifiers import is_keto, is_vegan, diet_score  # noqa: E402
+
+import numpy as np  # add this near the top with other imports
+
+
+def _to_text(x):
+    if x is None:
+        return ""
+    if isinstance(x, str):
+        return x
+    if isinstance(x, (list, tuple, set)):
+        return "\n".join(str(i) for i in x)
+    if isinstance(x, np.ndarray):
+        return "\n".join(str(i) for i in x.tolist())
+    return str(x)
+
+
+def _as_list(x):
+    if x is None:
+        return []
+    if isinstance(x, list):
+        return x
+    if isinstance(x, (tuple, set)):
+        return list(x)
+    if isinstance(x, np.ndarray):
+        return x.tolist()
+    if isinstance(x, str):
+        return [p.strip() for p in re.split(r"[\n,]+", x) if p.strip()]
+    return [str(x)]
+
 
 # ── logging ───────────────────────────────────────────────────────
 logging.getLogger("opensearch").setLevel(logging.ERROR)
@@ -87,10 +115,10 @@ def load_table_any(path: Path) -> pd.DataFrame:
 
 
 def _doc_text_for_embedding(doc: dict) -> str:
-    t = (doc.get("title") or "")
-    ing = (doc.get("ingredients") or "")
-    ins = (doc.get("instructions") or "")
-    desc = (doc.get("description") or "")
+    t = _to_text(doc.get("title"))
+    ing = _to_text(doc.get("ingredients"))
+    ins = _to_text(doc.get("instructions") or doc.get("directions"))
+    desc = _to_text(doc.get("description"))
     return f"{t}\nIngredients:\n{ing}\nInstructions:\n{ins}\n{desc}"
 
 
@@ -190,12 +218,20 @@ def normalize_ingredient(txt: str) -> str:
 
 
 def enrich_recipes_df(df: pd.DataFrame) -> pd.DataFrame:
+    if "ingredients" not in df.columns:
+        df["ingredients"] = [[] for _ in range(len(df))]
+    else:
+        df["ingredients"] = df["ingredients"].apply(_as_list)
+
+    ing_series = df["ingredients"]
+
     if SWIFTER_AVAILABLE:
         log.info("Applying diet classifiers with swifter (parallel)…")
-        apply = df["ingredients"].swifter.apply
+        apply = ing_series.swifter.apply
     else:
         log.warning("Swifter not available; using standard pandas")
-        apply = df["ingredients"].apply
+        apply = ing_series.apply
+
     df["keto"] = apply(is_keto)
     df["vegan"] = apply(is_vegan)
     df["keto_score"] = apply(lambda ings: diet_score(ings, "keto"))
@@ -216,7 +252,8 @@ def bulk_index_recipes(client: OpenSearch, records: List[Dict], batch_size: int 
         _id = str(r.get("id") or r.get("title") or os.urandom(8).hex())
         actions.append({"index": {"_index": RECIPES_INDEX, "_id": _id}})
         actions.append(r)
-        vocab.update(normalize_ingredient(i) for i in r["ingredients"])
+        for i in _as_list(r.get("ingredients")):
+            vocab.add(normalize_ingredient(i))
 
         if len(actions) >= batch_size * 2:
             client.bulk(actions)
