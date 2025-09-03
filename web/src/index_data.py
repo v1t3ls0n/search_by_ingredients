@@ -73,6 +73,7 @@ OPENSEARCH_URL = config("OPENSEARCH_URL", default="http://localhost:9200")
 RECIPES_INDEX = config("RECIPES_INDEX",  default="recipes_v2")
 EMBED_MODEL = config(
     "EMBED_MODEL",    default="sentence-transformers/all-MiniLM-L6-v2")
+ENCODE_BATCH_SIZE = config("ENCODE_BATCH_SIZE", default=64, cast=int)
 
 _embed = SentenceTransformer(EMBED_MODEL)
 
@@ -247,21 +248,43 @@ def enrich_recipes_df(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def bulk_index_recipes(client: OpenSearch, records: List[Dict], batch_size: int = 1024):
+    # Diet flags first (keeps your swifter path)
     df = enrich_recipes_df(pd.DataFrame(records))
     enriched: List[Dict] = df.to_dict("records")
+
+    # ----- NEW: embed in mini-batches, not per row -----
+    texts = [_doc_text_for_embedding(r) for r in enriched]
+    vecs: List[List[float]] = []
+    for j in range(0, len(texts), ENCODE_BATCH_SIZE):
+        chunk = texts[j:j + ENCODE_BATCH_SIZE]
+        # Turn off the internal progress bar; we drive our own logging
+        m = _embed.encode(
+            chunk,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+        vecs.extend(v.tolist() for v in m)
+    # attach embeddings back
+    for r, v in zip(enriched, vecs):
+        r["embedding"] = v
+
+    # ----- Bulk index + vocab build -----
     actions: List[Dict] = []
     vocab: Set[str] = set()
 
     for r in enriched:
-        r["embedding"] = build_doc_embedding(r)
         _id = str(r.get("id") or r.get("title") or os.urandom(8).hex())
         actions.append({"index": {"_index": RECIPES_INDEX, "_id": _id}})
         actions.append(r)
 
+        # robust ingredient tokenization for vocab
         for i in _as_list(r.get("ingredients")):
-            vocab.add(normalize_ingredient(i))
+            token = normalize_ingredient(i)
+            if token:
+                vocab.add(token)
 
-        if len(actions) >= batch_size * 2:
+        if len(actions) >= batch_size * 2:  # 2 lines per doc in bulk API
             client.bulk(actions)
             actions.clear()
 
@@ -274,6 +297,7 @@ def bulk_index_recipes(client: OpenSearch, records: List[Dict], batch_size: int 
             ing_actions += [{"index": {"_index": "ingredients"}},
                             {"ingredients": token}]
         client.bulk(ing_actions)
+
 
 # ── main ----------------------------------------------------------
 
