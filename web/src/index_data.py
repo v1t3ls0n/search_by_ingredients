@@ -117,7 +117,12 @@ def load_table_any(path: Path) -> pd.DataFrame:
 def _doc_text_for_embedding(doc: dict) -> str:
     t = _to_text(doc.get("title"))
     ing = _to_text(doc.get("ingredients"))
-    ins = _to_text(doc.get("instructions") or doc.get("directions"))
+
+    instr = doc.get("instructions")
+    if instr is None:                      # don't use `or` on arrays
+        instr = doc.get("directions")
+    ins = _to_text(instr)
+
     desc = _to_text(doc.get("description"))
     return f"{t}\nIngredients:\n{ing}\nInstructions:\n{ins}\n{desc}"
 

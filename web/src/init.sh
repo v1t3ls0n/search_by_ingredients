@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# Download NLTK data if not already present
 echo "Checking NLTK data..."
 python -c "
 try:
@@ -18,19 +19,15 @@ except Exception as e:
     print('Continuing without lemmatization support...')
 " || true
 
-# One-time indexing (like the old setup)
+# Initial indexing (no --opensearch_url; it’s taken from env by index_data.py)
 if [ ! -f /app/.indexed ]; then
   echo "Running initial indexing..."
-  # Allow override via DATA_FILE, but default to the parquet we download in the Dockerfile
-  DATA_ARG=""
-  if [ -n "${DATA_FILE}" ]; then
-    DATA_ARG="--data_file ${DATA_FILE}"
-  fi
-  python web/index_data.py --opensearch_url "${OPENSEARCH_URL:-http://os:9200}" ${DATA_ARG}
+  python web/index_data.py --force --data_file "/app/data/allrecipes.parquet"
   touch /app/.indexed
   echo "Indexing completed"
 else
   echo "Indexing already completed, skipping..."
 fi
 
+# Start the Flask application
 python web/app.py
