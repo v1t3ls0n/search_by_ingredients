@@ -22,7 +22,7 @@ except Exception as e:
 # Initial indexing (no --opensearch_url; it’s taken from env by index_data.py)
 if [ ! -f /app/.indexed ]; then
   echo "Running initial indexing..."
-  python web/index_data.py --force --data_file "/app/data/allrecipes.parquet"
+  python web/index_data.py --force
   touch /app/.indexed
   echo "Indexing completed"
 else

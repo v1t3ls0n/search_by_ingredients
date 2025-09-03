@@ -119,7 +119,7 @@ def _doc_text_for_embedding(doc: dict) -> str:
     ing = _to_text(doc.get("ingredients"))
 
     instr = doc.get("instructions")
-    if instr is None:                      # don't use `or` on arrays
+    if instr is None:                       # ← DO THIS, don't use “or” on arrays
         instr = doc.get("directions")
     ins = _to_text(instr)
 
@@ -257,6 +257,7 @@ def bulk_index_recipes(client: OpenSearch, records: List[Dict], batch_size: int 
         _id = str(r.get("id") or r.get("title") or os.urandom(8).hex())
         actions.append({"index": {"_index": RECIPES_INDEX, "_id": _id}})
         actions.append(r)
+
         for i in _as_list(r.get("ingredients")):
             vocab.add(normalize_ingredient(i))
 
