@@ -271,6 +271,10 @@ Pure engineering showcase. It demonstrates the ability to architect large-scale 
 
 **Bottom line**: The rule-based solution is the right answer. The ML branch is there if you want to see what "throwing everything at the problem" looks like.
 
+
+---
+
+
 **Contact:**  
 🔗 [Linkedin](https://www.linkedin.com/in/guyvitelson/)  
 🐙 [GitHub](https://github.com/v1t3ls0n)  
