@@ -4,7 +4,7 @@
 
 ---
 
-### 🔗 Solution For Argmax's Search By Ingredients Challenge **By Guy Vitelson**
+### [🔗 Solution For Argmax's Search By Ingredients Challenge **By Guy Vitelson**](https://github.com/argmaxml/search_by_ingredients)
 
 ---
 
