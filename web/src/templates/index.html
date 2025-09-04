@@ -3022,12 +3022,12 @@ ${data.formatted_text}
         const thrValEl = document.getElementById("ragThresholdValue");
         const topkEl = document.getElementById("ragTopK");
 
-        thrEl.addEventListener(
-          "input",
-          () => (thrValEl.textContent = Number(thrEl.value).toFixed(2))
-        );
+        thrEl.addEventListener("input", () => {
+          thrValEl.textContent = Number(thrEl.value).toFixed(2);
+        });
+
         const esc = (s) =>
-          s.replace(
+          String(s).replace(
             /[&<>"']/g,
             (c) =>
               ({
@@ -3038,12 +3038,14 @@ ${data.formatted_text}
                 "'": "&#39;",
               }[c])
           );
+
         const md = (s) =>
           esc(s)
             .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
             .replace(/\*(.+?)\*/g, "<em>$1</em>")
             .replace(/`(.+?)`/g, "<code>$1</code>")
             .replace(/\n/g, "<br>");
+
         const toBottom = () => {
           logEl.scrollTop = logEl.scrollHeight;
         };
@@ -3055,6 +3057,7 @@ ${data.formatted_text}
           logEl.appendChild(n);
           toBottom();
         }
+
         function bubbleTyping() {
           const n = document.createElement("div");
           n.className = "msg assistant";
@@ -3064,17 +3067,18 @@ ${data.formatted_text}
           toBottom();
           return n;
         }
+
         function bubbleAnswer(node, answer, sources, diet) {
           node.innerHTML =
             `<div class="bubble">${md(answer || "")}</div>
-      <div class="sources">${(sources || [])
-        .map((s) => {
-          const k = s.keto_score != null ? `${s.keto_score}%` : "?";
-          const v = s.vegan_score != null ? `${s.vegan_score}%` : "?";
-          const t = esc(s.title || s.id || "recipe");
-          return `<span class="source-pill">[${s.ref}] ${t} · k:${k} v:${v}</span>`;
-        })
-        .join("")}</div>` +
+         <div class="sources">${(sources || [])
+           .map((s) => {
+             const k = s.keto_score != null ? `${s.keto_score}%` : "?";
+             const v = s.vegan_score != null ? `${s.vegan_score}%` : "?";
+             const t = esc(s.title || s.id || "recipe");
+             return `<span class="source-pill">[${s.ref}] ${t} · k:${k} v:${v}</span>`;
+           })
+           .join("")}</div>` +
             (diet && diet !== "none"
               ? `<div class="mt-2"><span class="badge-mini">Detected diet: ${esc(
                   diet
@@ -3084,7 +3088,8 @@ ${data.formatted_text}
         }
 
         async function callAPI(payload) {
-          const res = await fetch("/api/chat", {
+          // Use the RAG endpoint provided by the backend
+          const res = await fetch("/api/rag_chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
@@ -3097,11 +3102,14 @@ ${data.formatted_text}
           e.preventDefault();
           const q = (inputEl.value || "").trim();
           if (!q) return;
+
           bubbleUser(q);
           inputEl.value = "";
           inputEl.focus();
           sendEl.disabled = true;
+
           const typing = bubbleTyping();
+
           try {
             const payload = {
               query: q,
@@ -3112,7 +3120,9 @@ ${data.formatted_text}
                 Math.min(10, parseInt(topkEl.value || "5", 10))
               ),
             };
+
             const data = await callAPI(payload);
+
             bubbleAnswer(
               typing,
               data.answer || "Not found in the sources.",
