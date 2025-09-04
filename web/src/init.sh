@@ -42,7 +42,7 @@ done
 # 4) Initial indexing (single call; indexer now handles both datasets)
 if [ ! -f /app/.indexed ]; then
   log "Running initial indexing..."
-  python web/index_data.py --force --sample 100
+  python web/index_data.py --force 
   touch /app/.indexed
   log "Indexing completed"
 else
