@@ -1763,7 +1763,7 @@
         // Instructions
         const instructionsList = $("#modalInstructions");
         instructionsList.empty();
-        recipe.instructions.forEach((instruction) => {
+        recipe.instructions.split(",").forEach((instruction) => {
           instructionsList.append(`<li>${instruction}</li>`);
         });
 
@@ -2912,7 +2912,7 @@ ${data.formatted_text}
         const instructionsList = $("#modalInstructions");
         instructionsList.empty();
         if (recipe.instructions && recipe.instructions.length > 0) {
-          recipe.instructions.forEach((instruction) => {
+          recipe.instructions.split(",").forEach((instruction) => {
             instructionsList.append(`<li>${instruction}</li>`);
           });
         } else {
