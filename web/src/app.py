@@ -6,7 +6,6 @@ Flask API:
 * /api/rag_chat — RAG Chat over recipes (BM25 + KNN + RRF + diet intent)
 """
 from __future__ import annotations
-
 import logging
 import sys
 import os
@@ -19,12 +18,13 @@ import numpy as np
 from time import sleep
 from typing import List
 from datetime import datetime
-
 from decouple import config
 from flask import Flask, jsonify, render_template, request, session
+from flask import send_from_directory, abort
+from werkzeug.utils import safe_join
+from pathlib import Path
 from opensearchpy import OpenSearch
 from sentence_transformers import SentenceTransformer
-
 # ── helpers -------------------------------------------------------
 from diet_classifiers import is_keto, is_vegan, diet_score
 from utils.query_flags import split_query_flags
@@ -36,6 +36,9 @@ from utils.substitutions import (
     quick_compliance_check,
     export_modified_recipe,
 )
+
+
+DATA_ROOT = Path(os.environ.get("DATA_DIR", "/app/data")).resolve()
 
 # ── logging -------------------------------------------------------
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -215,6 +218,28 @@ def _ollama_answer(question: str, context: str) -> str:
                       json=payload, timeout=120)
     r.raise_for_status()
     return r.json()["message"]["content"].strip()
+
+
+@app.route("/data/<path:subpath>")
+def serve_data(subpath: str):
+    """
+    Serve files from /app/data securely.
+    Allows URLs like /data/clean/images/<file>.jpg
+    """
+    # prevent path traversal
+    safe_path = safe_join(str(DATA_ROOT), subpath)
+    if not safe_path:
+        abort(403)
+    full = Path(safe_path).resolve()
+    if not str(full).startswith(str(DATA_ROOT)):
+        abort(403)
+    if not full.exists():
+        abort(404)
+
+    # optional: add simple caching
+    resp = send_from_directory(
+        str(DATA_ROOT), subpath, conditional=True, max_age=60*60*24)
+    return resp
 
 
 @app.route("/api/rag_chat", methods=["GET", "POST"])

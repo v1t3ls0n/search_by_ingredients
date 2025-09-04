@@ -16,7 +16,8 @@ Usage:
 """
 
 from __future__ import annotations
-
+import zipfile
+import io
 import os
 import re
 import string
@@ -624,6 +625,60 @@ def _zip_dir(src_dir: Path, zip_path: Path) -> None:
             zf.write(p, p.relative_to(src_dir))
 
 
+def export_clean_artifacts(clean_dir: Path, df: pd.DataFrame, zip_name: str = "clean.zip") -> None:
+    """
+    Write CSV + Parquet + image manifest and zip the entire clean_dir.
+    - clean_dir/recipes.parquet (already created by caller)
+    - clean_dir/recipes.csv
+    - clean_dir/images_manifest.csv  (id, image_path per row)
+    - data/clean.zip  (zip of clean_dir)
+    """
+    clean_dir = Path(clean_dir)
+    clean_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1) CSV export (readable)
+    csv_path = clean_dir / "recipes.csv"
+    try:
+        # avoid ugly list reprs: join image_files list into ';'-sep string for CSV
+        to_csv = df.copy()
+        if "image_files" in to_csv.columns:
+            to_csv["image_files"] = to_csv["image_files"].apply(
+                lambda xs: ";".join(xs) if isinstance(
+                    xs, (list, tuple)) else (xs or "")
+            )
+        to_csv.to_csv(csv_path, index=False)
+        log.info("Saved clean CSV: %s", csv_path)
+    except Exception as e:
+        log.warning("Failed writing CSV: %s", e)
+
+    # 2) Image manifest
+    try:
+        rows = []
+        if "image_files" in df.columns:
+            for rid, files in zip(df["id"], df["image_files"]):
+                if isinstance(files, (list, tuple)):
+                    for p in files:
+                        rows.append({"id": rid, "image_path": p})
+        man = pd.DataFrame(rows, columns=["id", "image_path"])
+        (clean_dir / "images_manifest.csv").write_text(
+            man.to_csv(index=False), encoding="utf-8"
+        )
+        log.info("Saved images manifest: %s",
+                 clean_dir / "images_manifest.csv")
+    except Exception as e:
+        log.warning("Failed writing images manifest: %s", e)
+
+    # 3) Zip the clean dir (to data/clean.zip)
+    zip_path = clean_dir.parent / zip_name
+    try:
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for path in clean_dir.rglob("*"):
+                zf.write(path, arcname=path.relative_to(clean_dir.parent))
+        log.info("Packed clean dataset → %s", zip_path)
+    except Exception as e:
+        log.warning("Failed to create zip %s: %s", zip_path, e)
+
+
 def load_or_build_clean_dataset(
     base_allrecipes: Path,
     kaggle_csv: Path,
@@ -636,9 +691,9 @@ def load_or_build_clean_dataset(
     Clean product layout:
       data/clean/
         ├─ recipes.parquet
+        ├─ recipes.csv
+        ├─ images_manifest.csv
         └─ images/  (pooled images {id}_{i}.ext)
-
-    Return: DataFrame loaded from clean product.
     """
     clean_dir = Path("data/clean")
     clean_zip = Path("data/clean.zip")
@@ -663,29 +718,32 @@ def load_or_build_clean_dataset(
     df_all = load_table_any(
         base_allrecipes) if base_allrecipes.exists() else pd.DataFrame()
     if not df_all.empty:
-        # ensure IDs if needed (should already be there)
         if "id" not in df_all.columns or df_all["id"].isna().any():
-            df_all["id"] = df_all.apply(lambda r: make_uid(r.to_dict(
-            ), f"data/{base_allrecipes.parent.name}_{base_allrecipes.stem}{base_allrecipes.suffix}"), axis=1)
+            df_all["id"] = df_all.apply(
+                lambda r: make_uid(r.to_dict(
+                ), f"data/{base_allrecipes.parent.name}_{base_allrecipes.stem}{base_allrecipes.suffix}"),
+                axis=1,
+            )
 
     if kaggle_csv.exists():
         df_kag = load_table_any(kaggle_csv)
-
-        # attach raw Image_Name for multi-image glob via a consistent data_source
         try:
             raw_df = pd.read_csv(
                 kaggle_csv,
                 usecols=["Image_Name", "Title", "Ingredients",
-                         "Instructions", "Cleaned_Ingredients"]
+                         "Instructions", "Cleaned_Ingredients"],
             )
             src_ds = f"data/{kaggle_csv.parent.name}_{kaggle_csv.stem}{kaggle_csv.suffix}"
             tmp = pd.DataFrame({
                 "Image_Name": raw_df["Image_Name"],
-                "id": raw_df.apply(lambda r: make_uid({
-                    "Title": r.get("Title"),
-                    "Ingredients": r.get("Ingredients"),
-                    "Cleaned_Ingredients": r.get("Cleaned_Ingredients"),
-                }, src_ds), axis=1)
+                "id": raw_df.apply(
+                    lambda r: make_uid(
+                        {"Title": r.get("Title"), "Ingredients": r.get(
+                            "Ingredients"), "Cleaned_Ingredients": r.get("Cleaned_Ingredients")},
+                        src_ds,
+                    ),
+                    axis=1,
+                ),
             })
             df_kag = df_kag.merge(tmp, on="id", how="left")
         except Exception:
@@ -693,7 +751,7 @@ def load_or_build_clean_dataset(
     else:
         df_kag = pd.DataFrame()
 
-    # Sample (fast path) — do this BEFORE heavy image work
+    # Sample (fast path)
     if sample and sample > 0:
         if not df_all.empty:
             df_all = df_all.sample(
@@ -703,7 +761,7 @@ def load_or_build_clean_dataset(
                 n=min(sample, len(df_kag)), random_state=42).reset_index(drop=True)
         log.info("Sample mode: using up to %d rows from each dataset.", sample)
 
-    # Build pooled images into clean_dir/images/
+    # Build pooled images
     images_dir = clean_dir / "images"
     images_dir.mkdir(parents=True, exist_ok=True)
 
@@ -723,33 +781,34 @@ def load_or_build_clean_dataset(
             df_kag["image_files"] = df_kag["id"].map(
                 kag_map).apply(lambda x: x or [])
             df_kag["photo_url"] = df_kag.apply(
-                lambda r: (r["image_files"][0] if r.get(
-                    "image_files") else r.get("photo_url")),
-                axis=1
+                lambda r: (r["image_files"][0] if r.get("image_files") else r.get("photo_url")), axis=1
             )
     else:
-        # Ensure columns exist even if skipping
         for df in (df_all, df_kag):
-            if not df.empty:
-                if "image_files" not in df.columns:
-                    df["image_files"] = [[] for _ in range(len(df))]
+            if not df.empty and "image_files" not in df.columns:
+                df["image_files"] = [[] for _ in range(len(df))]
 
-    # Merge
+    # Merge & save parquet
     df_all = df_all if not df_all.empty else pd.DataFrame(
-        columns=["id", "title", "description", "ingredients", "instructions", "photo_url", "image_files", "data_source"])
+        columns=["id", "title", "description", "ingredients",
+                 "instructions", "photo_url", "image_files", "data_source"]
+    )
     df_kag = df_kag if not df_kag.empty else pd.DataFrame(
-        columns=["id", "title", "description", "ingredients", "instructions", "photo_url", "image_files", "data_source"])
+        columns=["id", "title", "description", "ingredients",
+                 "instructions", "photo_url", "image_files", "data_source"]
+    )
     df = pd.concat([df_all, df_kag], ignore_index=True)
 
-    # Save clean product
     clean_dir.mkdir(parents=True, exist_ok=True)
     out_pq = clean_dir / "recipes.parquet"
     df.to_parquet(out_pq, index=False)
     log.info("Saved clean dataset: %s (%d rows)", out_pq, len(df))
 
+    # NEW: emit CSV/manifest and zip if requested
+    export_clean_artifacts(clean_dir, df)
     if pack:
-        _zip_dir(clean_dir, clean_zip)
-        log.info("Packed clean dataset → %s", clean_zip)
+        # already zipped by export_clean_artifacts; leave here for clarity if you prefer to gate it
+        log.info("Artifacts exported; pack=True acknowledged.")
 
     return df
 
