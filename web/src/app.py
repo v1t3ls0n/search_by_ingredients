@@ -243,7 +243,7 @@ def serve_data(subpath: str):
 
 
 @app.route("/api/chat", methods=["GET", "POST"])
-def api_rag_chat():
+def api_chat():
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
         query = (data.get("query") or "").strip()
