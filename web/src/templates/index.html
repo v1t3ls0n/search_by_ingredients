@@ -3084,7 +3084,7 @@ ${data.formatted_text}
         }
 
         async function callAPI(payload) {
-          const res = await fetch("/api/rag_chat", {
+          const res = await fetch("/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),

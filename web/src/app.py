@@ -3,7 +3,7 @@
 Flask API:
 * /select2, /search, /substitutions, /modify-recipe, /convert-recipes,
   /check-compliance, /export-modified, /save-modified-recipe, /get-modified-recipes, ...
-* /api/rag_chat — RAG Chat over recipes (BM25 + KNN + RRF + diet intent)
+* /api/chat — RAG Chat over recipes (BM25 + KNN + RRF + diet intent)
 """
 from __future__ import annotations
 import logging
@@ -242,7 +242,7 @@ def serve_data(subpath: str):
     return resp
 
 
-@app.route("/api/rag_chat", methods=["GET", "POST"])
+@app.route("/api/chat", methods=["GET", "POST"])
 def api_rag_chat():
     if request.method == "POST":
         data = request.get_json(silent=True) or {}
