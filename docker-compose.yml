@@ -54,14 +54,16 @@ services:
       - FLASK_APP=app.py
       - FLASK_ENV=development
       - FLASK_DEBUG=1
-      - OPENSEARCH_URL= http://os:9200 
-      - OLLAMA_URL= http://ollama:11434
+      - OPENSEARCH_UR=http://os:9200 
+      - OLLAMA_URL=http://ollama:11434
       - OLLAMA_MODEL=llama3.1:8b
       - RECIPES_INDEX=recipes_v2
       - EMBED_MODEL=sentence-transformers/all-MiniLM-L6-v2
       - SECRET_KEY=i-have-nothing-to-hide-lol
-        # optional: if your app/indexer reads a DATA_FILE path at runtime
       - DATA_FILE=/app/data/allrecipes.parquet
+
+
+      
     ports:
       - "8080:8080"
     volumes:

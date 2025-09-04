@@ -48,12 +48,13 @@ app = Flask(__name__)
 app.secret_key = config(
     "SECRET_KEY", default="dev-secret-key-change-in-production")
 
-OPENSEARCH_URL = config("OPENSEARCH_URL", default="http://localhost:9200")
-OLLAMA_URL = config("OLLAMA_URL",     default="http://localhost:11434")
-OLLAMA_MODEL = config("OLLAMA_MODEL",   default="llama3.1:8b")
-RECIPES_INDEX = config("RECIPES_INDEX",  default="recipes_v2")
+OPENSEARCH_URL = config(
+    "OPENSEARCH_URL", default="http://localhost:9200").strip()
+OLLAMA_URL = config("OLLAMA_URL",     default="http://localhost:11434").strip()
+OLLAMA_MODEL = config("OLLAMA_MODEL",   default="llama3.1:8b").strip()
+RECIPES_INDEX = config("RECIPES_INDEX",  default="recipes_v2").strip()
 EMBED_MODEL = config(
-    "EMBED_MODEL",    default="sentence-transformers/all-MiniLM-L6-v2")
+    "EMBED_MODEL",    default="sentence-transformers/all-MiniLM-L6-v2").strip()
 
 client = OpenSearch(OPENSEARCH_URL, use_ssl=False,
                     verify_certs=False, ssl_show_warn=False)

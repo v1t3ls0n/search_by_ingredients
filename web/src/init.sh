@@ -26,15 +26,15 @@ PY
 export OPENSEARCH_URL="${OPENSEARCH_URL:-http://os:9200}"
 export RECIPES_INDEX="${RECIPES_INDEX:-recipes_v2}"
 
-# 3) Wait for OpenSearch to be ready
-log "Waiting for OpenSearch at ${OPENSEARCH_URL} ..."
+# Wait for OpenSearch health (trim spaces, set default)
+OS_URL="${OPENSEARCH_URL:-http://os:9200}"
+OS_URL="$(echo "$OS_URL" | xargs)"   # trim whitespace
+echo "$(date -u +'%F %T') Waiting for OpenSearch at $OS_URL ..."
+
 for i in $(seq 1 60); do
-  if curl -fsS "${OPENSEARCH_URL%/}/_cluster/health?wait_for_status=yellow&timeout=1s" >/dev/null; then
-    log "OpenSearch is up."
+  if curl -sSf "$OS_URL/_cluster/health" >/dev/null 2>&1; then
+    echo "OpenSearch is up."
     break
-  fi
-  if [ "$i" -eq 60 ]; then
-    log "ERROR: OpenSearch not reachable at ${OPENSEARCH_URL}"
   fi
   sleep 1
 done
@@ -42,7 +42,7 @@ done
 # 4) Initial indexing (single call; indexer now handles both datasets)
 if [ ! -f /app/.indexed ]; then
   log "Running initial indexing..."
-  python web/index_data.py --force
+  python web/index_data.py --force --sample 100
   touch /app/.indexed
   log "Indexing completed"
 else

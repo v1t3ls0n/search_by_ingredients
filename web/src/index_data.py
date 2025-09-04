@@ -96,13 +96,15 @@ def setup_logging(verbosity: int = 1) -> logging.Logger:
 log = setup_logging()
 
 # ── config & embed model ─────────────────────────────────────────
-OPENSEARCH_URL = config("OPENSEARCH_URL", default="http://localhost:9200")
-RECIPES_INDEX = config("RECIPES_INDEX",  default="recipes_v2")
+OPENSEARCH_URL = config(
+    "OPENSEARCH_URL", default="http://localhost:9200").strip()
+RECIPES_INDEX = config("RECIPES_INDEX",  default="recipes_v2").strip()
 EMBED_MODEL = config(
-    "EMBED_MODEL", default="sentence-transformers/all-MiniLM-L6-v2")
-ENCODE_BATCH_SIZE = config("ENCODE_BATCH_SIZE", default=64, cast=int)
+    "EMBED_MODEL", default="sentence-transformers/all-MiniLM-L6-v2").strip()
+ENCODE_BATCH_SIZE = config("ENCODE_BATCH_SIZE", default=64, cast=int).strip()
 
 _embed = SentenceTransformer(EMBED_MODEL)
+
 
 # ─────────────────────────────────────────────────────────────────
 # General helpers
