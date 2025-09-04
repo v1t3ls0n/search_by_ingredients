@@ -216,11 +216,6 @@ def _ollama_answer(question: str, context: str) -> str:
     return r.json()["message"]["content"].strip()
 
 
-# BEFORE
-# @app.route("/api/rag_chat")
-# def api_rag_chat():
-
-# AFTER
 @app.route("/api/rag_chat", methods=["GET", "POST"])
 def api_rag_chat():
     if request.method == "POST":

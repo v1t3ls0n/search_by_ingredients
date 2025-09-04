@@ -3,9 +3,7 @@ set -euo pipefail
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*"; }
 
-# -------------------------------
 # 1) NLTK setup (idempotent)
-# -------------------------------
 log "Checking NLTK data..."
 python - <<'PY' || true
 try:
@@ -24,10 +22,11 @@ except Exception as e:
     print('Continuing without lemmatization support...')
 PY
 
-# -------------------------------
-# 2) Wait for OpenSearch to be ready
-# -------------------------------
-OPENSEARCH_URL="${OPENSEARCH_URL:-http://os:9200}"
+# 2) Environment (export so Python sees it)
+export OPENSEARCH_URL="${OPENSEARCH_URL:-http://os:9200}"
+export RECIPES_INDEX="${RECIPES_INDEX:-recipes_v2}"
+
+# 3) Wait for OpenSearch to be ready
 log "Waiting for OpenSearch at ${OPENSEARCH_URL} ..."
 for i in $(seq 1 60); do
   if curl -fsS "${OPENSEARCH_URL%/}/_cluster/health?wait_for_status=yellow&timeout=1s" >/dev/null; then
@@ -40,27 +39,15 @@ for i in $(seq 1 60); do
   sleep 1
 done
 
-# -------------------------------
-# 3) Initial indexing (idempotent)
-#    - indexer reads OPENSEARCH_URL and RECIPES_INDEX from env
-#    - optional DATA_FILE override (default parquet path)
-# -------------------------------
+# 4) Initial indexing (single call; indexer now handles both datasets)
 if [ ! -f /app/.indexed ]; then
   log "Running initial indexing..."
-  # Index Allrecipes parquet
-  python web/index_data.py --force --data_file data/allrecipes.parquet
-  # Index Allrecipes GROUND TRUTH sample CSV
-  python web/index_data.py --force --data_file data/ground_truth_sample.csv
-  # Index new Kaggle dataset
-  python web/index_data.py --data_file data/food-ingredients-and-recipe-dataset-with-image/dataset.csv
-  # Force re-create indices & alias; indexer uses env OPENSEARCH_URL
+  python web/index_data.py --force
   touch /app/.indexed
   log "Indexing completed"
 else
   log "Indexing already completed, skipping..."
 fi
 
-# -------------------------------
-# 4) Start Flask app
-# -------------------------------
+# 5) Start Flask app
 exec python web/app.py
