@@ -36,9 +36,14 @@ from utils.substitutions import (
     quick_compliance_check,
     export_modified_recipe,
 )
+import math
+import traceback
+from typing import Any, Dict, List
 
 
+ALLOWED_DIETS = {"auto", "", "none", None, "keto", "vegan", "both"}
 DATA_ROOT = Path(os.environ.get("DATA_DIR", "/app/data")).resolve()
+
 
 # ── logging -------------------------------------------------------
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -58,6 +63,7 @@ OLLAMA_MODEL = config("OLLAMA_MODEL",   default="llama3.1:8b").strip()
 RECIPES_INDEX = config("RECIPES_INDEX",  default="recipes_v2").strip()
 EMBED_MODEL = config(
     "EMBED_MODEL",    default="sentence-transformers/all-MiniLM-L6-v2").strip()
+
 
 client = OpenSearch(OPENSEARCH_URL, use_ssl=False,
                     verify_certs=False, ssl_show_warn=False)
@@ -242,51 +248,148 @@ def serve_data(subpath: str):
     return resp
 
 
+def _j(code: int, payload: Dict[str, Any]):
+    resp = jsonify(payload)
+    resp.status_code = code
+    resp.headers.setdefault("Content-Type", "application/json; charset=utf-8")
+    resp.headers.setdefault("Cache-Control", "no-store")
+    return resp
+
+
 @app.route("/api/chat", methods=["GET", "POST"])
 def api_chat():
-    if request.method == "POST":
-        data = request.get_json(silent=True) or {}
-        query = (data.get("query") or "").strip()
-        client_diet = (data.get("diet") or "auto").strip().lower()
-        threshold = float(data.get("threshold") or 1.0)
-        topk = int(data.get("topk") or 5)
-    else:
-        # GET: read from query params
-        query = (request.args.get("query") or "").strip()
-        client_diet = (request.args.get("diet") or "auto").strip().lower()
-        threshold = float(request.args.get("threshold", 1.0))
-        topk = int(request.args.get("topk", 5))
+    """
+    Robust RAG chat endpoint.
+    - POST requires application/json; GET reads query params.
+    - Validates diet/threshold/topk.
+    - Catches and downgrades failures in inference/search/context/LLM so the UI never sees a blank 500.
+    """
+    try:
+        # ------------- parse input -------------
+        if request.method == "POST":
+            ct = (request.headers.get("Content-Type") or "").lower()
+            if not (ct.startswith("application/json") or request.is_json):
+                return _j(415, {"error_code": "unsupported_media_type",
+                                "message": "POST requires application/json"})
+            data = request.get_json(silent=True)
+            if not isinstance(data, dict):
+                return _j(400, {"error_code": "invalid_json", "message": "Malformed JSON body"})
+            query = (data.get("query") or "").strip()
+            client_diet = (data.get("diet") or "auto").strip().lower()
+            try:
+                threshold = float(data.get("threshold", 1.0))
+            except Exception:
+                return _j(422, {"error_code": "bad_threshold", "message": "threshold must be a number in [0,1]"})
+            try:
+                topk = int(data.get("topk", 5))
+            except Exception:
+                return _j(422, {"error_code": "bad_topk", "message": "topk must be an integer in [1,10]"})
+        else:
+            query = (request.args.get("query") or "").strip()
+            client_diet = (request.args.get("diet") or "auto").strip().lower()
+            try:
+                threshold = float(request.args.get("threshold", 1.0))
+            except Exception:
+                return _j(422, {"error_code": "bad_threshold", "message": "threshold must be a number in [0,1]"})
+            try:
+                topk = int(request.args.get("topk", 5))
+            except Exception:
+                return _j(422, {"error_code": "bad_topk", "message": "topk must be an integer in [1,10]"})
 
-    if not query:
-        return jsonify({"error": "query is required"}), 400
+        if not query:
+            return _j(400, {"error_code": "missing_query", "message": "query is required"})
 
-    inferred = infer_diet(query) if client_diet in {
-        "auto", "", "none", None} else client_diet
-    hits = hybrid_rrf_search(
-        query, topk=topk,
-        diet=(inferred if inferred != "none" else None),
-        threshold=threshold
-    )
-    if not hits:
-        return jsonify({"answer": "Not found in the sources.", "sources": [], "diet_inferred": inferred})
+        if client_diet not in ALLOWED_DIETS:
+            return _j(422, {"error_code": "bad_diet",
+                            "message": "diet must be one of: auto, '', none, keto, vegan, both"})
 
-    context = _build_context(hits)
-    answer = _ollama_answer(query, context)
+        if not (0.0 <= threshold <= 1.0 or math.isclose(threshold, 0.0) or math.isclose(threshold, 1.0)):
+            return _j(422, {"error_code": "bad_threshold", "message": "threshold must be in [0,1]"})
 
-    sources = []
-    for i, h in enumerate(hits, 1):
-        s = h["_source"]
-        sources.append({
-            "ref": i,
-            "id": h.get("_id"),
-            "title": s.get("title"),
-            "keto_score": s.get("keto_score"),
-            "vegan_score": s.get("vegan_score")
-        })
-    return jsonify({"answer": answer, "sources": sources, "diet_inferred": inferred})
+        if not (1 <= topk <= 10):
+            return _j(422, {"error_code": "bad_topk", "message": "topk must be in [1,10]"})
+
+        # ------------- diet inference -------------
+        try:
+            inferred = (
+                infer_diet(query)
+                if client_diet in {"auto", "", "none", None}
+                else client_diet
+            )
+            if inferred not in {"keto", "vegan", "both", "none"}:
+                # sanitize unexpected model outputs
+                inferred = "none"
+        except Exception as e:
+            app.logger.exception("infer_diet failed: %s", e)
+            inferred = "none"  # degrade — do search without diet gating
+
+        # ------------- search -------------
+        try:
+            hits = hybrid_rrf_search(
+                query,
+                topk=topk,
+                diet=(inferred if inferred != "none" else None),
+                threshold=threshold,
+            )
+        except Exception as e:
+            app.logger.exception("hybrid_rrf_search failed: %s", e)
+            return _j(502, {"error_code": "search_failed",
+                            "message": "Search backend failed"})
+
+        if not hits:
+            return _j(200, {"answer": "Not found in the sources.",
+                            "sources": [], "diet_inferred": inferred})
+
+        # ------------- context -------------
+        try:
+            context = _build_context(hits)
+        except Exception as e:
+            app.logger.exception("_build_context failed: %s", e)
+            # fallback: build a tiny context from titles/ingredients
+            parts: List[str] = []
+            for h in hits:
+                s = (h or {}).get("_source", {}) or {}
+                parts.append(
+                    f"{s.get('title', '')}\nIngredients:\n{(s.get('ingredients') or '')}")
+            context = "\n\n---\n\n".join(parts[:topk])
+
+        # ------------- model answer -------------
+        try:
+            answer = _ollama_answer(query, context)
+        except Exception as e:
+            app.logger.exception("_ollama_answer failed: %s", e)
+            # graceful fallback: stitch an answer stub + top sources
+            titles = []
+            for h in hits:
+                s = (h or {}).get("_source", {}) or {}
+                titles.append(s.get("title") or s.get("id") or "recipe")
+            answer = (
+                "I couldn't generate a full answer right now, "
+                "but here are relevant recipes you can open:\n- "
+                + "\n- ".join(titles[:topk])
+            )
+
+        # ------------- format sources -------------
+        sources = []
+        for i, h in enumerate(hits, 1):
+            s = (h or {}).get("_source", {}) or {}
+            sources.append({
+                "ref": i,
+                "id": h.get("_id"),
+                "title": s.get("title"),
+                "keto_score": s.get("keto_score"),
+                "vegan_score": s.get("vegan_score"),
+            })
+
+        return _j(200, {"answer": answer, "sources": sources, "diet_inferred": inferred})
+
+    except Exception as e:
+        # Final safety net — should rarely trigger now
+        app.logger.error("api_chat unexpected failure: %s\n%s",
+                         e, traceback.format_exc())
+        return _j(500, {"error_code": "internal_error", "message": "internal server error"})
 
 
-# Utility bootstrap reused by /select2:
 def _wait(os_client: OpenSearch, tries: int = 30, delay: int = 2) -> bool:
     for _ in range(tries):
         if os_client.ping():
