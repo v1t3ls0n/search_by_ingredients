@@ -1,12 +1,12 @@
 
 # 🥑 Search By Ingredients 2.0: Multi-Diet, Portion-Aware, and Transformative Recipe Search
 
-> **v3 IN PROGRESS — RAG Chat++**
-> We’re actively working on **Search By Ingredients 3.0**, focused on a more capable **RAG Chat** experience (better answers, sources, multi-turn memory, tool-use), plus optional local LLM upgrades. ETA: soon™️.
+> **v3 IN PROGRESS — RAG Chat++**  
+> Version 3 is currently in development, focusing on a more capable **RAG Chat** experience (better answers, sources, multi-turn memory, tool-use), plus optional local LLM upgrades. ETA: soon™️.
 
 ---
 
-### [🔗 Solution For Argmax's Search By Ingredients Challenge](https://github.com/argmaxml/search_by_ingredients)
+### [🔗 Solution For Argmax's Search By Ingredients Challenge](https://github.com/v1t3ls0n/search_by_ingredients/blob/main/nb/src/task.ipynb)
 
 ---
 
