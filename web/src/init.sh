@@ -1,8 +1,11 @@
 #!/bin/bash
+set -euo pipefail
 
-# Download NLTK data if not already present
-echo "Checking NLTK data..."
-python -c "
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*"; }
+
+# 1) NLTK setup (idempotent)
+log "Checking NLTK data..."
+python - <<'PY' || true
 try:
     import nltk
     try:
@@ -17,17 +20,34 @@ try:
 except Exception as e:
     print(f'Warning: Could not setup NLTK: {e}')
     print('Continuing without lemmatization support...')
-" || true
+PY
 
-# Check if indexing has been done
+# 2) Environment (export so Python sees it)
+export OPENSEARCH_URL="${OPENSEARCH_URL:-http://os:9200}"
+export RECIPES_INDEX="${RECIPES_INDEX:-recipes_v2}"
+
+# Wait for OpenSearch health (trim spaces, set default)
+OS_URL="${OPENSEARCH_URL:-http://os:9200}"
+OS_URL="$(echo "$OS_URL" | xargs)"   # trim whitespace
+echo "$(date -u +'%F %T') Waiting for OpenSearch at $OS_URL ..."
+
+for i in $(seq 1 60); do
+  if curl -sSf "$OS_URL/_cluster/health" >/dev/null 2>&1; then
+    echo "OpenSearch is up."
+    break
+  fi
+  sleep 1
+done
+
+# 4) Initial indexing (single call; indexer now handles both datasets)
 if [ ! -f /app/.indexed ]; then
-    echo "Running initial indexing..."
-    python web/index_data.py --force --data_file "${DATA_FILE:-data/allrecipes.parquet}"
-    touch /app/.indexed
-    echo "Indexing completed"
+  log "Running initial indexing..."
+  python web/index_data.py --force 
+  touch /app/.indexed
+  log "Indexing completed"
 else
-    echo "Indexing already completed, skipping..."
+  log "Indexing already completed, skipping..."
 fi
 
-# Start the Flask application
-python web/app.py
+# 5) Start Flask app
+exec python web/app.py

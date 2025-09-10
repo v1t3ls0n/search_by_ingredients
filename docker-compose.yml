@@ -1,13 +1,17 @@
+version: "3.9"
+
 services:
   ollama:
     image: ollama/ollama:latest
     networks: [argmax]
     ports: ["11434:11434"]
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:11434/api/tags"]
+      # image doesn't have curl; use the CLI
+      test: ["CMD", "ollama", "list"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 20s
     restart: unless-stopped
 
   os:
@@ -15,6 +19,7 @@ services:
     environment:
       - discovery.type=single-node
       - plugins.security.disabled=true
+      - DISABLE_INSTALL_DEMO_CONFIG=true
       - bootstrap.memory_lock=true
       - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
     ulimits:
@@ -36,27 +41,35 @@ services:
 
   web:
     build:
-      context: ./web
+      context: web
       dockerfile: Dockerfile
+      # Google Drive build-time args (no .env)
       args:
-        DATA_FILE_ID: ${DATA_FILE_ID}
-        DATA_FILE_NAME: ${DATA_FILE_NAME}
-        GT_FILE_ID: ${GT_FILE_ID}
-        GT_FILE_NAME: ${GT_FILE_NAME}
-    env_file:
-      - ./.env
+        DATA_FILE_ID: "1ynhhTOs8qqeI6QuB6CCrU8GMS-sFjVn6"
+        DATA_FILE_NAME: "allrecipes.parquet"
+        GT_FILE_ID: "124gxkSCjWP2NFk2YOWIAxAEN6JwAS0oq"
+        GT_FILE_NAME: "ground_truth_sample.csv"
     environment:
+      # runtime env — all inline here (no .env)
       - FLASK_APP=app.py
       - FLASK_ENV=development
       - FLASK_DEBUG=1
-      - OPENSEARCH_URL=http://os:9200
-      # falls back to the sidecar if OLLAMA_URL isn't set in .env
-      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
+      - OPENSEARCH_UR=http://os:9200 
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=llama3.1:8b
+      - RECIPES_INDEX=recipes_v2
+      - EMBED_MODEL=sentence-transformers/all-MiniLM-L6-v2
+      - SECRET_KEY=i-have-nothing-to-hide-lol
+      - DATA_FILE=/app/data/allrecipes.parquet
+
+
+      
     ports:
       - "8080:8080"
-    # mount entire web folder so /app/init.sh and /app/web/init.sh exist as you expect
     volumes:
-      - ./web:/app
+      # keep your "good old" mapping — init.sh must be at ./web/src/init.sh
+      - ./web/src:/app/web
+      - ./data:/app/data
     networks: [argmax]
     depends_on:
       os:
@@ -70,15 +83,13 @@ services:
       context: ./nb
       dockerfile: Dockerfile
       args:
-        NB_DATA_FILE_ID: ${DATA_FILE_ID}
-        NB_DATA_FILE_NAME: ${DATA_FILE_NAME}
-        NB_GT_FILE_ID: ${GT_FILE_ID}
-        NB_GT_FILE_NAME: ${GT_FILE_NAME}
-    env_file:
-      - ./.env
+        NB_DATA_FILE_ID: "1ynhhTOs8qqeI6QuB6CCrU8GMS-sFjVn6"
+        NB_DATA_FILE_NAME: "allrecipes.parquet"
+        NB_GT_FILE_ID: "124gxkSCjWP2NFk2YOWIAxAEN6JwAS0oq"
+        NB_GT_FILE_NAME: "ground_truth_sample.csv"
     environment:
       - OPENSEARCH_URL=http://os:9200
-      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
+      - OLLAMA_URL= http://ollama:11434
     ports:
       - "8888:8888"
     volumes:
